@@ -100,16 +100,23 @@ export default function ReportLibrary({
   const [generatedReport, setGeneratedReport] = useState<GeneratedReport | null>(null)
   const [contextInput, setContextInput] = useState(customContext || '')
 
+  const [guestEmail, setGuestEmail] = useState('')
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
+  const [purchaseLoading, setPurchaseLoading] = useState(false)
+  const [purchaseError, setPurchaseError] = useState<string | null>(null)
+
   const { data: categories, isLoading } = useQuery<CategoryWithTemplates[]>({
-    queryKey: ['report-templates'],
+    queryKey: ['report-templates', isGuest],
     queryFn: async () => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (token) headers['Authorization'] = `Bearer ${token}`
-      const res = await fetch('/api/v1/reports/templates', { headers })
+      // Use public endpoint for guests, authenticated endpoint for logged-in users
+      const endpoint = isGuest ? '/api/v1/reports/templates/public' : '/api/v1/reports/templates'
+      const res = await fetch(endpoint, { headers })
       if (!res.ok) throw new Error('Failed to fetch templates')
       return res.json()
     },
-    enabled: isAuthenticated,
   })
 
   const generateMutation = useMutation({
@@ -169,23 +176,8 @@ export default function ReportLibrary({
     return badges[tier] || { text: tier.toUpperCase(), className: 'bg-gray-100 text-gray-600' }
   }
 
-  if (!isAuthenticated) {
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6 text-center">
-        <Lock className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Sign In Required</h3>
-        <p className="text-sm text-gray-500 mb-4">
-          Sign in to access our AI-powered report library
-        </p>
-        <a
-          href="/login"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-        >
-          Sign In
-        </a>
-      </div>
-    )
-  }
+  // Guest mode - show public pricing and allow purchases
+  const isGuest = !isAuthenticated
 
   if (isLoading) {
     return (
@@ -315,20 +307,34 @@ export default function ReportLibrary({
                           <span className={`px-2 py-0.5 rounded text-xs font-bold ${tierBadge.className}`}>
                             {tierBadge.text}
                           </span>
-                          <button
-                            onClick={() => generateMutation.mutate({ templateSlug: template.slug })}
-                            disabled={isGenerating || !hasContext}
-                            className="px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-1"
-                          >
-                            {isGenerating ? (
-                              <>
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                                Generating...
-                              </>
-                            ) : (
-                              'Generate'
-                            )}
-                          </button>
+                          {isGuest ? (
+                            <button
+                              onClick={() => {
+                                setSelectedTemplate(template)
+                                setShowPurchaseModal(true)
+                              }}
+                              disabled={!hasContext}
+                              className="px-3 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              <DollarSign className="w-4 h-4" />
+                              Purchase
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => generateMutation.mutate({ templateSlug: template.slug })}
+                              disabled={isGenerating || !hasContext}
+                              className="px-3 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-1"
+                            >
+                              {isGenerating ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Generating...
+                                </>
+                              ) : (
+                                'Generate'
+                              )}
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -339,6 +345,116 @@ export default function ReportLibrary({
           </div>
         )
       })}
+
+      {/* Guest Purchase Modal */}
+      {showPurchaseModal && selectedTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-r from-amber-500 to-orange-500 p-4 text-white">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">Purchase Report</h3>
+                <button 
+                  onClick={() => {
+                    setShowPurchaseModal(false)
+                    setSelectedTemplate(null)
+                    setPurchaseError(null)
+                  }}
+                  className="text-white/80 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              <div className="mb-4">
+                <div className="font-medium text-gray-900">{selectedTemplate.name}</div>
+                <div className="text-sm text-gray-500">{selectedTemplate.description}</div>
+              </div>
+              
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Your Idea</div>
+                <div className="text-sm text-gray-700">
+                  {contextInput || 'No context provided'}
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <Mail className="w-4 h-4 inline mr-1" />
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={guestEmail}
+                  onChange={(e) => setGuestEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  We'll send your report to this email
+                </p>
+              </div>
+
+              {purchaseError && (
+                <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+                  {purchaseError}
+                </div>
+              )}
+
+              <button
+                onClick={async () => {
+                  if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+                    setPurchaseError('Please enter a valid email address')
+                    return
+                  }
+                  setPurchaseLoading(true)
+                  setPurchaseError(null)
+                  try {
+                    const baseUrl = window.location.origin
+                    const res = await fetch('/api/v1/report-pricing/studio-checkout', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        report_type: selectedTemplate.slug,
+                        custom_context: contextInput,
+                        email: guestEmail,
+                        success_url: `${baseUrl}/billing/return?status=success`,
+                        cancel_url: `${baseUrl}/billing/return?status=canceled`,
+                      })
+                    })
+                    const data = await res.json()
+                    if (!res.ok) throw new Error(data.detail || 'Checkout failed')
+                    if (data.url) {
+                      window.location.href = data.url
+                    }
+                  } catch (e) {
+                    setPurchaseError(e instanceof Error ? e.message : 'Checkout failed')
+                  } finally {
+                    setPurchaseLoading(false)
+                  }
+                }}
+                disabled={purchaseLoading}
+                className="w-full py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 flex items-center justify-center gap-2"
+              >
+                {purchaseLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    Proceed to Checkout
+                  </>
+                )}
+              </button>
+
+              <p className="text-xs text-center text-gray-500 mt-4">
+                Already have an account? <a href="/login" className="text-purple-600 hover:underline">Sign in</a> for member pricing
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

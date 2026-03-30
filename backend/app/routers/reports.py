@@ -120,6 +120,48 @@ async def get_report_templates(
     return result
 
 
+@router.get("/templates/public", response_model=List[CategoryWithTemplates])
+async def get_public_report_templates(
+    db: Session = Depends(get_db)
+):
+    """Get report templates - no authentication required for browsing"""
+    templates = db.query(ReportTemplate).filter(
+        ReportTemplate.is_active == True
+    ).order_by(ReportTemplate.display_order).all()
+    
+    if not templates:
+        await seed_templates(db)
+        templates = db.query(ReportTemplate).filter(
+            ReportTemplate.is_active == True
+        ).order_by(ReportTemplate.display_order).all()
+    
+    category_map = {
+        "popular": "Popular",
+        "marketing": "Marketing",
+        "product": "Product",
+        "business": "Business",
+        "research": "Research"
+    }
+    
+    categories = {}
+    for template in templates:
+        cat = template.category
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(template)
+    
+    result = []
+    for cat_key in ["popular", "marketing", "product", "business", "research"]:
+        if cat_key in categories:
+            result.append(CategoryWithTemplates(
+                category=cat_key,
+                display_name=category_map.get(cat_key, cat_key.title()),
+                templates=[ReportTemplateResponse.model_validate(t) for t in categories[cat_key]]
+            ))
+    
+    return result
+
+
 @router.post("/generate", response_model=GeneratedReportResponse)
 async def generate_report(
     request: GenerateReportRequest,
