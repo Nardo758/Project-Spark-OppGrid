@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
+import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import RequireAuth from './components/RequireAuth'
 import RequireTier from './components/RequireTier'
@@ -58,6 +59,7 @@ function App() {
   const { isAuthenticated } = useAuthStore()
 
   return (
+    <ErrorBoundary>
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={isAuthenticated ? <Dashboard /> : <Home />} />
@@ -237,6 +239,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" />} />
       </Route>
     </Routes>
+    </ErrorBoundary>
   )
 }
 

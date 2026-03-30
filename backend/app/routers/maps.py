@@ -1314,8 +1314,8 @@ def analyze_polygon(
             logger.error(f"Traffic analysis error: {e}")
             try:
                 db.rollback()
-            except:
-                pass
+            except Exception:
+                pass  # Rollback failed, connection may be dead
     
     if request.include_demographics:
         try:

@@ -3,11 +3,16 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 import os
+import logging
 
 from anthropic import Anthropic
 
 from app.db.database import get_db
 from app.models.opportunity import Opportunity
+from app.models.user import User
+from app.core.dependencies import get_current_user_optional
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -198,7 +203,11 @@ CATEGORY_SUGGESTIONS = {
 }
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_with_ai(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat_with_ai(
+    request: ChatRequest, 
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
+):
     try:
         messages = []
         
