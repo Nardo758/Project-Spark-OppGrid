@@ -179,6 +179,153 @@ export default function ReportLibrary({
   // Guest mode - show public pricing and allow purchases
   const isGuest = !isAuthenticated
 
+  // Flatten all templates into a single list for dropdown
+  const allTemplates = categories?.flatMap(cat => cat.templates) || []
+
+  // Simplified guest UI
+  if (isGuest) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Generate AI-Powered Reports</h2>
+          <p className="text-sm text-gray-500 mb-6">
+            Describe your business idea and select a report type. We'll generate a professional report and deliver it to your email.
+          </p>
+
+          {/* Idea Input */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Describe Your Business Idea
+            </label>
+            <textarea
+              value={contextInput}
+              onChange={(e) => setContextInput(e.target.value)}
+              placeholder="Example: A mobile app that connects local dog walkers with busy pet owners in urban areas. Target market is working professionals aged 25-45 who own dogs but don't have time for midday walks..."
+              className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+              rows={5}
+            />
+          </div>
+
+          {/* Report Type Dropdown */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Report Type
+            </label>
+            <select
+              value={selectedTemplate?.slug || ''}
+              onChange={(e) => {
+                const template = allTemplates.find(t => t.slug === e.target.value)
+                setSelectedTemplate(template || null)
+              }}
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+            >
+              <option value="">Choose a report...</option>
+              {allTemplates.map(template => (
+                <option key={template.slug} value={template.slug}>
+                  {template.name} — {template.description}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Email Input */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <Mail className="w-4 h-4 inline mr-1" />
+              Your Email Address
+            </label>
+            <input
+              type="email"
+              value={guestEmail}
+              onChange={(e) => setGuestEmail(e.target.value)}
+              placeholder="your@email.com"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              We'll send your completed report to this email
+            </p>
+          </div>
+
+          {purchaseError && (
+            <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg">
+              {purchaseError}
+            </div>
+          )}
+
+          {/* Purchase Button */}
+          <button
+            onClick={async () => {
+              if (!contextInput.trim()) {
+                setPurchaseError('Please describe your business idea')
+                return
+              }
+              if (!selectedTemplate) {
+                setPurchaseError('Please select a report type')
+                return
+              }
+              if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
+                setPurchaseError('Please enter a valid email address')
+                return
+              }
+              setPurchaseLoading(true)
+              setPurchaseError(null)
+              try {
+                const baseUrl = window.location.origin
+                const res = await fetch('/api/v1/report-pricing/studio-checkout', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    report_type: selectedTemplate.slug,
+                    custom_context: contextInput,
+                    email: guestEmail,
+                    success_url: `${baseUrl}/billing/return?status=success`,
+                    cancel_url: `${baseUrl}/billing/return?status=canceled`,
+                  })
+                })
+                const data = await res.json()
+                if (!res.ok) throw new Error(data.detail || 'Checkout failed')
+                if (data.url) {
+                  window.location.href = data.url
+                }
+              } catch (e) {
+                setPurchaseError(e instanceof Error ? e.message : 'Checkout failed')
+              } finally {
+                setPurchaseLoading(false)
+              }
+            }}
+            disabled={purchaseLoading || !contextInput.trim() || !selectedTemplate || !guestEmail}
+            className="w-full py-4 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
+          >
+            {purchaseLoading ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <DollarSign className="w-5 h-5" />
+                Purchase Report
+              </>
+            )}
+          </button>
+
+          <p className="text-sm text-center text-gray-500 mt-4">
+            Already have an account? <a href="/login" className="text-purple-600 hover:underline font-medium">Sign in</a> for member pricing & more features
+          </p>
+        </div>
+
+        {isLoading && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6">
+            <div className="flex items-center justify-center gap-2 text-gray-500">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span>Loading reports...</span>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-6">
