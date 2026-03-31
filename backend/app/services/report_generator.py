@@ -25,6 +25,124 @@ MAPBOX_STYLE_SATELLITE = "mapbox/satellite-streets-v11"
 MAPBOX_STYLE_DARK = "mapbox/dark-v11"
 MAPBOX_STYLE_LIGHT = "mapbox/light-v11"
 
+# Miles to meters conversion
+MILES_TO_METERS = 1609.34
+
+
+def generate_circle_geojson(center_lng: float, center_lat: float, radius_miles: float, color: str = "3b82f6") -> str:
+    """Generate a GeoJSON circle for Mapbox static API overlay.
+    
+    Args:
+        center_lng: Center longitude
+        center_lat: Center latitude  
+        radius_miles: Radius in miles
+        color: Hex color (without #)
+    
+    Returns:
+        URL-encoded GeoJSON path string for Mapbox
+    """
+    import math
+    import urllib.parse
+    
+    # Generate circle points (36 points for smooth circle)
+    points = []
+    radius_km = radius_miles * 1.60934
+    
+    for i in range(37):  # 37 to close the circle
+        angle = (i * 10) * math.pi / 180
+        # Approximate lat/lng offset
+        dlat = (radius_km / 111.32) * math.cos(angle)
+        dlng = (radius_km / (111.32 * math.cos(math.radians(center_lat)))) * math.sin(angle)
+        points.append([round(center_lng + dlng, 6), round(center_lat + dlat, 6)])
+    
+    geojson = {
+        "type": "Feature",
+        "properties": {
+            "stroke": f"#{color}",
+            "stroke-width": 2,
+            "stroke-opacity": 0.8,
+            "fill": f"#{color}",
+            "fill-opacity": 0.15
+        },
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [points]
+        }
+    }
+    
+    return urllib.parse.quote(str(geojson).replace("'", '"'), safe='')
+
+
+def build_static_map_with_radius(
+    center_lng: float,
+    center_lat: float,
+    radii: List[float] = [3, 5],  # Miles
+    zoom: int = 11,
+    width: int = 800,
+    height: int = 500,
+    markers: Optional[List[Dict]] = None,
+    style: str = MAPBOX_STYLE_LIGHT,
+    recommended_sites: Optional[List[Dict]] = None
+) -> Optional[str]:
+    """Build a static map with radius circles for location reports.
+    
+    Args:
+        center_lng: Center longitude
+        center_lat: Center latitude
+        radii: List of radius values in miles (default [3, 5])
+        zoom: Zoom level
+        width: Image width
+        height: Image height
+        markers: Additional markers
+        style: Mapbox style
+        recommended_sites: List of {lat, lng, name} for recommended locations
+    
+    Returns:
+        Static map URL with radius circles
+    """
+    token = os.environ.get("MAPBOX_ACCESS_TOKEN")
+    if not token:
+        return None
+    
+    overlays = []
+    
+    # Add radius circles (outer first so inner is on top)
+    radius_colors = {
+        5: "94a3b8",  # Gray for 5 mile
+        3: "3b82f6",  # Blue for 3 mile
+    }
+    
+    for radius in sorted(radii, reverse=True):
+        color = radius_colors.get(radius, "3b82f6")
+        circle_geojson = generate_circle_geojson(center_lng, center_lat, radius, color)
+        overlays.append(f"geojson({circle_geojson})")
+    
+    # Add center marker
+    overlays.append(f"pin-l-star+ef4444({center_lng},{center_lat})")
+    
+    # Add recommended site markers
+    if recommended_sites:
+        for i, site in enumerate(recommended_sites[:5]):
+            lng = site.get("lng") or site.get("longitude")
+            lat = site.get("lat") or site.get("latitude")
+            if lng and lat:
+                label = chr(97 + i)  # a, b, c, d, e
+                overlays.append(f"pin-s-{label}+22c55e({lng},{lat})")
+    
+    # Add custom markers
+    if markers:
+        for m in markers[:10]:
+            color = m.get("color", "ff5544")
+            lng = m.get("lng", m.get("longitude"))
+            lat = m.get("lat", m.get("latitude"))
+            if lng and lat:
+                overlays.append(f"pin-s+{color}({lng},{lat})")
+    
+    overlay_str = ",".join(overlays) + "/" if overlays else ""
+    
+    url = f"https://api.mapbox.com/styles/v1/{style}/static/{overlay_str}{center_lng},{center_lat},{zoom}/{width}x{height}@2x?access_token={token}"
+    return url
+
 
 def build_static_map_url(
     center_lng: float,

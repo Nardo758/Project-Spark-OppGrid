@@ -83,6 +83,11 @@ class PlaceData:
     claude_summary: Optional[str] = None
     population: Optional[int] = None
     total_households: Optional[int] = None
+    # Location coordinates
+    center_lat: Optional[float] = None
+    center_lng: Optional[float] = None
+    # Map URLs
+    static_map_url: Optional[str] = None  # Map with 3mi/5mi radius
     # JediRE enrichment
     vacancy_rate: Optional[float] = None
     absorption_rate: Optional[float] = None
@@ -366,7 +371,7 @@ class ReportDataService:
             data.site_recommendations = cache.site_recommendations
             data.claude_summary = cache.claude_summary
         
-        # Get service area population
+        # Get service area population and coordinates
         service_area = self.db.query(ServiceAreaBoundary).filter(
             func.lower(ServiceAreaBoundary.included_cities.cast(str)).contains(city.lower())
         ).first()
@@ -374,6 +379,8 @@ class ReportDataService:
         if service_area:
             data.population = service_area.total_population
             data.total_households = service_area.total_households
+            data.center_lat = service_area.center_latitude
+            data.center_lng = service_area.center_longitude
         
         # Fallback to census
         if not data.population:
@@ -382,6 +389,19 @@ class ReportDataService:
             ).order_by(CensusPopulationEstimate.year.desc()).first()
             if census:
                 data.population = census.population
+        
+        # Generate static map with radius circles if we have coordinates
+        if data.center_lat and data.center_lng:
+            try:
+                from app.services.report_generator import build_static_map_with_radius
+                data.static_map_url = build_static_map_with_radius(
+                    center_lng=data.center_lng,
+                    center_lat=data.center_lat,
+                    radii=[3, 5],  # 3 and 5 mile radius
+                    recommended_sites=data.site_recommendations
+                )
+            except Exception as e:
+                logger.warning(f"[ReportData] Could not generate static map: {e}")
         
         return data
     
