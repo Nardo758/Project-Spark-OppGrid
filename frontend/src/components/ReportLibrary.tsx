@@ -275,12 +275,9 @@ export default function ReportLibrary({
 
   // Fetch Template reports (20+)
   const { data: categories, isLoading } = useQuery<CategoryWithTemplates[]>({
-    queryKey: ['report-templates', isGuest],
+    queryKey: ['report-templates'],
     queryFn: async () => {
-      const hdrs: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) hdrs['Authorization'] = `Bearer ${token}`
-      const endpoint = isGuest ? '/api/v1/reports/templates/public' : '/api/v1/reports/templates'
-      const res = await fetch(endpoint, { headers: hdrs })
+      const res = await fetch('/api/v1/reports/templates/public')
       if (!res.ok) throw new Error('Failed to fetch templates')
       return res.json()
     },
