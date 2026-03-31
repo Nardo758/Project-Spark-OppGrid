@@ -25,7 +25,11 @@ import {
   Bot,
   Key,
   Eye,
-  EyeOff
+  EyeOff,
+  BarChart2,
+  TrendingUp,
+  DollarSign,
+  Cpu
 } from 'lucide-react'
 
 type SubscriptionInfo = {
@@ -54,6 +58,27 @@ type AIPreferences = {
   has_claude_key: boolean
   openai_key_validated_at: string | null
   claude_key_validated_at: string | null
+}
+
+type ModelUsage = {
+  model: string
+  requests: number
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  estimated_cost_usd: number
+  markup_percent: number
+}
+
+type TokenUsageData = {
+  total_input_tokens: number
+  total_output_tokens: number
+  total_tokens: number
+  total_estimated_cost_usd: number
+  period_days: number
+  since: string
+  by_model: ModelUsage[]
+  stripe_billing_enabled: boolean
 }
 
 type NetworkRole = 'expert' | 'partner' | 'investor' | 'lender'
@@ -123,6 +148,9 @@ export default function Settings() {
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null)
   const [loadingSubscription, setLoadingSubscription] = useState(false)
   const [loadingPortal, setLoadingPortal] = useState(false)
+  const [tokenUsage, setTokenUsage] = useState<TokenUsageData | null>(null)
+  const [loadingUsage, setLoadingUsage] = useState(false)
+  const [usagePeriod, setUsagePeriod] = useState(30)
 
   const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus | null>(null)
   const [loading2FA, setLoading2FA] = useState(false)
@@ -149,6 +177,7 @@ export default function Settings() {
   useEffect(() => {
     if (activeTab === 'billing' && token) {
       fetchSubscriptionInfo()
+      fetchTokenUsage(usagePeriod)
     }
     if (activeTab === 'security' && token) {
       fetch2FAStatus()
@@ -157,6 +186,12 @@ export default function Settings() {
       fetchAIPreferences()
     }
   }, [activeTab, token])
+
+  useEffect(() => {
+    if (activeTab === 'billing' && token) {
+      fetchTokenUsage(usagePeriod)
+    }
+  }, [usagePeriod])
 
   async function fetchSubscriptionInfo() {
     if (!token) return
@@ -173,6 +208,24 @@ export default function Settings() {
       console.error('Failed to fetch subscription:', err)
     } finally {
       setLoadingSubscription(false)
+    }
+  }
+
+  async function fetchTokenUsage(days: number) {
+    if (!token) return
+    setLoadingUsage(true)
+    try {
+      const res = await fetch(`/api/v1/billing/usage?days=${days}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setTokenUsage(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch token usage:', err)
+    } finally {
+      setLoadingUsage(false)
     }
   }
 
@@ -689,6 +742,165 @@ export default function Settings() {
                     )}
                   </div>
                 )}
+
+                {/* AI Token Usage Section */}
+                <div className="mt-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <BarChart2 className="w-5 h-5 text-gray-600" />
+                      <h3 className="text-base font-semibold text-gray-900">AI Token Usage</h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {[7, 30, 90].map((d) => (
+                        <button
+                          key={d}
+                          onClick={() => setUsagePeriod(d)}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                            usagePeriod === d
+                              ? 'bg-gray-900 text-white'
+                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          }`}
+                        >
+                          {d}d
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => fetchTokenUsage(usagePeriod)}
+                        disabled={loadingUsage}
+                        className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-500 transition-colors disabled:opacity-40"
+                        title="Refresh"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingUsage ? 'animate-spin' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingUsage ? (
+                    <div className="flex items-center justify-center py-10 bg-gray-50 rounded-xl border border-gray-200">
+                      <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                    </div>
+                  ) : tokenUsage ? (
+                    <div className="space-y-4">
+                      {/* Summary stats */}
+                      <div className="grid grid-cols-3 gap-3">
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Cpu className="w-4 h-4 text-purple-500" />
+                            <p className="text-xs text-gray-500 font-medium">Total Tokens</p>
+                          </div>
+                          <p className="text-xl font-bold text-gray-900">
+                            {tokenUsage.total_tokens >= 1_000_000
+                              ? `${(tokenUsage.total_tokens / 1_000_000).toFixed(2)}M`
+                              : tokenUsage.total_tokens >= 1000
+                              ? `${(tokenUsage.total_tokens / 1000).toFixed(1)}K`
+                              : tokenUsage.total_tokens.toString()}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {tokenUsage.total_input_tokens.toLocaleString()} in · {tokenUsage.total_output_tokens.toLocaleString()} out
+                          </p>
+                        </div>
+
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                          <div className="flex items-center gap-2 mb-1">
+                            <DollarSign className="w-4 h-4 text-green-500" />
+                            <p className="text-xs text-gray-500 font-medium">Est. Cost</p>
+                          </div>
+                          <p className="text-xl font-bold text-gray-900">
+                            ${tokenUsage.total_estimated_cost_usd.toFixed(4)}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">last {tokenUsage.period_days} days</p>
+                        </div>
+
+                        <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                          <div className="flex items-center gap-2 mb-1">
+                            <TrendingUp className="w-4 h-4 text-blue-500" />
+                            <p className="text-xs text-gray-500 font-medium">Models Used</p>
+                          </div>
+                          <p className="text-xl font-bold text-gray-900">{tokenUsage.by_model.length}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">
+                            {tokenUsage.by_model.reduce((s, m) => s + m.requests, 0)} requests
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Per-model breakdown */}
+                      {tokenUsage.by_model.length > 0 ? (
+                        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Breakdown by Model</p>
+                          </div>
+                          <div className="divide-y divide-gray-100">
+                            {tokenUsage.by_model.map((m) => {
+                              const pct = tokenUsage.total_tokens > 0
+                                ? Math.round((m.total_tokens / tokenUsage.total_tokens) * 100)
+                                : 0
+                              const shortName = m.model.replace('claude-', 'Claude ').replace('gpt-', 'GPT-').replace(/-\d{8}$/, '')
+                              return (
+                                <div key={m.model} className="px-4 py-3">
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <Bot className="w-3.5 h-3.5 text-gray-400" />
+                                      <span className="text-sm font-medium text-gray-800">{shortName}</span>
+                                      <span className="text-xs text-gray-400">{m.requests} req</span>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-sm font-semibold text-gray-900">
+                                        ${m.estimated_cost_usd.toFixed(4)}
+                                      </span>
+                                      <span className="text-xs text-gray-400 ml-2">{pct}%</span>
+                                    </div>
+                                  </div>
+                                  <div className="w-full bg-gray-100 rounded-full h-1.5">
+                                    <div
+                                      className="bg-purple-500 h-1.5 rounded-full transition-all"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <div className="flex justify-between mt-1">
+                                    <span className="text-xs text-gray-400">
+                                      {m.total_tokens >= 1000
+                                        ? `${(m.total_tokens / 1000).toFixed(1)}K`
+                                        : m.total_tokens} tokens
+                                    </span>
+                                    {m.markup_percent > 0 && (
+                                      <span className="text-xs text-gray-400">{m.markup_percent}% markup incl.</span>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-center">
+                          <Bot className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500">No AI usage recorded in the last {usagePeriod} days.</p>
+                          <p className="text-xs text-gray-400 mt-1">Usage is tracked after generating reports, analysis, or chat responses.</p>
+                        </div>
+                      )}
+
+                      {tokenUsage.stripe_billing_enabled && (
+                        <div className="flex items-center gap-2 p-3 bg-green-50 rounded-lg border border-green-200">
+                          <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                          <p className="text-xs text-green-700">
+                            Usage is automatically reported to Stripe and included in your next invoice.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-6 bg-gray-50 rounded-xl border border-dashed border-gray-300 text-center">
+                      <BarChart2 className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">Could not load usage data.</p>
+                      <button
+                        onClick={() => fetchTokenUsage(usagePeriod)}
+                        className="mt-2 text-xs text-purple-600 hover:text-purple-700 font-medium"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             
