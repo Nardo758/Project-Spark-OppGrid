@@ -30,6 +30,21 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
+# Exclude PostGIS system tables from migrations
+EXCLUDED_TABLES = {
+    'spatial_ref_sys',      # PostGIS coordinate systems
+    'geography_columns',    # PostGIS geography info
+    'geometry_columns',     # PostGIS geometry info
+    'raster_columns',       # PostGIS raster info
+    'raster_overviews',     # PostGIS raster overviews
+}
+
+def include_object(object, name, type_, reflected, compare_to):
+    """Filter out PostGIS system tables from autogenerate."""
+    if type_ == "table" and name in EXCLUDED_TABLES:
+        return False
+    return True
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
@@ -54,6 +69,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -75,7 +91,9 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
         )
 
         with context.begin_transaction():
