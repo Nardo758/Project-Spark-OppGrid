@@ -909,9 +909,10 @@ Target Audience: {opportunity.get('target_audience', '')}
         opportunity: Dict[str, Any],
         industry: Optional[str] = None,
         demand_signals: Optional[Dict[str, Any]] = None,
-        market_economics: Optional[Dict[str, Any]] = None
+        market_economics: Optional[Dict[str, Any]] = None,
+        report_data: Optional[Any] = None  # ReportDataContext from ReportDataService
     ) -> str:
-        """Generate comprehensive market analysis report with JediRE data integration."""
+        """Generate comprehensive market analysis report with full 4 P's data."""
         system = f"""You are a senior market research analyst at OppGrid creating institutional-grade market analysis reports.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
@@ -981,34 +982,108 @@ When consumer demand data is provided, incorporate it into the Consumer Analysis
         
         industry_focus = industry or opportunity.get('category', 'Unknown')
         
-        # Build demand signals info from JediRE
-        demand_info = ""
-        if demand_signals and demand_signals.get('signals'):
-            demand_info = "\n\nCONSUMER DEMAND INTELLIGENCE (Local Renter Preference Data):\n"
-            for signal in demand_signals['signals'][:12]:
-                trend = signal.get('trend', 'stable')
-                trend_icon = "↑ rising" if trend == 'rising' else "↓ declining" if trend == 'declining' else "→ stable"
-                demand_info += f"• {signal['amenity_type'].replace('_', ' ').title()}: {signal['demand_pct']}% of residents prioritize this ({trend_icon})\n"
-            demand_info += f"\n(Data from {demand_signals.get('count', 0)} local preference signals)"
+        # Build 4 P's data sections
+        product_info = ""
+        price_info = ""
+        place_info = ""
+        promotion_info = ""
         
-        # Build market economics info from JediRE
-        economics_info = ""
-        if market_economics:
-            economics_info = "\n\nMARKET ECONOMICS (Rental Market Intelligence):\n"
-            if market_economics.get('median_rent'):
-                economics_info += f"• Median Rent: ${market_economics['median_rent']}/month\n"
-            if market_economics.get('avg_rent_1br'):
-                economics_info += f"• Average 1BR Rent: ${market_economics['avg_rent_1br']}/month\n"
-            if market_economics.get('avg_rent_2br'):
-                economics_info += f"• Average 2BR Rent: ${market_economics['avg_rent_2br']}/month\n"
-            if market_economics.get('spending_power_index'):
-                spi = market_economics['spending_power_index']
+        # Use ReportDataContext if available (preferred)
+        if report_data:
+            # PRODUCT (Demand Validation)
+            product_info = "\n\n📊 PRODUCT INTELLIGENCE (OppGrid Analysis):\n"
+            if report_data.product.opportunity_score:
+                product_info += f"• Opportunity Score: {report_data.product.opportunity_score}/100\n"
+            if report_data.product.pain_intensity:
+                product_info += f"• Pain Intensity: {report_data.product.pain_intensity}/10\n"
+            if report_data.product.urgency_level:
+                product_info += f"• Urgency Level: {report_data.product.urgency_level.title()}\n"
+            if report_data.product.trend_strength:
+                product_info += f"• Trend Strength: {report_data.product.trend_strength}/100\n"
+            if report_data.product.signal_density:
+                product_info += f"• Signal Density: {report_data.product.signal_density:.0%}\n"
+            if report_data.product.amenity_demand:
+                product_info += "\nConsumer Demand Signals:\n"
+                for signal in report_data.product.amenity_demand[:8]:
+                    trend_icon = "↑" if signal.get('trend') == 'rising' else "↓" if signal.get('trend') == 'declining' else "→"
+                    product_info += f"  • {signal.get('amenity_type', '').replace('_', ' ').title()}: {signal.get('demand_pct', 0)}% {trend_icon}\n"
+            
+            # PRICE (Economics)
+            price_info = "\n\n💰 PRICE INTELLIGENCE (OppGrid Analysis):\n"
+            if report_data.price.market_size_estimate:
+                price_info += f"• Market Size: {report_data.price.market_size_estimate}\n"
+            if report_data.price.addressable_market_value:
+                price_info += f"• Addressable Market (TAM): ${report_data.price.addressable_market_value:,.0f}\n"
+            if report_data.price.median_income:
+                price_info += f"• Median Household Income: ${report_data.price.median_income:,}\n"
+            if report_data.price.income_growth_rate:
+                price_info += f"• Income Growth Rate: {report_data.price.income_growth_rate}%\n"
+            if report_data.price.revenue_benchmark:
+                price_info += f"• Revenue Benchmark: ${report_data.price.revenue_benchmark:,.0f}/year\n"
+            if report_data.price.capital_required:
+                price_info += f"• Capital Required: ${report_data.price.capital_required:,.0f}\n"
+            if report_data.price.median_rent:
+                price_info += f"• Median Rent: ${report_data.price.median_rent}/month\n"
+            if report_data.price.spending_power_index:
+                spi = report_data.price.spending_power_index
                 spi_label = "High" if spi >= 70 else "Moderate" if spi >= 40 else "Lower"
-                economics_info += f"• Spending Power Index: {spi}/100 ({spi_label})\n"
-            if market_economics.get('vacancy_rate'):
-                economics_info += f"• Market Vacancy Rate: {market_economics['vacancy_rate']}%\n"
-            if market_economics.get('rent_trend'):
-                economics_info += f"• Rent Trend: {market_economics['rent_trend'].title()}\n"
+                price_info += f"• Spending Power Index: {spi}/100 ({spi_label})\n"
+            
+            # PLACE (Location)
+            place_info = "\n\n📍 PLACE INTELLIGENCE (OppGrid Analysis):\n"
+            if report_data.place.growth_score:
+                place_info += f"• Market Growth Score: {report_data.place.growth_score}/100\n"
+            if report_data.place.growth_category:
+                place_info += f"• Growth Category: {report_data.place.growth_category.title()}\n"
+            if report_data.place.population:
+                place_info += f"• Population: {report_data.place.population:,}\n"
+            if report_data.place.population_growth_rate:
+                place_info += f"• Population Growth: {report_data.place.population_growth_rate}%\n"
+            if report_data.place.job_growth_rate:
+                place_info += f"• Job Growth: {report_data.place.job_growth_rate}%\n"
+            if report_data.place.business_formation_rate:
+                place_info += f"• New Business Formation: {report_data.place.business_formation_rate}%\n"
+            if report_data.place.traffic_aadt:
+                place_info += f"• Daily Traffic (AADT): {report_data.place.traffic_aadt:,} vehicles\n"
+            if report_data.place.vacancy_rate:
+                place_info += f"• Vacancy Rate: {report_data.place.vacancy_rate}%\n"
+            
+            # PROMOTION (Competition)
+            promotion_info = "\n\n🎯 PROMOTION INTELLIGENCE (OppGrid Analysis):\n"
+            if report_data.promotion.competition_level:
+                promotion_info += f"• Competition Level: {report_data.promotion.competition_level.title()}\n"
+            if report_data.promotion.competitor_count:
+                promotion_info += f"• Competitor Count: {report_data.promotion.competitor_count}\n"
+            if report_data.promotion.avg_competitor_rating:
+                promotion_info += f"• Avg Competitor Rating: {report_data.promotion.avg_competitor_rating}/5.0\n"
+            if report_data.promotion.competitive_advantages:
+                promotion_info += f"• Key Advantages: {', '.join(report_data.promotion.competitive_advantages[:3])}\n"
+            if report_data.promotion.key_risks:
+                promotion_info += f"• Key Risks: {', '.join(report_data.promotion.key_risks[:3])}\n"
+            if report_data.promotion.success_factors:
+                promotion_info += "\nSuccess Factors from Similar Businesses:\n"
+                for factor in report_data.promotion.success_factors[:5]:
+                    promotion_info += f"  • {factor}\n"
+        
+        # Fallback to legacy JediRE data if ReportDataContext not available
+        elif demand_signals and demand_signals.get('signals'):
+            product_info = "\n\nCONSUMER DEMAND INTELLIGENCE:\n"
+            for signal in demand_signals['signals'][:12]:
+                trend_icon = "↑" if signal.get('trend') == 'rising' else "↓" if signal.get('trend') == 'declining' else "→"
+                product_info += f"• {signal['amenity_type'].replace('_', ' ').title()}: {signal['demand_pct']}% {trend_icon}\n"
+        
+        if market_economics and not report_data:
+            price_info = "\n\nMARKET ECONOMICS:\n"
+            if market_economics.get('median_rent'):
+                price_info += f"• Median Rent: ${market_economics['median_rent']}/month\n"
+            if market_economics.get('spending_power_index'):
+                price_info += f"• Spending Power Index: {market_economics['spending_power_index']}/100\n"
+        
+        # Data quality note
+        data_quality_note = ""
+        if report_data and report_data.data_quality:
+            completeness = report_data.data_quality.completeness
+            data_quality_note = f"\n\n(Data Completeness: {completeness:.0%})"
         
         prompt = f"""Create a comprehensive market analysis for:
 
@@ -1016,10 +1091,12 @@ Industry/Market: {industry_focus}
 Focus Area: {opportunity.get('title', 'Unknown')}
 Location: {opportunity.get('city', '')}, {opportunity.get('region', '')}
 Description: {opportunity.get('description', '')}
-Market Size Estimate: {opportunity.get('market_size', 'Under analysis')}
 Target Audience: {opportunity.get('target_audience', '')}
-{demand_info}
-{economics_info}
+{product_info}
+{price_info}
+{place_info}
+{promotion_info}
+{data_quality_note}
 """
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Market Analysis")

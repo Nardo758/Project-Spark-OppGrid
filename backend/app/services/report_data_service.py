@@ -1,0 +1,563 @@
+"""
+Report Data Service
+
+Aggregates all 4 P's data for report generation according to REPORT_DATA_FRAMEWORK.md.
+
+Data Sources:
+- 🔵 OppGrid (Primary): opportunities, detected_trends, market_growth_trajectories, 
+                        service_area_boundaries, success_patterns, traffic_roads, 
+                        google_maps_businesses, census_*, location_analysis_cache
+- 🟡 JediRE (Enrichment): demand signals, market economics, absorption rates, supply pipeline
+"""
+import logging
+from typing import Dict, Any, Optional, List
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from dataclasses import dataclass, asdict
+from datetime import datetime, timedelta
+
+# OppGrid models
+from app.models.opportunity import Opportunity
+from app.models.detected_trend import DetectedTrend
+from app.models.census_demographics import (
+    MarketGrowthTrajectory, 
+    CensusPopulationEstimate,
+    CensusMigrationFlow,
+    ServiceAreaBoundary
+)
+from app.models.success_pattern import SuccessPattern
+from app.models.google_scraping import GoogleMapsBusiness
+from app.models.location_analysis_cache import LocationAnalysisCache
+from app.models.idea_validation import IdeaValidation
+
+# JediRE client for enrichment
+from app.services.jedire_client import get_jedire_client, get_full_market_intelligence_sync
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ProductData:
+    """PRODUCT: Demand Validation"""
+    opportunity_score: Optional[float] = None
+    pain_intensity: Optional[float] = None
+    urgency_level: Optional[str] = None
+    target_audience: Optional[str] = None
+    trend_strength: Optional[float] = None
+    confidence_score: Optional[float] = None
+    opportunities_count: Optional[int] = None
+    signal_density: Optional[float] = None
+    validation_confidence: Optional[float] = None
+    # JediRE enrichment
+    amenity_demand: Optional[List[Dict]] = None
+    unmet_demand: Optional[List[Dict]] = None
+
+
+@dataclass
+class PriceData:
+    """PRICE: Economics"""
+    market_size_estimate: Optional[str] = None
+    addressable_market_value: Optional[float] = None
+    revenue_benchmark: Optional[float] = None
+    capital_required: Optional[float] = None
+    median_income: Optional[int] = None
+    income_growth_rate: Optional[float] = None
+    income_differential: Optional[float] = None
+    # JediRE enrichment
+    median_rent: Optional[int] = None
+    spending_power_index: Optional[int] = None
+    rent_by_bedroom: Optional[Dict[str, int]] = None
+
+
+@dataclass
+class PlaceData:
+    """PLACE: Location Intelligence"""
+    growth_score: Optional[float] = None
+    growth_category: Optional[str] = None
+    population_growth_rate: Optional[float] = None
+    job_growth_rate: Optional[float] = None
+    business_formation_rate: Optional[float] = None
+    net_migration_rate: Optional[float] = None
+    traffic_aadt: Optional[int] = None
+    site_recommendations: Optional[List[Dict]] = None
+    claude_summary: Optional[str] = None
+    population: Optional[int] = None
+    total_households: Optional[int] = None
+    # JediRE enrichment
+    vacancy_rate: Optional[float] = None
+    absorption_rate: Optional[float] = None
+    supply_pipeline: Optional[List[Dict]] = None
+
+
+@dataclass
+class PromotionData:
+    """PROMOTION: Competition & Reach"""
+    competition_level: Optional[str] = None
+    competitive_advantages: Optional[List[str]] = None
+    key_risks: Optional[List[str]] = None
+    business_model_suggestions: Optional[List[str]] = None
+    success_factors: Optional[List[str]] = None
+    failure_points: Optional[List[str]] = None
+    competitor_count: Optional[int] = None
+    avg_competitor_rating: Optional[float] = None
+    # JediRE enrichment
+    search_trends: Optional[Dict] = None
+
+
+@dataclass
+class DataQuality:
+    """Data quality metrics"""
+    completeness: float = 0.0  # 0-1
+    confidence: float = 0.0  # 0-1
+    oppgrid_fields_filled: int = 0
+    jedire_enrichment_available: bool = False
+    stale_data_warnings: Optional[List[str]] = None
+
+
+@dataclass
+class ReportDataContext:
+    """Complete data context for report generation"""
+    city: str
+    state: str
+    business_type: Optional[str]
+    report_type: str
+    product: ProductData
+    price: PriceData
+    place: PlaceData
+    promotion: PromotionData
+    data_quality: DataQuality
+    fetched_at: str
+
+
+class ReportDataService:
+    """
+    Aggregates all 4 P's data for report generation.
+    
+    Usage:
+        service = ReportDataService(db)
+        context = service.get_report_data(
+            city="Atlanta",
+            state="GA", 
+            business_type="coffee_shop",
+            report_type="market_analysis"
+        )
+    """
+    
+    def __init__(self, db: Session):
+        self.db = db
+        self.jedire_client = get_jedire_client()
+    
+    def get_report_data(
+        self,
+        city: str,
+        state: str,
+        business_type: Optional[str] = None,
+        report_type: str = "market_analysis",
+        opportunity_id: Optional[int] = None
+    ) -> ReportDataContext:
+        """
+        Fetch all data for a report.
+        
+        Args:
+            city: City name
+            state: State code (e.g., "GA")
+            business_type: Business category for filtering
+            report_type: Type of report being generated
+            opportunity_id: Specific opportunity ID if available
+        
+        Returns:
+            ReportDataContext with all 4 P's data
+        """
+        logger.info(f"[ReportData] Fetching data for {city}, {state} - {report_type}")
+        
+        # Fetch OppGrid data (primary)
+        product = self._fetch_product_data(city, state, business_type, opportunity_id)
+        price = self._fetch_price_data(city, state, business_type)
+        place = self._fetch_place_data(city, state)
+        promotion = self._fetch_promotion_data(city, state, business_type, opportunity_id)
+        
+        # Fetch JediRE enrichment
+        self._enrich_with_jedire(city, state, business_type, product, price, place, promotion)
+        
+        # Calculate data quality
+        data_quality = self._calculate_data_quality(product, price, place, promotion)
+        
+        context = ReportDataContext(
+            city=city,
+            state=state,
+            business_type=business_type,
+            report_type=report_type,
+            product=product,
+            price=price,
+            place=place,
+            promotion=promotion,
+            data_quality=data_quality,
+            fetched_at=datetime.utcnow().isoformat()
+        )
+        
+        logger.info(f"[ReportData] Data quality: {data_quality.completeness:.0%} complete")
+        return context
+    
+    def _fetch_product_data(
+        self, 
+        city: str, 
+        state: str, 
+        business_type: Optional[str],
+        opportunity_id: Optional[int]
+    ) -> ProductData:
+        """Fetch PRODUCT data from OppGrid."""
+        data = ProductData()
+        
+        # Get specific opportunity if ID provided
+        if opportunity_id:
+            opp = self.db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+            if opp:
+                data.opportunity_score = opp.ai_opportunity_score
+                data.pain_intensity = opp.ai_pain_intensity
+                data.urgency_level = opp.ai_urgency_level
+                data.target_audience = opp.ai_target_audience
+        
+        # Get aggregated opportunity data for location
+        opps = self.db.query(Opportunity).filter(
+            func.lower(Opportunity.city) == city.lower(),
+            Opportunity.status == 'active'
+        )
+        if business_type:
+            opps = opps.filter(func.lower(Opportunity.category) == business_type.lower())
+        opps = opps.all()
+        
+        if opps and not opportunity_id:
+            scores = [o.ai_opportunity_score for o in opps if o.ai_opportunity_score]
+            pains = [o.ai_pain_intensity for o in opps if o.ai_pain_intensity]
+            data.opportunity_score = sum(scores) / len(scores) if scores else None
+            data.pain_intensity = sum(pains) / len(pains) if pains else None
+            data.opportunities_count = len(opps)
+        
+        # Get detected trends
+        trends = self.db.query(DetectedTrend).filter(
+            DetectedTrend.category == business_type if business_type else True
+        ).order_by(DetectedTrend.trend_strength.desc()).limit(5).all()
+        
+        if trends:
+            data.trend_strength = trends[0].trend_strength
+            data.confidence_score = trends[0].confidence_score
+        
+        # Get signal density from service area
+        service_area = self.db.query(ServiceAreaBoundary).filter(
+            func.lower(ServiceAreaBoundary.included_cities.cast(str)).contains(city.lower())
+        ).first()
+        
+        if service_area:
+            data.signal_density = service_area.signal_density
+        
+        # Get validation confidence
+        validations = self.db.query(IdeaValidation).filter(
+            IdeaValidation.category == business_type if business_type else True
+        ).order_by(IdeaValidation.created_at.desc()).limit(10).all()
+        
+        if validations:
+            confidences = [v.validation_confidence for v in validations if v.validation_confidence]
+            data.validation_confidence = sum(confidences) / len(confidences) if confidences else None
+        
+        return data
+    
+    def _fetch_price_data(
+        self, 
+        city: str, 
+        state: str, 
+        business_type: Optional[str]
+    ) -> PriceData:
+        """Fetch PRICE data from OppGrid."""
+        data = PriceData()
+        
+        # Get market size from opportunities
+        opps = self.db.query(Opportunity).filter(
+            func.lower(Opportunity.city) == city.lower(),
+            Opportunity.ai_market_size_estimate.isnot(None)
+        ).limit(10).all()
+        
+        if opps:
+            # Take most common market size estimate
+            sizes = [o.ai_market_size_estimate for o in opps if o.ai_market_size_estimate]
+            if sizes:
+                data.market_size_estimate = max(set(sizes), key=sizes.count)
+        
+        # Get service area TAM
+        service_area = self.db.query(ServiceAreaBoundary).filter(
+            func.lower(ServiceAreaBoundary.included_cities.cast(str)).contains(city.lower())
+        ).first()
+        
+        if service_area:
+            data.addressable_market_value = float(service_area.addressable_market_value) if service_area.addressable_market_value else None
+        
+        # Get success pattern benchmarks
+        patterns = self.db.query(SuccessPattern).filter(
+            SuccessPattern.opportunity_type == business_type if business_type else True
+        ).all()
+        
+        if patterns:
+            revenues = [float(p.revenue_generated) for p in patterns if p.revenue_generated]
+            capitals = [float(p.capital_spent) for p in patterns if p.capital_spent]
+            data.revenue_benchmark = sum(revenues) / len(revenues) if revenues else None
+            data.capital_required = sum(capitals) / len(capitals) if capitals else None
+        
+        # Get census income data
+        census = self.db.query(CensusPopulationEstimate).filter(
+            func.lower(CensusPopulationEstimate.geography_name).contains(city.lower())
+        ).order_by(CensusPopulationEstimate.year.desc()).first()
+        
+        if census:
+            data.median_income = census.median_income
+        
+        # Get income growth from trajectories
+        trajectory = self.db.query(MarketGrowthTrajectory).filter(
+            func.lower(MarketGrowthTrajectory.city) == city.lower()
+        ).first()
+        
+        if trajectory:
+            data.income_growth_rate = float(trajectory.income_growth_rate) if trajectory.income_growth_rate else None
+        
+        # Get migration income differential
+        migration = self.db.query(CensusMigrationFlow).filter(
+            func.lower(CensusMigrationFlow.destination_name).contains(city.lower())
+        ).first()
+        
+        if migration:
+            data.income_differential = migration.income_differential
+        
+        return data
+    
+    def _fetch_place_data(self, city: str, state: str) -> PlaceData:
+        """Fetch PLACE data from OppGrid."""
+        data = PlaceData()
+        
+        # Get growth trajectory
+        trajectory = self.db.query(MarketGrowthTrajectory).filter(
+            func.lower(MarketGrowthTrajectory.city) == city.lower(),
+            MarketGrowthTrajectory.is_active == True
+        ).first()
+        
+        if trajectory:
+            data.growth_score = float(trajectory.growth_score) if trajectory.growth_score else None
+            data.growth_category = trajectory.growth_category.value if trajectory.growth_category else None
+            data.population_growth_rate = float(trajectory.population_growth_rate) if trajectory.population_growth_rate else None
+            data.job_growth_rate = float(trajectory.job_growth_rate) if trajectory.job_growth_rate else None
+            data.business_formation_rate = float(trajectory.business_formation_rate) if trajectory.business_formation_rate else None
+            data.net_migration_rate = float(trajectory.net_migration_rate) if trajectory.net_migration_rate else None
+        
+        # Get traffic data (simplified - would need geo query in production)
+        # For now, get average AADT for the city
+        try:
+            from app.models.traffic_road import TrafficRoad
+            traffic = self.db.query(func.avg(TrafficRoad.aadt)).filter(
+                func.lower(TrafficRoad.county).contains(city.lower())
+            ).scalar()
+            if traffic:
+                data.traffic_aadt = int(traffic)
+        except Exception:
+            pass  # Traffic table may not exist
+        
+        # Get location analysis cache
+        cache = self.db.query(LocationAnalysisCache).filter(
+            func.lower(LocationAnalysisCache.city) == city.lower()
+        ).order_by(LocationAnalysisCache.updated_at.desc()).first()
+        
+        if cache:
+            data.site_recommendations = cache.site_recommendations
+            data.claude_summary = cache.claude_summary
+        
+        # Get service area population
+        service_area = self.db.query(ServiceAreaBoundary).filter(
+            func.lower(ServiceAreaBoundary.included_cities.cast(str)).contains(city.lower())
+        ).first()
+        
+        if service_area:
+            data.population = service_area.total_population
+            data.total_households = service_area.total_households
+        
+        # Fallback to census
+        if not data.population:
+            census = self.db.query(CensusPopulationEstimate).filter(
+                func.lower(CensusPopulationEstimate.geography_name).contains(city.lower())
+            ).order_by(CensusPopulationEstimate.year.desc()).first()
+            if census:
+                data.population = census.population
+        
+        return data
+    
+    def _fetch_promotion_data(
+        self, 
+        city: str, 
+        state: str, 
+        business_type: Optional[str],
+        opportunity_id: Optional[int]
+    ) -> PromotionData:
+        """Fetch PROMOTION data from OppGrid."""
+        data = PromotionData()
+        
+        # Get opportunity-level competition data
+        if opportunity_id:
+            opp = self.db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+            if opp:
+                data.competition_level = opp.ai_competition_level
+                data.competitive_advantages = self._parse_json_field(opp.ai_competitive_advantages)
+                data.key_risks = self._parse_json_field(opp.ai_key_risks)
+                data.business_model_suggestions = self._parse_json_field(opp.ai_business_model_suggestions)
+        
+        # Get success patterns
+        patterns = self.db.query(SuccessPattern).filter(
+            SuccessPattern.opportunity_type == business_type if business_type else True
+        ).all()
+        
+        if patterns:
+            all_success = []
+            all_failures = []
+            for p in patterns:
+                all_success.extend(self._parse_json_field(p.success_factors) or [])
+                all_failures.extend(self._parse_json_field(p.failure_points) or [])
+            data.success_factors = list(set(all_success))[:10] if all_success else None
+            data.failure_points = list(set(all_failures))[:10] if all_failures else None
+        
+        # Get competitor data from Google Maps
+        competitors = self.db.query(GoogleMapsBusiness).filter(
+            GoogleMapsBusiness.types.contains([business_type]) if business_type else True,
+            GoogleMapsBusiness.is_active == True
+        ).limit(50).all()
+        
+        if competitors:
+            data.competitor_count = len(competitors)
+            ratings = [c.rating for c in competitors if c.rating]
+            data.avg_competitor_rating = sum(ratings) / len(ratings) if ratings else None
+        
+        return data
+    
+    def _enrich_with_jedire(
+        self,
+        city: str,
+        state: str,
+        business_type: Optional[str],
+        product: ProductData,
+        price: PriceData,
+        place: PlaceData,
+        promotion: PromotionData
+    ) -> None:
+        """Enrich data with JediRE market intelligence."""
+        try:
+            jedire_data = get_full_market_intelligence_sync(city, state, business_type)
+            
+            if not jedire_data.get('has_data'):
+                logger.info(f"[ReportData] No JediRE data available for {city}, {state}")
+                return
+            
+            # Enrich PRODUCT
+            if jedire_data.get('product'):
+                product.amenity_demand = jedire_data['product'].get('demand_signals')
+            
+            # Enrich PRICE
+            if jedire_data.get('price'):
+                price.median_rent = jedire_data['price'].get('median_rent')
+                price.spending_power_index = jedire_data['price'].get('spending_power_index')
+                price.rent_by_bedroom = jedire_data['price'].get('rent_by_bedroom')
+            
+            # Enrich PLACE
+            if jedire_data.get('place'):
+                place.vacancy_rate = jedire_data['place'].get('vacancy_rate')
+                place.absorption_rate = jedire_data['place'].get('monthly_absorption_rate')
+            
+            logger.info(f"[ReportData] JediRE enrichment applied for {city}, {state}")
+            
+        except Exception as e:
+            logger.warning(f"[ReportData] JediRE enrichment failed: {e}")
+    
+    def _calculate_data_quality(
+        self,
+        product: ProductData,
+        price: PriceData,
+        place: PlaceData,
+        promotion: PromotionData
+    ) -> DataQuality:
+        """Calculate data quality metrics."""
+        quality = DataQuality()
+        
+        # Count filled OppGrid fields
+        all_fields = []
+        for data in [product, price, place, promotion]:
+            for key, value in asdict(data).items():
+                if not key.startswith('_') and value is not None:
+                    all_fields.append(key)
+        
+        quality.oppgrid_fields_filled = len(all_fields)
+        
+        # Calculate completeness (out of key fields)
+        key_fields = [
+            product.opportunity_score,
+            product.trend_strength,
+            price.market_size_estimate,
+            price.median_income,
+            place.growth_score,
+            place.population,
+            promotion.competition_level,
+            promotion.competitor_count,
+        ]
+        filled = sum(1 for f in key_fields if f is not None)
+        quality.completeness = filled / len(key_fields)
+        
+        # Check JediRE enrichment
+        quality.jedire_enrichment_available = (
+            price.median_rent is not None or 
+            product.amenity_demand is not None
+        )
+        
+        # Calculate confidence
+        confidence_factors = [
+            1.0 if product.opportunity_score else 0.0,
+            1.0 if product.confidence_score else 0.5,
+            1.0 if place.growth_score else 0.5,
+            0.8 if quality.jedire_enrichment_available else 0.5,
+        ]
+        quality.confidence = sum(confidence_factors) / len(confidence_factors)
+        
+        return quality
+    
+    def _parse_json_field(self, field: Any) -> Optional[List]:
+        """Parse JSON string field to list."""
+        if field is None:
+            return None
+        if isinstance(field, list):
+            return field
+        if isinstance(field, str):
+            try:
+                import json
+                return json.loads(field)
+            except:
+                return None
+        return None
+    
+    def to_dict(self, context: ReportDataContext) -> Dict[str, Any]:
+        """Convert ReportDataContext to dictionary for AI prompts."""
+        return {
+            "city": context.city,
+            "state": context.state,
+            "business_type": context.business_type,
+            "report_type": context.report_type,
+            "product": asdict(context.product),
+            "price": asdict(context.price),
+            "place": asdict(context.place),
+            "promotion": asdict(context.promotion),
+            "data_quality": asdict(context.data_quality),
+            "fetched_at": context.fetched_at,
+        }
+
+
+# Convenience function
+def get_report_data(
+    db: Session,
+    city: str,
+    state: str,
+    business_type: Optional[str] = None,
+    report_type: str = "market_analysis",
+    opportunity_id: Optional[int] = None
+) -> ReportDataContext:
+    """Get report data context."""
+    service = ReportDataService(db)
+    return service.get_report_data(city, state, business_type, report_type, opportunity_id)

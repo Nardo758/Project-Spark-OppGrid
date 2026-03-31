@@ -915,53 +915,47 @@ async def trigger_report_generation(
     try:
         generator = AIReportGenerator()
         
+        # Parse city and state from location
+        location = report_context.get("location", "")
+        city, state = "", ""
+        if "," in location:
+            parts = location.split(",")
+            city = parts[0].strip()
+            state = parts[1].strip() if len(parts) > 1 else ""
+        else:
+            city = location
+        
         opportunity_context = {
             "title": report_context.get("businessConcept", "Business Opportunity"),
             "category": report_context.get("category", "General"),
-            "city": report_context.get("location", ""),
+            "city": city,
+            "region": state,
             "description": report_context.get("businessConcept", ""),
             "target_audience": report_context.get("targetMarket", ""),
         }
         
-        # Fetch JediRE market intelligence data if available
-        demand_signals = None
-        market_economics = None
+        # Fetch full 4 P's data using ReportDataService
+        report_data = None
         try:
-            from app.services.jedire_client import get_jedire_client
-            import asyncio
-            
-            # Parse city and state from location
-            location = report_context.get("location", "")
-            city, state = "", ""
-            if "," in location:
-                parts = location.split(",")
-                city = parts[0].strip()
-                state = parts[1].strip() if len(parts) > 1 else ""
-            else:
-                city = location
+            from app.services.report_data_service import ReportDataService
             
             if city and state:
-                client = get_jedire_client()
-                # Run async calls
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    demand_signals = loop.run_until_complete(client.get_demand_signals(city, state))
-                    market_economics = loop.run_until_complete(client.get_market_economics(city, state))
-                finally:
-                    loop.close()
-                    
-                if demand_signals or market_economics:
-                    logger.info(f"[JediRE] Enriched report with market data for {city}, {state}")
-        except Exception as jedire_err:
-            logger.warning(f"[JediRE] Could not fetch market data: {jedire_err}")
+                data_service = ReportDataService(db)
+                report_data = data_service.get_report_data(
+                    city=city,
+                    state=state,
+                    business_type=report_context.get("category"),
+                    report_type=report_type
+                )
+                logger.info(f"[ReportData] Fetched 4 P's data: {report_data.data_quality.completeness:.0%} complete")
+        except Exception as data_err:
+            logger.warning(f"[ReportData] Could not fetch report data: {data_err}")
         
         report_content = ""
         if report_type in ("market_analysis",):
             report_content = generator.generate_market_analysis_report(
                 opportunity_context,
-                demand_signals=demand_signals,
-                market_economics=market_economics
+                report_data=report_data
             )
         elif report_type in ("strategic", "strategic_assessment"):
             report_content = generator.generate_strategic_assessment(opportunity_context)
