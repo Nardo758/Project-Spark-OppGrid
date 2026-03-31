@@ -32,6 +32,8 @@ interface OpportunityGridProps {
   validatedIds?: number[];
   savedIds?: number[];
   emptyMessage?: string;
+  /** Show 4 P's market intelligence indicator on cards */
+  showFourPs?: boolean;
 }
 
 export const OpportunityGrid: React.FC<OpportunityGridProps> = ({
@@ -47,6 +49,7 @@ export const OpportunityGrid: React.FC<OpportunityGridProps> = ({
   validatedIds = [],
   savedIds = [],
   emptyMessage = 'No opportunities found. Be the first to submit one!',
+  showFourPs = false,
 }) => {
   const renderViewToggle = () => {
     if (!onViewModeChange) return null;
@@ -157,6 +160,7 @@ export const OpportunityGrid: React.FC<OpportunityGridProps> = ({
               onShare={onShare}
               isValidated={validatedIds.includes(opportunity.id)}
               isSaved={savedIds.includes(opportunity.id)}
+              showFourPs={showFourPs}
             />
           </div>
         ))}

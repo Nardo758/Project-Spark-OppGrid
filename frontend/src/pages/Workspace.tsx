@@ -7,6 +7,7 @@ import {
   Send, Sparkles, Target, Trash2, Loader2
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import { WorkspaceIntelligence } from '../components/FourPs'
 
 type WorkspaceStatus = 'researching' | 'validating' | 'planning' | 'building' | 'launched' | 'paused' | 'archived'
 type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
@@ -265,6 +266,9 @@ export default function WorkspacePage() {
                   {completedTasks} of {totalTasks} tasks completed
                 </p>
               </div>
+
+              {/* 4 P's Smart Task Suggestions */}
+              <WorkspaceIntelligence workspaceId={workspaceId} className="mb-4" />
 
               <div className="border-t border-stone-100 pt-4 space-y-2">
                 <button
