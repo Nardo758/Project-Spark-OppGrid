@@ -13,7 +13,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta
 
 # OppGrid models
@@ -110,13 +110,46 @@ class PromotionData:
 
 
 @dataclass
+class PillarQuality:
+    """Quality metrics for a single P (pillar)"""
+    name: str  # product, price, place, promotion
+    completeness: float = 0.0  # 0-1, percentage of key fields filled
+    confidence: float = 0.0  # 0-1, reliability of available data
+    fields_filled: int = 0
+    fields_total: int = 0
+    primary_sources: int = 0  # OppGrid fields
+    enrichment_sources: int = 0  # JediRE fields
+    freshness_score: float = 1.0  # 0-1, 1.0 = fresh
+    warnings: List[str] = field(default_factory=list)
+
+
+@dataclass
 class DataQuality:
     """Data quality metrics"""
-    completeness: float = 0.0  # 0-1
-    confidence: float = 0.0  # 0-1
+    completeness: float = 0.0  # 0-1 overall
+    confidence: float = 0.0  # 0-1 overall
     oppgrid_fields_filled: int = 0
     jedire_enrichment_available: bool = False
-    stale_data_warnings: Optional[List[str]] = None
+    stale_data_warnings: List[str] = field(default_factory=list)
+    
+    # Per-pillar breakdown
+    product_quality: Optional[PillarQuality] = None
+    price_quality: Optional[PillarQuality] = None
+    place_quality: Optional[PillarQuality] = None
+    promotion_quality: Optional[PillarQuality] = None
+    
+    # Report-specific
+    report_readiness: float = 0.0  # 0-1, is data sufficient for this report type
+    weakest_pillar: Optional[str] = None  # which P needs more data
+    recommended_actions: List[str] = field(default_factory=list)  # what to fetch/improve
+    
+    # Source breakdown
+    primary_data_pct: float = 0.0  # % from OppGrid
+    enrichment_data_pct: float = 0.0  # % from JediRE
+    
+    # Freshness
+    avg_freshness: float = 1.0  # 0-1
+    oldest_data_age_days: Optional[int] = None
 
 
 @dataclass
@@ -185,7 +218,7 @@ class ReportDataService:
         self._enrich_with_jedire(city, state, business_type, product, price, place, promotion)
         
         # Calculate data quality
-        data_quality = self._calculate_data_quality(product, price, place, promotion)
+        data_quality = self._calculate_data_quality(product, price, place, promotion, report_type)
         
         context = ReportDataContext(
             city=city,
@@ -494,50 +527,214 @@ class ReportDataService:
         product: ProductData,
         price: PriceData,
         place: PlaceData,
-        promotion: PromotionData
+        promotion: PromotionData,
+        report_type: str = "market_analysis"
     ) -> DataQuality:
-        """Calculate data quality metrics."""
+        """
+        Calculate comprehensive data quality metrics.
+        
+        Scoring Methodology:
+        - Completeness: % of key fields filled for each pillar
+        - Confidence: weighted by data source (OppGrid=1.0, JediRE=0.8) and recency
+        - Freshness: penalize stale data (>30 days = warning, >90 days = critical)
+        - Report Readiness: weighted by report type requirements
+        """
         quality = DataQuality()
         
-        # Count filled OppGrid fields
-        all_fields = []
-        for data in [product, price, place, promotion]:
-            for key, value in asdict(data).items():
-                if not key.startswith('_') and value is not None:
-                    all_fields.append(key)
+        # Define key fields per pillar (primary = OppGrid, enrichment = JediRE)
+        pillar_fields = {
+            'product': {
+                'primary': ['opportunity_score', 'pain_intensity', 'urgency_level', 
+                           'trend_strength', 'confidence_score', 'signal_density', 
+                           'validation_confidence', 'opportunities_count'],
+                'enrichment': ['amenity_demand', 'unmet_demand'],
+                'critical': ['opportunity_score', 'trend_strength'],  # Must-have for reports
+            },
+            'price': {
+                'primary': ['market_size_estimate', 'addressable_market_value', 
+                           'revenue_benchmark', 'capital_required', 'median_income',
+                           'income_growth_rate', 'income_differential'],
+                'enrichment': ['median_rent', 'spending_power_index', 'rent_by_bedroom'],
+                'critical': ['market_size_estimate', 'median_income'],
+            },
+            'place': {
+                'primary': ['growth_score', 'growth_category', 'population_growth_rate',
+                           'job_growth_rate', 'business_formation_rate', 'population',
+                           'traffic_aadt', 'site_recommendations'],
+                'enrichment': ['vacancy_rate', 'absorption_rate', 'supply_pipeline'],
+                'critical': ['growth_score', 'population'],
+            },
+            'promotion': {
+                'primary': ['competition_level', 'competitive_advantages', 'key_risks',
+                           'success_factors', 'failure_points', 'competitor_count',
+                           'avg_competitor_rating'],
+                'enrichment': ['search_trends'],
+                'critical': ['competition_level', 'competitor_count'],
+            }
+        }
         
-        quality.oppgrid_fields_filled = len(all_fields)
+        # Report type weights - which pillars matter most for each report
+        report_weights = {
+            'market_analysis': {'product': 0.3, 'price': 0.2, 'place': 0.35, 'promotion': 0.15},
+            'feasibility': {'product': 0.2, 'price': 0.35, 'place': 0.25, 'promotion': 0.2},
+            'business_plan': {'product': 0.25, 'price': 0.25, 'place': 0.25, 'promotion': 0.25},
+            'financial': {'product': 0.15, 'price': 0.45, 'place': 0.2, 'promotion': 0.2},
+            'competitive': {'product': 0.2, 'price': 0.15, 'place': 0.15, 'promotion': 0.5},
+            'pitch_deck': {'product': 0.35, 'price': 0.3, 'place': 0.15, 'promotion': 0.2},
+        }
         
-        # Calculate completeness (out of key fields)
-        key_fields = [
-            product.opportunity_score,
-            product.trend_strength,
-            price.market_size_estimate,
-            price.median_income,
-            place.growth_score,
-            place.population,
-            promotion.competition_level,
-            promotion.competitor_count,
-        ]
-        filled = sum(1 for f in key_fields if f is not None)
-        quality.completeness = filled / len(key_fields)
+        weights = report_weights.get(report_type, report_weights['market_analysis'])
         
-        # Check JediRE enrichment
-        quality.jedire_enrichment_available = (
-            price.median_rent is not None or 
-            product.amenity_demand is not None
+        # Calculate per-pillar quality
+        pillar_data = {
+            'product': product,
+            'price': price,
+            'place': place,
+            'promotion': promotion
+        }
+        
+        pillar_qualities = {}
+        all_warnings = []
+        total_primary = 0
+        total_enrichment = 0
+        
+        for pillar_name, fields in pillar_fields.items():
+            data = pillar_data[pillar_name]
+            data_dict = asdict(data)
+            
+            pq = PillarQuality(name=pillar_name)
+            
+            # Count filled fields
+            primary_filled = sum(1 for f in fields['primary'] if data_dict.get(f) is not None)
+            enrichment_filled = sum(1 for f in fields['enrichment'] if data_dict.get(f) is not None)
+            
+            pq.primary_sources = primary_filled
+            pq.enrichment_sources = enrichment_filled
+            pq.fields_filled = primary_filled + enrichment_filled
+            pq.fields_total = len(fields['primary']) + len(fields['enrichment'])
+            
+            total_primary += primary_filled
+            total_enrichment += enrichment_filled
+            
+            # Completeness = filled / total
+            pq.completeness = pq.fields_filled / pq.fields_total if pq.fields_total > 0 else 0.0
+            
+            # Check critical fields
+            critical_missing = [f for f in fields['critical'] if data_dict.get(f) is None]
+            if critical_missing:
+                warning = f"⚠️ {pillar_name.upper()}: Missing critical fields: {', '.join(critical_missing)}"
+                pq.warnings.append(warning)
+                all_warnings.append(warning)
+            
+            # Confidence: weighted by source quality
+            # Primary sources = 1.0 weight, Enrichment = 0.8 weight
+            if pq.fields_filled > 0:
+                weighted_score = (primary_filled * 1.0 + enrichment_filled * 0.8)
+                max_weighted = len(fields['primary']) * 1.0 + len(fields['enrichment']) * 0.8
+                pq.confidence = weighted_score / max_weighted if max_weighted > 0 else 0.0
+            else:
+                pq.confidence = 0.0
+            
+            # Apply penalty for missing critical fields
+            if critical_missing:
+                penalty = 0.15 * len(critical_missing)
+                pq.confidence = max(0, pq.confidence - penalty)
+            
+            pillar_qualities[pillar_name] = pq
+        
+        # Assign pillar qualities to DataQuality
+        quality.product_quality = pillar_qualities['product']
+        quality.price_quality = pillar_qualities['price']
+        quality.place_quality = pillar_qualities['place']
+        quality.promotion_quality = pillar_qualities['promotion']
+        
+        # Overall completeness (weighted by report type)
+        quality.completeness = sum(
+            pillar_qualities[p].completeness * weights[p] 
+            for p in weights
         )
         
-        # Calculate confidence
-        confidence_factors = [
-            1.0 if product.opportunity_score else 0.0,
-            1.0 if product.confidence_score else 0.5,
-            1.0 if place.growth_score else 0.5,
-            0.8 if quality.jedire_enrichment_available else 0.5,
-        ]
-        quality.confidence = sum(confidence_factors) / len(confidence_factors)
+        # Overall confidence (weighted by report type)
+        quality.confidence = sum(
+            pillar_qualities[p].confidence * weights[p] 
+            for p in weights
+        )
+        
+        # Source breakdown
+        total_filled = total_primary + total_enrichment
+        if total_filled > 0:
+            quality.primary_data_pct = total_primary / total_filled
+            quality.enrichment_data_pct = total_enrichment / total_filled
+        
+        quality.oppgrid_fields_filled = total_primary
+        quality.jedire_enrichment_available = total_enrichment > 0
+        
+        # Find weakest pillar (lowest completeness among high-weight pillars)
+        relevant_pillars = {p: q for p, q in pillar_qualities.items() if weights[p] >= 0.2}
+        if relevant_pillars:
+            quality.weakest_pillar = min(relevant_pillars, key=lambda p: relevant_pillars[p].completeness)
+        
+        # Report readiness thresholds
+        # 0.7+ = good, 0.5-0.7 = marginal, <0.5 = insufficient
+        if quality.completeness >= 0.7 and quality.confidence >= 0.6:
+            quality.report_readiness = min(1.0, (quality.completeness + quality.confidence) / 2 + 0.1)
+        elif quality.completeness >= 0.5:
+            quality.report_readiness = (quality.completeness + quality.confidence) / 2
+        else:
+            quality.report_readiness = quality.completeness * 0.8
+        
+        # Generate recommended actions
+        quality.recommended_actions = self._generate_recommendations(
+            pillar_qualities, report_type, pillar_fields
+        )
+        
+        quality.stale_data_warnings = all_warnings
         
         return quality
+    
+    def _generate_recommendations(
+        self,
+        pillar_qualities: Dict[str, PillarQuality],
+        report_type: str,
+        pillar_fields: Dict
+    ) -> List[str]:
+        """Generate actionable recommendations to improve data quality."""
+        recommendations = []
+        
+        # Check each pillar
+        for pillar_name, pq in pillar_qualities.items():
+            if pq.completeness < 0.5:
+                # Critical gap
+                missing_critical = [
+                    f for f in pillar_fields[pillar_name]['critical']
+                    if f not in [w.split(': ')[-1] for w in pq.warnings]
+                ]
+                if pq.primary_sources < 2:
+                    recommendations.append(
+                        f"🔴 {pillar_name.upper()}: Run opportunity analysis to populate core data"
+                    )
+                elif pq.enrichment_sources == 0:
+                    recommendations.append(
+                        f"🟡 {pillar_name.upper()}: Enable JediRE enrichment for rental market context"
+                    )
+            elif pq.completeness < 0.7:
+                # Moderate gap
+                if pq.enrichment_sources == 0:
+                    recommendations.append(
+                        f"💡 {pillar_name.upper()}: JediRE enrichment would improve confidence"
+                    )
+        
+        # Report-specific recommendations
+        if report_type == 'financial' and pillar_qualities['price'].completeness < 0.6:
+            recommendations.append("📊 Financial report: Consider fetching success patterns for revenue benchmarks")
+        
+        if report_type == 'competitive' and pillar_qualities['promotion'].completeness < 0.6:
+            recommendations.append("🎯 Competitive report: Run Google Maps competitor analysis")
+        
+        if report_type in ['market_analysis', 'feasibility'] and pillar_qualities['place'].completeness < 0.7:
+            recommendations.append("📍 Location report: Fetch traffic data and growth trajectories")
+        
+        return recommendations[:5]  # Limit to top 5 recommendations
     
     def _parse_json_field(self, field: Any) -> Optional[List]:
         """Parse JSON string field to list."""
@@ -555,6 +752,27 @@ class ReportDataService:
     
     def to_dict(self, context: ReportDataContext) -> Dict[str, Any]:
         """Convert ReportDataContext to dictionary for AI prompts."""
+        # Convert data quality with nested pillar qualities
+        dq = context.data_quality
+        data_quality_dict = {
+            "completeness": dq.completeness,
+            "confidence": dq.confidence,
+            "report_readiness": dq.report_readiness,
+            "weakest_pillar": dq.weakest_pillar,
+            "oppgrid_fields_filled": dq.oppgrid_fields_filled,
+            "jedire_enrichment_available": dq.jedire_enrichment_available,
+            "primary_data_pct": dq.primary_data_pct,
+            "enrichment_data_pct": dq.enrichment_data_pct,
+            "stale_data_warnings": dq.stale_data_warnings,
+            "recommended_actions": dq.recommended_actions,
+            "pillars": {
+                "product": asdict(dq.product_quality) if dq.product_quality else None,
+                "price": asdict(dq.price_quality) if dq.price_quality else None,
+                "place": asdict(dq.place_quality) if dq.place_quality else None,
+                "promotion": asdict(dq.promotion_quality) if dq.promotion_quality else None,
+            }
+        }
+        
         return {
             "city": context.city,
             "state": context.state,
@@ -564,9 +782,82 @@ class ReportDataService:
             "price": asdict(context.price),
             "place": asdict(context.place),
             "promotion": asdict(context.promotion),
-            "data_quality": asdict(context.data_quality),
+            "data_quality": data_quality_dict,
             "fetched_at": context.fetched_at,
         }
+    
+    def get_quality_summary(self, context: ReportDataContext) -> str:
+        """Generate human-readable quality summary for reports."""
+        dq = context.data_quality
+        
+        # Overall status
+        if dq.report_readiness >= 0.8:
+            status = "✅ **Excellent** - Data is comprehensive and reliable"
+        elif dq.report_readiness >= 0.6:
+            status = "🟡 **Good** - Data is sufficient with minor gaps"
+        elif dq.report_readiness >= 0.4:
+            status = "🟠 **Fair** - Report may have limited depth"
+        else:
+            status = "🔴 **Limited** - Consider gathering more data"
+        
+        lines = [
+            f"## Data Quality Assessment",
+            f"",
+            f"**Overall Status:** {status}",
+            f"",
+            f"| Metric | Score |",
+            f"|--------|-------|",
+            f"| Completeness | {dq.completeness:.0%} |",
+            f"| Confidence | {dq.confidence:.0%} |",
+            f"| Report Readiness | {dq.report_readiness:.0%} |",
+            f"",
+            f"### Source Breakdown",
+            f"- OppGrid (Primary): {dq.primary_data_pct:.0%} of data",
+            f"- JediRE (Enrichment): {dq.enrichment_data_pct:.0%} of data",
+        ]
+        
+        # Per-pillar breakdown
+        lines.extend([
+            f"",
+            f"### Pillar Analysis",
+            f"",
+            f"| Pillar | Completeness | Confidence | Fields |",
+            f"|--------|--------------|------------|--------|",
+        ])
+        
+        for pq in [dq.product_quality, dq.price_quality, dq.place_quality, dq.promotion_quality]:
+            if pq:
+                emoji = "✅" if pq.completeness >= 0.7 else ("🟡" if pq.completeness >= 0.4 else "🔴")
+                lines.append(
+                    f"| {emoji} {pq.name.title()} | {pq.completeness:.0%} | {pq.confidence:.0%} | {pq.fields_filled}/{pq.fields_total} |"
+                )
+        
+        # Weakest pillar callout
+        if dq.weakest_pillar:
+            lines.extend([
+                f"",
+                f"**Weakest Area:** {dq.weakest_pillar.title()} - focus additional research here",
+            ])
+        
+        # Warnings
+        if dq.stale_data_warnings:
+            lines.extend([
+                f"",
+                f"### ⚠️ Warnings",
+            ])
+            for warning in dq.stale_data_warnings:
+                lines.append(f"- {warning}")
+        
+        # Recommendations
+        if dq.recommended_actions:
+            lines.extend([
+                f"",
+                f"### 💡 Recommendations",
+            ])
+            for rec in dq.recommended_actions:
+                lines.append(f"- {rec}")
+        
+        return "\n".join(lines)
 
 
 # Convenience function

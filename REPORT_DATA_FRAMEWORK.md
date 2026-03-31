@@ -164,4 +164,66 @@ def get_report_data(city, state, business_type, report_type) -> ReportDataContex
 
 ---
 
+## Data Quality Scoring
+
+### Pillar-Level Quality (`PillarQuality`)
+
+Each of the 4 P's gets individual quality scores:
+
+| Metric | Description |
+|--------|-------------|
+| `completeness` | 0-1, % of key fields filled |
+| `confidence` | 0-1, weighted by source (OppGrid=1.0, JediRE=0.8) |
+| `fields_filled` / `fields_total` | Raw count |
+| `primary_sources` | OppGrid fields filled |
+| `enrichment_sources` | JediRE fields filled |
+| `warnings` | Missing critical fields |
+
+### Overall Quality (`DataQuality`)
+
+| Metric | Description |
+|--------|-------------|
+| `completeness` | Weighted avg by report type |
+| `confidence` | Weighted avg by report type |
+| `report_readiness` | 0-1, is data sufficient for this report? |
+| `weakest_pillar` | Which P needs more data |
+| `recommended_actions` | Actionable improvement steps |
+| `primary_data_pct` | % from OppGrid |
+| `enrichment_data_pct` | % from JediRE |
+
+### Report Type Weights
+
+Different reports prioritize different pillars:
+
+| Report Type | PRODUCT | PRICE | PLACE | PROMOTION |
+|-------------|---------|-------|-------|-----------|
+| market_analysis | 30% | 20% | **35%** | 15% |
+| feasibility | 20% | **35%** | 25% | 20% |
+| business_plan | 25% | 25% | 25% | 25% |
+| financial | 15% | **45%** | 20% | 20% |
+| competitive | 20% | 15% | 15% | **50%** |
+| pitch_deck | **35%** | 30% | 15% | 20% |
+
+### Readiness Thresholds
+
+| Score | Status | Action |
+|-------|--------|--------|
+| 0.8+ | ✅ Excellent | Proceed with full report |
+| 0.6-0.8 | 🟡 Good | Minor gaps, report viable |
+| 0.4-0.6 | 🟠 Fair | Report will have limited depth |
+| <0.4 | 🔴 Limited | Gather more data first |
+
+### Critical Fields
+
+Each pillar has critical fields that **must** be present:
+
+- **PRODUCT:** `opportunity_score`, `trend_strength`
+- **PRICE:** `market_size_estimate`, `median_income`
+- **PLACE:** `growth_score`, `population`
+- **PROMOTION:** `competition_level`, `competitor_count`
+
+Missing critical fields triggers warnings and confidence penalties.
+
+---
+
 *OppGrid owns the intelligence. JediRE adds rental market context.*
