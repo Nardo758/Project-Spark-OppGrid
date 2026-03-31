@@ -104,6 +104,9 @@ class PlaceData:
     vacancy_rate: Optional[float] = None
     absorption_rate: Optional[float] = None
     supply_pipeline: Optional[List[Dict]] = None
+    # JediRE growth indices (leading indicators)
+    traffic_growth_index: Optional[float] = None  # (Realtime - Historical) / Historical × 100
+    search_growth_index: Optional[float] = None   # Similar for online search volume
     # Web enrichment (Indeed/LinkedIn + BLS)
     job_postings_count: Optional[int] = None
     job_market_growth: Optional[str] = None  # growing, stable, limited
@@ -543,6 +546,16 @@ class ReportDataService:
             if jedire_data.get('place'):
                 place.vacancy_rate = jedire_data['place'].get('vacancy_rate')
                 place.absorption_rate = jedire_data['place'].get('monthly_absorption_rate')
+            
+            # Fetch growth indices (leading indicators)
+            try:
+                growth_indices = self.jedire_client.get_growth_indices_sync(city, state)
+                if growth_indices:
+                    place.traffic_growth_index = growth_indices.get('traffic_growth_index')
+                    place.search_growth_index = growth_indices.get('search_growth_index')
+                    logger.info(f"[ReportData] Growth indices: traffic={place.traffic_growth_index}, search={place.search_growth_index}")
+            except Exception as e:
+                logger.debug(f"[ReportData] Growth indices not available: {e}")
             
             logger.info(f"[ReportData] JediRE enrichment applied for {city}, {state}")
             

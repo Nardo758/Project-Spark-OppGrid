@@ -330,6 +330,69 @@ class JediREClient:
             logger.error(f"[JediRE] Error fetching supply pipeline: {e}")
             return None
     
+    async def get_growth_indices(
+        self, 
+        city: str, 
+        state: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch leading growth indicators from JediRE.
+        
+        Returns:
+        - traffic_growth_index: (Google Realtime ADT - DOT Historical) / DOT Historical × 100
+        - search_growth_index: Similar formula for online search volume
+        
+        Positive = growing market, Negative = declining
+        """
+        cache_key = f"growth:{city.lower()}:{state.upper()}"
+        cached = _get_cached(cache_key)
+        if cached:
+            return cached
+        
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/api/v1/oppgrid/growth-indices",
+                    params={"city": city, "state": state},
+                    headers=self._get_headers(),
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('success'):
+                        result = data.get('data', {})
+                        _set_cached(cache_key, result)
+                        return result
+                return None
+                    
+        except Exception as e:
+            logger.error(f"[JediRE] Error fetching growth indices: {e}")
+            return None
+    
+    def get_growth_indices_sync(
+        self, 
+        city: str, 
+        state: str
+    ) -> Optional[Dict[str, Any]]:
+        """Sync version of get_growth_indices."""
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Can't use asyncio.run inside a running loop
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run, 
+                        self.get_growth_indices(city, state)
+                    )
+                    return future.result(timeout=self.timeout + 5)
+            else:
+                return asyncio.run(self.get_growth_indices(city, state))
+        except Exception as e:
+            logger.error(f"[JediRE] Sync growth indices error: {e}")
+            return None
+    
     # =========================================================================
     # PULL: PROMOTION (Digital & Competition)
     # =========================================================================

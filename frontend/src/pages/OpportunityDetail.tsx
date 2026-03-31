@@ -38,6 +38,8 @@ type MarketIntelligence = {
     population?: number
     population_growth_rate?: number
     job_growth_rate?: number
+    traffic_growth_index?: number  // Leading indicator: where people are moving
+    search_growth_index?: number   // Leading indicator: online interest
   }
   promotion: {
     competition_level?: string
@@ -636,6 +638,26 @@ export default function OpportunityDetail() {
                   <span className="text-lg">📍</span>
                   <span className="text-sm font-medium text-stone-700 capitalize">
                     {intel.place.growth_category} Market
+                  </span>
+                </div>
+              )}
+              
+              {/* Traffic Growth (Leading Indicator) */}
+              {intel.place?.traffic_growth_index && intel.place.traffic_growth_index > 5 && (
+                <div className="flex items-center gap-2 bg-white/70 px-3 py-1.5 rounded-full">
+                  <span className="text-lg">🚗</span>
+                  <span className="text-sm font-medium text-stone-700">
+                    +{intel.place.traffic_growth_index.toFixed(0)}% Traffic Growth
+                  </span>
+                </div>
+              )}
+              
+              {/* Search Growth (Leading Indicator) */}
+              {intel.place?.search_growth_index && intel.place.search_growth_index > 10 && (
+                <div className="flex items-center gap-2 bg-white/70 px-3 py-1.5 rounded-full">
+                  <span className="text-lg">🔍</span>
+                  <span className="text-sm font-medium text-stone-700">
+                    +{intel.place.search_growth_index.toFixed(0)}% Search Interest
                   </span>
                 </div>
               )}
