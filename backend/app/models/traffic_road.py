@@ -1,7 +1,6 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Index, SmallInteger
+from sqlalchemy import Column, Integer, String, Float, DateTime, Index, SmallInteger, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import func
-from geoalchemy2 import Geometry
 from app.db.database import Base
 
 
@@ -31,7 +30,7 @@ class TrafficRoad(Base):
     d_factor = Column(Float, nullable=True)
     t_factor = Column(Float, nullable=True)
     
-    geometry = Column(Geometry('LINESTRING', srid=4326), nullable=False)
+    geometry = Column(Text, nullable=False)
     
     begin_post = Column(Float, nullable=True)
     end_post = Column(Float, nullable=True)
@@ -44,5 +43,4 @@ class TrafficRoad(Base):
 
     __table_args__ = (
         Index('idx_traffic_roads_state_year', 'state', 'year'),
-        Index('idx_traffic_roads_geometry', 'geometry', postgresql_using='gist'),
     )
