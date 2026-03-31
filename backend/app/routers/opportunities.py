@@ -837,3 +837,156 @@ async def get_opportunity_demographics(
         "census_configured": census_service.is_configured,
         "trends_configured": google_trends_service.is_configured
     }
+
+
+
+# =============================================================================
+# 4 P's API Endpoints - Platform-wide data framework
+# =============================================================================
+
+@router.get("/{opportunity_id}/four-ps")
+async def get_opportunity_four_ps(
+    opportunity_id: int,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(optional_auth)
+):
+    """
+    Get full 4 P's data for an opportunity.
+    
+    Returns comprehensive PRODUCT, PRICE, PLACE, PROMOTION data
+    with quality metrics and pillar scores.
+    
+    Access: Authenticated users (free tier gets basic data)
+    """
+    from app.services.report_data_service import ReportDataService
+    
+    # Verify opportunity exists
+    opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found"
+        )
+    
+    try:
+        service = ReportDataService(db)
+        response = service.get_full_response(opportunity_id)
+        
+        if not response:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Could not generate 4 P's data for this opportunity"
+            )
+        
+        return response
+        
+    except Exception as e:
+        import logging
+        logging.error(f"[4Ps] Error fetching data for opportunity {opportunity_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching 4 P's data: {str(e)}"
+        )
+
+
+@router.get("/{opportunity_id}/four-ps/mini")
+async def get_opportunity_four_ps_mini(
+    opportunity_id: int,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(optional_auth)
+):
+    """
+    Get lightweight 4 P's scores for opportunity cards.
+    
+    Returns only pillar scores, overall score, quality, and top insight.
+    Optimized for rendering lists of cards quickly.
+    """
+    from app.services.report_data_service import ReportDataService
+    
+    # Verify opportunity exists
+    opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found"
+        )
+    
+    try:
+        service = ReportDataService(db)
+        response = service.get_mini_response(opportunity_id)
+        
+        if not response:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Could not generate 4 P's mini data"
+            )
+        
+        return response
+        
+    except Exception as e:
+        import logging
+        logging.error(f"[4Ps Mini] Error for opportunity {opportunity_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching 4 P's mini data: {str(e)}"
+        )
+
+
+@router.post("/four-ps/batch")
+async def get_opportunities_four_ps_batch(
+    request: dict,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(optional_auth)
+):
+    """
+    Batch fetch 4 P's mini scores for multiple opportunities.
+    
+    Body: { "ids": [1, 2, 3, 4, 5] }
+    
+    Returns dict mapping opportunity_id -> mini scores.
+    Max 50 opportunities per request.
+    """
+    from app.services.report_data_service import ReportDataService
+    
+    ids = request.get("ids", [])
+    
+    if not ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ids array is required"
+        )
+    
+    if len(ids) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 50 opportunities per batch request"
+        )
+    
+    # Verify opportunities exist
+    existing = db.query(Opportunity.id).filter(Opportunity.id.in_(ids)).all()
+    existing_ids = {o.id for o in existing}
+    
+    service = ReportDataService(db)
+    results = {}
+    errors = []
+    
+    for opp_id in ids:
+        if opp_id not in existing_ids:
+            errors.append({"id": opp_id, "error": "not_found"})
+            continue
+        
+        try:
+            response = service.get_mini_response(opp_id)
+            if response:
+                results[str(opp_id)] = response
+            else:
+                errors.append({"id": opp_id, "error": "no_data"})
+        except Exception as e:
+            errors.append({"id": opp_id, "error": str(e)})
+    
+    return {
+        "results": results,
+        "errors": errors if errors else None,
+        "fetched": len(results),
+        "total_requested": len(ids)
+    }

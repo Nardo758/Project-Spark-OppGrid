@@ -965,6 +965,195 @@ class ReportDataService:
                 lines.append(f"- {rec}")
         
         return "\n".join(lines)
+    
+    # =========================================================================
+    # 4 P's API Methods - For platform-wide integration
+    # =========================================================================
+    
+    def get_four_ps_for_opportunity(self, opportunity_id: int) -> Optional[ReportDataContext]:
+        """
+        Get 4 P's data for a specific opportunity.
+        
+        This is the primary method for powering idea cards, detail pages,
+        and workspace intelligence with unified 4 P's data.
+        """
+        opp = self.db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+        if not opp:
+            return None
+        
+        # Extract location from opportunity
+        city = opp.city or "Unknown"
+        state = opp.region or opp.country or "US"
+        business_type = opp.category
+        
+        return self.get_report_data(
+            city=city,
+            state=state,
+            business_type=business_type,
+            report_type="market_analysis",
+            opportunity_id=opportunity_id
+        )
+    
+    def get_pillar_scores(self, context: ReportDataContext) -> Dict[str, int]:
+        """
+        Calculate 0-100 scores for each pillar.
+        
+        Score formula:
+        - Base from data completeness (40% weight)
+        - Boost from key metrics (40% weight)
+        - Confidence adjustment (20% weight)
+        """
+        scores = {}
+        
+        # PRODUCT score
+        product_base = (context.data_quality.product_quality.completeness * 40) if context.data_quality.product_quality else 0
+        product_boost = 0
+        if context.product.opportunity_score:
+            product_boost += min(20, context.product.opportunity_score / 5)  # 0-100 → 0-20
+        if context.product.pain_intensity:
+            product_boost += min(10, context.product.pain_intensity)  # 1-10 → 1-10
+        if context.product.trend_strength:
+            product_boost += min(10, context.product.trend_strength * 10)  # 0-1 → 0-10
+        product_conf = (context.data_quality.product_quality.confidence * 20) if context.data_quality.product_quality else 0
+        scores['product'] = min(100, int(product_base + product_boost + product_conf))
+        
+        # PRICE score
+        price_base = (context.data_quality.price_quality.completeness * 40) if context.data_quality.price_quality else 0
+        price_boost = 0
+        if context.price.median_income:
+            # Higher income = better market
+            if context.price.median_income > 100000:
+                price_boost += 20
+            elif context.price.median_income > 70000:
+                price_boost += 15
+            elif context.price.median_income > 50000:
+                price_boost += 10
+            else:
+                price_boost += 5
+        if context.price.market_size_estimate:
+            size = context.price.market_size_estimate.lower()
+            if 'b' in size:  # Billions
+                price_boost += 20
+            elif 'm' in size:  # Millions
+                price_boost += 10
+        price_conf = (context.data_quality.price_quality.confidence * 20) if context.data_quality.price_quality else 0
+        scores['price'] = min(100, int(price_base + price_boost + price_conf))
+        
+        # PLACE score
+        place_base = (context.data_quality.place_quality.completeness * 40) if context.data_quality.place_quality else 0
+        place_boost = 0
+        if context.place.growth_score:
+            place_boost += min(25, context.place.growth_score / 4)  # 0-100 → 0-25
+        if context.place.population_growth_rate:
+            if context.place.population_growth_rate > 2:
+                place_boost += 15
+            elif context.place.population_growth_rate > 1:
+                place_boost += 10
+            elif context.place.population_growth_rate > 0:
+                place_boost += 5
+        place_conf = (context.data_quality.place_quality.confidence * 20) if context.data_quality.place_quality else 0
+        scores['place'] = min(100, int(place_base + place_boost + place_conf))
+        
+        # PROMOTION score
+        promo_base = (context.data_quality.promotion_quality.completeness * 40) if context.data_quality.promotion_quality else 0
+        promo_boost = 0
+        if context.promotion.competition_level:
+            level = context.promotion.competition_level.lower()
+            if level == 'low':
+                promo_boost += 25
+            elif level == 'medium':
+                promo_boost += 15
+            elif level == 'high':
+                promo_boost += 5
+        if context.promotion.competitive_advantages:
+            promo_boost += min(15, len(context.promotion.competitive_advantages) * 5)
+        promo_conf = (context.data_quality.promotion_quality.confidence * 20) if context.data_quality.promotion_quality else 0
+        scores['promotion'] = min(100, int(promo_base + promo_boost + promo_conf))
+        
+        return scores
+    
+    def get_mini_response(self, opportunity_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get lightweight 4 P's response for cards.
+        
+        Returns only scores and key insight - minimal payload.
+        """
+        context = self.get_four_ps_for_opportunity(opportunity_id)
+        if not context:
+            return None
+        
+        scores = self.get_pillar_scores(context)
+        overall = int(sum(scores.values()) / 4)
+        
+        # Generate top insight
+        insights = []
+        if context.product.trend_strength and context.product.trend_strength > 0.7:
+            insights.append("Strong upward trend")
+        if context.place.growth_score and context.place.growth_score > 70:
+            insights.append("High-growth market")
+        if context.promotion.competition_level and context.promotion.competition_level.lower() == 'low':
+            insights.append("Low competition")
+        if context.price.median_income and context.price.median_income > 80000:
+            insights.append("High spending power")
+        
+        top_insight = insights[0] if insights else "Data analysis available"
+        
+        return {
+            "opportunity_id": opportunity_id,
+            "scores": scores,
+            "overall": overall,
+            "quality": round(context.data_quality.completeness, 2),
+            "top_insight": top_insight
+        }
+    
+    def get_full_response(self, opportunity_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get full 4 P's response for detail pages.
+        """
+        context = self.get_four_ps_for_opportunity(opportunity_id)
+        if not context:
+            return None
+        
+        scores = self.get_pillar_scores(context)
+        
+        return {
+            "opportunity_id": opportunity_id,
+            "city": context.city,
+            "state": context.state,
+            "business_type": context.business_type,
+            "scores": scores,
+            "overall": int(sum(scores.values()) / 4),
+            "product": asdict(context.product),
+            "price": asdict(context.price),
+            "place": asdict(context.place),
+            "promotion": asdict(context.promotion),
+            "data_quality": {
+                "completeness": round(context.data_quality.completeness, 2),
+                "confidence": round(context.data_quality.confidence, 2),
+                "report_readiness": round(context.data_quality.report_readiness, 2),
+                "weakest_pillar": context.data_quality.weakest_pillar,
+                "recommended_actions": context.data_quality.recommended_actions[:3],
+                "pillar_quality": {
+                    "product": {
+                        "completeness": round(context.data_quality.product_quality.completeness, 2) if context.data_quality.product_quality else 0,
+                        "confidence": round(context.data_quality.product_quality.confidence, 2) if context.data_quality.product_quality else 0,
+                    },
+                    "price": {
+                        "completeness": round(context.data_quality.price_quality.completeness, 2) if context.data_quality.price_quality else 0,
+                        "confidence": round(context.data_quality.price_quality.confidence, 2) if context.data_quality.price_quality else 0,
+                    },
+                    "place": {
+                        "completeness": round(context.data_quality.place_quality.completeness, 2) if context.data_quality.place_quality else 0,
+                        "confidence": round(context.data_quality.place_quality.confidence, 2) if context.data_quality.place_quality else 0,
+                    },
+                    "promotion": {
+                        "completeness": round(context.data_quality.promotion_quality.completeness, 2) if context.data_quality.promotion_quality else 0,
+                        "confidence": round(context.data_quality.promotion_quality.confidence, 2) if context.data_quality.promotion_quality else 0,
+                    },
+                }
+            },
+            "fetched_at": context.fetched_at
+        }
 
 
 # Convenience function
