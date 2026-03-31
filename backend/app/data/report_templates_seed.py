@@ -494,5 +494,194 @@ Business Context:
 {context}
 
 Format as ready-to-use interview guide with tips for moderators."""
-    }
+    },
+
+    # ── Analysis Reports (7 Consultant Studio originals) ─────────────────────
+    {
+        "slug": "feasibility_study",
+        "name": "Feasibility Study",
+        "description": "Quick viability check with market validation",
+        "category": "analysis",
+        "min_tier": "free",
+        "price_cents": 2500,
+        "display_order": 50,
+        "ai_prompt": """Conduct a comprehensive feasibility study for the following business idea. Structure your analysis as:
+
+1. Executive Summary (viability verdict + confidence score 0-100)
+2. Market Feasibility – demand signals, addressable market size, customer segments
+3. Technical Feasibility – required capabilities, technology stack, build complexity
+4. Financial Feasibility – estimated startup costs, break-even timeline, revenue potential
+5. Operational Feasibility – team requirements, processes, regulatory considerations
+6. Risk Assessment – top 5 risks with likelihood and mitigation strategies
+7. Go / No-Go Recommendation with clear reasoning
+
+Business Context:
+{context}
+
+Be direct and evidence-based. Provide specific numbers where possible."""
+    },
+    {
+        "slug": "business_plan",
+        "name": "Business Plan",
+        "description": "Comprehensive strategy document",
+        "category": "analysis",
+        "min_tier": "pro",
+        "price_cents": 14900,
+        "display_order": 51,
+        "ai_prompt": """Create a comprehensive business plan for the following opportunity. Include:
+
+1. Executive Summary
+2. Company Description – mission, vision, values, legal structure
+3. Problem & Solution – pain points addressed, unique value proposition
+4. Market Analysis – TAM/SAM/SOM, target customer profiles, market trends
+5. Competitive Analysis – key competitors, differentiation strategy, moat
+6. Product / Service Description – features, roadmap, IP considerations
+7. Marketing & Sales Strategy – channels, customer acquisition, retention
+8. Operations Plan – team structure, processes, key milestones
+9. Financial Projections – 3-year P&L, cash flow, unit economics
+10. Funding Requirements (if applicable)
+11. Risk Management
+
+Business Context:
+{context}
+
+Write in a professional tone suitable for investors and partners."""
+    },
+    {
+        "slug": "financial_model",
+        "name": "Financial Model",
+        "description": "5-year projections and unit economics",
+        "category": "analysis",
+        "min_tier": "pro",
+        "price_cents": 12900,
+        "display_order": 52,
+        "ai_prompt": """Build a detailed financial model for the following business opportunity. Include:
+
+1. Revenue Model – pricing tiers, revenue streams, assumptions
+2. Unit Economics – CAC, LTV, LTV:CAC ratio, payback period
+3. Monthly P&L Projection (Year 1, month by month)
+4. Annual Summary (Years 1–5) – revenue, gross profit, EBITDA
+5. Cash Flow Statement – operating, investing, financing activities
+6. Break-Even Analysis – fixed costs, variable costs, break-even point
+7. Funding Scenarios – bootstrapped vs. seed vs. Series A paths
+8. Key Metrics Dashboard – MRR, ARR, churn, NPS targets
+9. Sensitivity Analysis – best / base / worst case scenarios
+
+Business Context:
+{context}
+
+Present numbers in clear tables. State all assumptions explicitly."""
+    },
+    {
+        "slug": "market_analysis",
+        "name": "Market Analysis",
+        "description": "TAM/SAM/SOM with competitive landscape",
+        "category": "analysis",
+        "min_tier": "business",
+        "price_cents": 9900,
+        "display_order": 53,
+        "ai_prompt": """Produce a detailed market analysis report for the following business opportunity. Cover:
+
+1. Market Overview – industry definition, current size, growth rate (CAGR)
+2. TAM / SAM / SOM Calculation with methodology explained
+3. Market Segmentation – demographic, psychographic, behavioral, geographic
+4. Customer Analysis – buyer personas, jobs-to-be-done, willingness to pay
+5. Competitive Landscape – direct and indirect competitors, market share map
+6. Porter's Five Forces Analysis
+7. Market Trends – macro forces shaping the market (3–5 year outlook)
+8. Regulatory Environment – key regulations, compliance requirements
+9. Market Entry Strategy – recommended approach and timing
+10. Opportunity Sizing Summary
+
+Business Context:
+{context}
+
+Use data-driven language. Cite categories of sources where applicable."""
+    },
+    {
+        "slug": "pestle_analysis",
+        "name": "PESTLE Analysis",
+        "description": "Political, Economic, Social, Technological, Legal, Environmental factors",
+        "category": "analysis",
+        "min_tier": "business",
+        "price_cents": 9900,
+        "display_order": 54,
+        "ai_prompt": """Conduct a thorough PESTLE analysis for the following business opportunity. For each factor provide current state, trend direction, and business impact (High / Medium / Low):
+
+1. Political Factors – government policy, trade regulations, political stability, tax policy
+2. Economic Factors – economic growth, inflation, interest rates, consumer spending, labour costs
+3. Social Factors – demographics, lifestyle trends, cultural shifts, consumer attitudes
+4. Technological Factors – emerging tech, R&D activity, automation, digital adoption
+5. Legal Factors – employment law, consumer protection, IP law, health & safety regulations
+6. Environmental Factors – sustainability pressures, climate risk, ESG expectations
+
+Then provide:
+7. Overall Risk Rating (Low / Medium / High) with justification
+8. Strategic Recommendations – how to leverage opportunities and mitigate threats from each factor
+9. Monitoring Checklist – signals to watch over the next 12 months
+
+Business Context:
+{context}
+
+Be specific to the industry and geography where applicable."""
+    },
+    {
+        "slug": "strategic_assessment",
+        "name": "Strategic Assessment",
+        "description": "SWOT analysis and strategic positioning",
+        "category": "analysis",
+        "min_tier": "pro",
+        "price_cents": 8900,
+        "display_order": 55,
+        "ai_prompt": """Deliver a strategic assessment for the following business opportunity. Structure it as:
+
+1. Executive Overview – strategic position summary
+2. SWOT Analysis
+   - Strengths (internal advantages)
+   - Weaknesses (internal gaps)
+   - Opportunities (external tailwinds)
+   - Threats (external risks)
+3. Strategic Positioning – value proposition, differentiation, target segment fit
+4. Competitive Moat Assessment – network effects, switching costs, brand, IP, scale
+5. Strategic Options (3 paths) – conservative, growth, and bold strategies
+6. Recommended Strategy – rationale, trade-offs, resource requirements
+7. 90-Day Action Plan – prioritised initiatives with owners and success metrics
+8. KPIs to Track – 5–7 metrics that signal strategic health
+
+Business Context:
+{context}
+
+Be opinionated. Give a clear strategic recommendation, not just a list of options."""
+    },
+    {
+        "slug": "pitch_deck",
+        "name": "Pitch Deck Assistant",
+        "description": "Investor presentation outline and key slides",
+        "category": "analysis",
+        "min_tier": "pro",
+        "price_cents": 7900,
+        "display_order": 56,
+        "ai_prompt": """Create investor-ready pitch deck content for the following business opportunity. Produce slide-by-slide content for a 10-slide deck:
+
+Slide 1 – Cover: company name, one-line tagline, presenter info
+Slide 2 – Problem: the pain, who feels it, how big the gap is
+Slide 3 – Solution: what you've built, the "aha" moment
+Slide 4 – Market Size: TAM / SAM / SOM with methodology
+Slide 5 – Business Model: how you make money, pricing, unit economics
+Slide 6 – Traction: key metrics, milestones, social proof (or early signals)
+Slide 7 – Competition: market map, why you win
+Slide 8 – Go-To-Market: acquisition strategy, channels, growth levers
+Slide 9 – Team: key roles, relevant experience, why this team
+Slide 10 – Ask: funding amount, use of funds, 18-month milestones
+
+Then add:
+- 5 likely investor questions with suggested answers
+- Design tips for each slide (visuals, layout guidance)
+- Common mistakes to avoid
+
+Business Context:
+{context}
+
+Write in confident, clear language. Every word should earn its place on the slide."""
+    },
 ]

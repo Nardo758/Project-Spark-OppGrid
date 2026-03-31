@@ -98,7 +98,8 @@ async def get_report_templates(
         "marketing": "Marketing",
         "product": "Product",
         "business": "Business",
-        "research": "Research"
+        "research": "Research",
+        "analysis": "Analysis Reports",
     }
     
     categories = {}
@@ -109,7 +110,7 @@ async def get_report_templates(
         categories[cat].append(template)
     
     result = []
-    for cat_key in ["popular", "marketing", "product", "business", "research"]:
+    for cat_key in ["popular", "marketing", "product", "business", "research", "analysis"]:
         if cat_key in categories:
             result.append(CategoryWithTemplates(
                 category=cat_key,
@@ -140,7 +141,8 @@ async def get_public_report_templates(
         "marketing": "Marketing",
         "product": "Product",
         "business": "Business",
-        "research": "Research"
+        "research": "Research",
+        "analysis": "Analysis Reports",
     }
     
     categories = {}
@@ -151,7 +153,7 @@ async def get_public_report_templates(
         categories[cat].append(template)
     
     result = []
-    for cat_key in ["popular", "marketing", "product", "business", "research"]:
+    for cat_key in ["popular", "marketing", "product", "business", "research", "analysis"]:
         if cat_key in categories:
             result.append(CategoryWithTemplates(
                 category=cat_key,
@@ -245,6 +247,14 @@ async def generate_report(
         "pricing_strategy": ReportType.PRICING_STRATEGY,
         "competitive_analysis": ReportType.COMPETITIVE_ANALYSIS,
         "customer_interview": ReportType.CUSTOMER_INTERVIEW,
+        # Analysis Reports
+        "feasibility_study": ReportType.FEASIBILITY_STUDY,
+        "business_plan": ReportType.BUSINESS_PLAN,
+        "financial_model": ReportType.FINANCIAL_MODEL,
+        "market_analysis": ReportType.MARKET_ANALYSIS,
+        "pestle_analysis": ReportType.PESTLE_ANALYSIS,
+        "strategic_assessment": ReportType.STRATEGIC_ASSESSMENT,
+        "pitch_deck": ReportType.PITCH_DECK,
     }
     
     report_type = report_type_map.get(template.slug, ReportType.MARKET_ANALYSIS)
