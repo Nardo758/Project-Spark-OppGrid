@@ -1381,7 +1381,7 @@ class FreeReportGenerateRequest(BaseModel):
 
 
 @router.post("/generate-free-report")
-def generate_free_report(
+async def generate_free_report(
     request_data: FreeReportGenerateRequest,
     request: Request,
     current_user: User = Depends(get_current_active_user),
@@ -1389,26 +1389,30 @@ def generate_free_report(
 ):
     """Generate a report using free allocation (no payment required)"""
     from app.models.generated_report import GeneratedReport, ReportType, ReportStatus
-    
+    from app.services.llm_ai_engine import llm_ai_engine_service
+    import time
+    import logging
+    logger = logging.getLogger(__name__)
+
     free_check = report_usage_service.check_free_available(current_user, db)
-    
+
     if not free_check["is_free"]:
         raise HTTPException(
             status_code=402,
             detail="No free reports remaining. Please purchase this report."
         )
-    
+
     if request_data.report_type not in REPORT_PRODUCTS:
         raise HTTPException(status_code=400, detail=f"Invalid report type: {request_data.report_type}")
-    
+
     opportunity = None
     title_suffix = request_data.idea_description or "General Analysis"
-    
+
     if request_data.opportunity_id:
         opportunity = db.query(Opportunity).filter(Opportunity.id == request_data.opportunity_id).first()
         if opportunity:
             title_suffix = opportunity.title
-    
+
     report_type_map = {
         "feasibility_study": ReportType.FEASIBILITY,
         "market_analysis": ReportType.MARKET_ANALYSIS,
@@ -1418,26 +1422,187 @@ def generate_free_report(
         "financial_model": ReportType.FINANCIAL_MODEL,
         "pitch_deck": ReportType.PITCH_DECK,
     }
-    
+
     report_type_enum = report_type_map.get(request_data.report_type)
     if not report_type_enum:
         raise HTTPException(status_code=400, detail=f"Unsupported report type: {request_data.report_type}")
-    
+
+    report_product = REPORT_PRODUCTS[request_data.report_type]
+
     report = GeneratedReport(
         user_id=current_user.id,
         opportunity_id=request_data.opportunity_id if opportunity else None,
         report_type=report_type_enum,
-        status=ReportStatus.PENDING,
-        title=f"{REPORT_PRODUCTS[request_data.report_type].name}: {title_suffix}",
+        status=ReportStatus.GENERATING,
+        title=f"{report_product.name}: {title_suffix}",
         summary=f"Free report - {free_check['reason']}. {request_data.idea_description or ''}".strip(),
     )
     db.add(report)
-    
-    report_usage_service.increment_usage(current_user.id, db)
-    
     db.commit()
     db.refresh(report)
-    
+
+    # Build context for AI generation
+    context_parts = []
+    if request_data.idea_description:
+        context_parts.append(f"Business Concept: {request_data.idea_description}")
+    if request_data.target_market:
+        context_parts.append(f"Target Market: {request_data.target_market}")
+    if request_data.location:
+        context_parts.append(f"Location: {request_data.location}")
+    if opportunity:
+        context_parts.append(f"Opportunity: {opportunity.title}")
+        if opportunity.description:
+            context_parts.append(f"Description: {opportunity.description}")
+        if opportunity.category:
+            context_parts.append(f"Category: {opportunity.category}")
+        if opportunity.market_size:
+            context_parts.append(f"Market Size: {opportunity.market_size}")
+
+    if not context_parts:
+        context_parts.append("General business analysis")
+
+    context = "\n".join(context_parts)
+
+    # Report type specific prompts
+    report_prompts = {
+        "feasibility_study": f"""Create a comprehensive Feasibility Study report for the following business concept.
+Include these sections with detailed analysis:
+1. Executive Summary
+2. Market Opportunity - market size, growth trends, target customers
+3. Technical Feasibility - what's needed to build/launch this
+4. Financial Viability - startup costs, revenue projections, break-even timeline
+5. Risk Assessment - key risks and mitigation strategies
+6. Recommendation - GO / NO-GO / CONDITIONAL with clear reasoning
+
+Business Context:
+{context}""",
+        "market_analysis": f"""Create a comprehensive Market Analysis report.
+Include these sections:
+1. Market Size (TAM/SAM/SOM)
+2. Growth Trends and Market Dynamics
+3. Customer Segments and Demographics
+4. Competitive Landscape
+5. Market Entry Strategy
+6. Revenue Projections
+
+Business Context:
+{context}""",
+        "strategic_assessment": f"""Create a Strategic Assessment report.
+Include these sections:
+1. SWOT Analysis (Strengths, Weaknesses, Opportunities, Threats)
+2. Competitive Positioning
+3. Value Proposition Analysis
+4. Strategic Options
+5. Recommended Strategy with implementation steps
+
+Business Context:
+{context}""",
+        "pestle_analysis": f"""Create a PESTLE Analysis report.
+Include these sections:
+1. Political Factors
+2. Economic Factors
+3. Social Factors
+4. Technological Factors
+5. Legal Factors
+6. Environmental Factors
+7. Summary and Strategic Implications
+
+Business Context:
+{context}""",
+        "business_plan": f"""Create a comprehensive Business Plan.
+Include these sections:
+1. Executive Summary
+2. Company Description
+3. Market Analysis
+4. Organization & Management
+5. Product/Service Line
+6. Marketing & Sales Strategy
+7. Financial Projections (3-year)
+8. Funding Requirements
+
+Business Context:
+{context}""",
+        "financial_model": f"""Create a Financial Model report.
+Include these sections:
+1. Revenue Model and Pricing Strategy
+2. Cost Structure (fixed and variable)
+3. Unit Economics (LTV, CAC, margins)
+4. Cash Flow Projections (monthly for Year 1, quarterly for Years 2-3)
+5. Profit & Loss Projection (3-year)
+6. Sensitivity Analysis
+7. Key Financial Metrics and KPIs
+
+Business Context:
+{context}""",
+        "pitch_deck": f"""Create a Pitch Deck outline with detailed content for each slide.
+Include these slides:
+1. Problem - the pain point you're solving
+2. Solution - your product/service
+3. Market Size - TAM/SAM/SOM
+4. Business Model - how you make money
+5. Traction - early wins, metrics, or validation
+6. Competitive Advantage - your moat
+7. Team - key people (suggest roles needed)
+8. Financials - key projections
+9. The Ask - funding needed and use of funds
+
+Business Context:
+{context}""",
+    }
+
+    prompt = report_prompts.get(request_data.report_type, f"""Create a detailed business report.
+
+Business Context:
+{context}""")
+
+    full_prompt = f"""You are a business strategy expert creating professional reports for entrepreneurs.
+Provide actionable, specific, and well-structured content. Use HTML formatting for headings, lists, tables, and emphasis.
+Format your response as clean HTML (use <h1>, <h2>, <h3>, <p>, <ul>, <li>, <table>, <strong>, <em> tags).
+Do NOT include <html>, <head>, or <body> tags - just the content HTML.
+
+{prompt}"""
+
+    start_time = time.time()
+    try:
+        result = await llm_ai_engine_service.generate_response(full_prompt, model="claude")
+
+        if result.get("error"):
+            logger.error(f"AI service error: {result.get('error_message', result.get('error'))}")
+            raise Exception(f"AI service unavailable: {result.get('error_message', 'Unknown error')}")
+
+        content = result.get("response") or result.get("raw")
+        if not content:
+            raise Exception("AI returned empty response")
+
+        generation_time_ms = int((time.time() - start_time) * 1000)
+
+        lines = content.split('\n')
+        summary = lines[0][:500] if lines else "Report generated successfully"
+        # Strip HTML from summary
+        import re
+        summary = re.sub(r'<[^>]+>', '', summary).strip()
+        if not summary:
+            summary = f"{report_product.name} generated successfully"
+
+        report.content = content
+        report.summary = summary
+        report.status = ReportStatus.COMPLETED
+        report.completed_at = datetime.utcnow()
+        report.generation_time_ms = generation_time_ms
+        report.confidence_score = 85
+
+        report_usage_service.increment_usage(current_user.id, db)
+
+        db.commit()
+        db.refresh(report)
+
+    except Exception as e:
+        logger.error(f"Free report generation failed: {e}")
+        report.status = ReportStatus.FAILED
+        report.error_message = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+
     log_event(
         db,
         action="report_pricing.free_report_generated",
@@ -1452,12 +1617,19 @@ def generate_free_report(
             "reason": free_check["reason"],
         },
     )
-    
+
     return {
         "success": True,
+        "id": report.id,
         "report_id": report.id,
         "report_type": request_data.report_type,
-        "message": "Report generation started. You will be notified when it's ready.",
+        "title": report.title,
+        "summary": report.summary,
+        "content": report.content,
+        "confidence_score": report.confidence_score,
+        "generation_time_ms": report.generation_time_ms,
+        "status": "completed",
+        "message": "Report generated successfully",
         "usage_reason": free_check["reason"],
     }
 
