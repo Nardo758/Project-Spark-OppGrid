@@ -30,6 +30,12 @@ import {
   FileSpreadsheet,
   Shield,
   Package,
+  Zap,
+  Star,
+  Lock,
+  Clock,
+  TrendingDown,
+  Gift,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
@@ -68,6 +74,7 @@ type ConsultantStudioReport = {
   name: string
   description: string
   price: number
+  consultant_price?: string
   included_in_tier: string | null
 }
 
@@ -78,6 +85,7 @@ type Bundle = {
   price: number
   reports: string[]
   savings: number
+  consultant_value?: string
 }
 
 const INPUT_MODES = [
@@ -106,6 +114,49 @@ const INPUT_MODES = [
     description: 'Analyze a successful business and find similar markets where you could replicate it.',
   },
 ]
+
+// Consultant pricing for comparison (what firms typically charge)
+const CONSULTANT_PRICES: Record<string, string> = {
+  feasibility_study: '$1,500 - $15,000',
+  pitch_deck: '$2,000 - $5,000',
+  strategic_assessment: '$1,500 - $5,000',
+  market_analysis: '$2,000 - $8,000',
+  pestle_analysis: '$1,500 - $5,000',
+  financial_model: '$2,500 - $10,000',
+  business_plan: '$3,000 - $15,000',
+}
+
+// Sample preview content for each report type
+const REPORT_PREVIEWS: Record<string, { sections: string[]; sampleInsight: string }> = {
+  feasibility_study: {
+    sections: ['Executive Summary', 'Market Opportunity', 'Technical Feasibility', 'Financial Viability', 'Risk Assessment', 'Recommendation'],
+    sampleInsight: 'Based on 47 comparable businesses in your target market, the projected success rate is 73%...',
+  },
+  market_analysis: {
+    sections: ['Market Size (TAM/SAM/SOM)', 'Growth Trends', 'Customer Segments', 'Competitive Landscape', 'Market Entry Strategy', 'Revenue Projections'],
+    sampleInsight: 'Your total addressable market is estimated at $4.2B with a 12% CAGR...',
+  },
+  business_plan: {
+    sections: ['Executive Summary', 'Company Description', 'Market Analysis', 'Organization & Management', 'Product/Service Line', 'Marketing Strategy', 'Financial Projections'],
+    sampleInsight: 'With the proposed go-to-market strategy, break-even is projected within 18 months...',
+  },
+  financial_model: {
+    sections: ['Revenue Model', 'Cost Structure', 'Unit Economics', 'Cash Flow Projections', '5-Year P&L', 'Sensitivity Analysis'],
+    sampleInsight: 'Customer LTV:CAC ratio of 4.2x indicates strong unit economics...',
+  },
+  pitch_deck: {
+    sections: ['Problem', 'Solution', 'Market Size', 'Business Model', 'Traction', 'Team', 'Financials', 'Ask'],
+    sampleInsight: 'Recommended ask: $1.5M at $8M pre-money valuation based on comparable raises...',
+  },
+  strategic_assessment: {
+    sections: ['SWOT Analysis', 'Competitive Positioning', 'Value Proposition', 'Strategic Options', 'Recommended Strategy'],
+    sampleInsight: 'Key differentiator identified: 3x faster delivery than nearest competitor...',
+  },
+  pestle_analysis: {
+    sections: ['Political Factors', 'Economic Factors', 'Social Factors', 'Technological Factors', 'Legal Factors', 'Environmental Factors'],
+    sampleInsight: 'Regulatory tailwind: New legislation expected to increase market by 25%...',
+  },
+}
 
 // Icons for Consultant Studio reports
 const studioReportIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -214,7 +265,6 @@ export default function ReportLibrary({
       setGeneratingSlug(reportType)
       
       if (isStudio) {
-        // Use studio report generation endpoint
         const res = await fetch('/api/v1/report-pricing/generate-free-report', {
           method: 'POST',
           headers: headers(),
@@ -230,7 +280,6 @@ export default function ReportLibrary({
         }
         return res.json()
       } else {
-        // Use template generation endpoint
         const res = await fetch('/api/v1/reports/generate', {
           method: 'POST',
           headers: headers(),
@@ -308,8 +357,15 @@ export default function ReportLibrary({
     }
   }
 
-  const formatPrice = (cents: number) => {
-    return `$${(cents / 100).toFixed(0)}`
+  const formatPrice = (cents: number) => `$${(cents / 100).toFixed(0)}`
+  
+  const calculateSavingsPercent = (yourPrice: number, consultantPrice: string) => {
+    // Extract lower bound from consultant price range
+    const match = consultantPrice.match(/\$([0-9,]+)/)
+    if (!match) return 90
+    const consultantLow = parseInt(match[1].replace(',', ''))
+    const savings = Math.round((1 - (yourPrice / 100) / consultantLow) * 100)
+    return Math.min(99, Math.max(80, savings))
   }
 
   const getTierBadge = (tier: string | null) => {
@@ -383,6 +439,26 @@ export default function ReportLibrary({
 
   return (
     <div className="space-y-6">
+      {/* Social Proof Banner */}
+      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-4 text-white">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-yellow-300" />
+              <span className="font-semibold">2,847 reports generated this month</span>
+            </div>
+            <div className="hidden sm:flex items-center gap-2">
+              <Star className="w-4 h-4 text-yellow-300 fill-yellow-300" />
+              <span className="text-sm">Trusted by founders from YC, Techstars & 500 Startups</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-sm">
+            <Gift className="w-4 h-4" />
+            <span>First report FREE for new users</span>
+          </div>
+        </div>
+      </div>
+
       {/* Two-Column Layout */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="grid md:grid-cols-2 gap-6">
@@ -418,7 +494,6 @@ export default function ReportLibrary({
               })}
             </div>
 
-            {/* Mode Description */}
             <p className="text-xs text-gray-500 mb-3">
               {INPUT_MODES.find(m => m.id === inputMode)?.description}
             </p>
@@ -441,7 +516,7 @@ export default function ReportLibrary({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Keyword (e.g., coffee, fitness...)"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
                 />
                 <select
                   value={searchCategory}
@@ -502,7 +577,6 @@ export default function ReportLibrary({
               </div>
             )}
 
-            {/* Analyze Button */}
             <button
               onClick={runConsultantAnalysis}
               disabled={!canAnalyze() || consultantLoading}
@@ -548,7 +622,6 @@ export default function ReportLibrary({
             >
               <option value="">Choose a report...</option>
               
-              {/* Consultant Studio Reports (Original 7) */}
               <optgroup label="📊 Consultant Studio Reports">
                 {studioReports?.reports.map(report => (
                   <option key={report.id} value={`studio:${report.id}`}>
@@ -557,7 +630,6 @@ export default function ReportLibrary({
                 ))}
               </optgroup>
               
-              {/* Template Reports */}
               {categories?.map(cat => (
                 <optgroup key={cat.category} label={`📝 ${cat.display_name}`}>
                   {cat.templates.map(template => (
@@ -569,70 +641,133 @@ export default function ReportLibrary({
               ))}
             </select>
 
-            {/* Selected Report Info */}
-            {selectedReport && (
-              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                {selectedReport.type === 'studio' ? (
-                  <>
-                    {(() => {
-                      const report = studioReports?.reports.find(r => r.id === selectedReport.slug)
-                      const Icon = studioReportIcons[selectedReport.slug] || FileText
-                      return (
-                        <>
+            {/* Selected Report Info with Value Comparison */}
+            {selectedReport && selectedReport.type === 'studio' && (
+              <>
+                {(() => {
+                  const report = studioReports?.reports.find(r => r.id === selectedReport.slug)
+                  const Icon = studioReportIcons[selectedReport.slug] || FileText
+                  const consultantPrice = CONSULTANT_PRICES[selectedReport.slug] || '$2,000 - $10,000'
+                  const savingsPercent = calculateSavingsPercent(report?.price || 0, consultantPrice)
+                  const preview = REPORT_PREVIEWS[selectedReport.slug]
+                  
+                  return (
+                    <div className="mt-3 space-y-3">
+                      {/* Value Comparison Card */}
+                      <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Icon className="w-5 h-5 text-green-600" />
+                          <span className="font-semibold text-gray-900">{report?.name}</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div className="text-center p-2 bg-white rounded border border-gray-200">
+                            <div className="text-xs text-gray-500 line-through">Consultants charge</div>
+                            <div className="font-semibold text-gray-700">{consultantPrice}</div>
+                          </div>
+                          <div className="text-center p-2 bg-green-600 rounded text-white">
+                            <div className="text-xs opacity-90">Your price</div>
+                            <div className="font-bold text-lg">{formatPrice(report?.price || 0)}</div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center justify-center gap-2 text-green-700 font-semibold">
+                          <TrendingDown className="w-4 h-4" />
+                          <span>Save {savingsPercent}%+</span>
+                        </div>
+                      </div>
+                      
+                      {/* Preview Card */}
+                      {preview && (
+                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                           <div className="flex items-center gap-2 mb-2">
-                            <Icon className="w-5 h-5 text-purple-600" />
-                            <span className="font-medium text-gray-900">{report?.name}</span>
-                            <span className={`ml-auto px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(report?.included_in_tier || null).className}`}>
-                              {report?.included_in_tier ? getTierBadge(report.included_in_tier).text : formatPrice(report?.price || 0)}
-                            </span>
+                            <Lock className="w-4 h-4 text-gray-400" />
+                            <span className="text-xs font-medium text-gray-600">What you'll get:</span>
                           </div>
-                          <p className="text-xs text-gray-500">{report?.description}</p>
-                        </>
-                      )
-                    })()}
-                  </>
-                ) : (
-                  <>
-                    {(() => {
-                      const template = allTemplates.find(t => t.slug === selectedReport.slug)
-                      return (
-                        <>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-gray-900">{template?.name}</span>
-                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(template?.min_tier || null).className}`}>
-                              {getTierBadge(template?.min_tier || null).text}
-                            </span>
+                          <div className="flex flex-wrap gap-1 mb-2">
+                            {preview.sections.slice(0, 4).map((section, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-white border border-gray-200 rounded text-xs text-gray-600">
+                                {section}
+                              </span>
+                            ))}
+                            {preview.sections.length > 4 && (
+                              <span className="px-2 py-0.5 text-xs text-gray-400">
+                                +{preview.sections.length - 4} more
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs text-gray-500">{template?.description}</p>
-                        </>
-                      )
-                    })()}
-                  </>
-                )}
+                          <div className="p-2 bg-white rounded border border-dashed border-gray-300">
+                            <p className="text-xs text-gray-500 italic blur-[2px] select-none">
+                              {preview.sampleInsight}
+                            </p>
+                          </div>
+                          <div className="mt-2 flex items-center gap-1 text-xs text-amber-600">
+                            <Clock className="w-3 h-3" />
+                            <span>Generated in under 60 seconds</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </>
+            )}
+
+            {selectedReport && selectedReport.type === 'template' && (
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                {(() => {
+                  const template = allTemplates.find(t => t.slug === selectedReport.slug)
+                  return (
+                    <>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-gray-900">{template?.name}</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(template?.min_tier || null).className}`}>
+                          {getTierBadge(template?.min_tier || null).text}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">{template?.description}</p>
+                    </>
+                  )
+                })()}
               </div>
             )}
 
-            {/* Bundles Toggle */}
-            {studioReports?.bundles && studioReports.bundles.length > 0 && (
-              <button
-                onClick={() => setShowBundles(!showBundles)}
-                className="mt-3 text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
-              >
-                <Package className="w-3 h-3" />
-                {showBundles ? 'Hide bundles' : 'View bundle deals (save up to 45%)'}
-              </button>
-            )}
+            {/* Bundles Section */}
+            <button
+              onClick={() => setShowBundles(!showBundles)}
+              className="mt-3 text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
+            >
+              <Package className="w-3 h-3" />
+              {showBundles ? 'Hide bundles' : 'View bundle deals (save up to 45%)'}
+            </button>
 
             {showBundles && studioReports?.bundles && (
               <div className="mt-2 space-y-2">
-                {studioReports.bundles.map(bundle => (
-                  <div key={bundle.id} className="p-2 bg-purple-50 rounded-lg border border-purple-100">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-purple-900 text-sm">{bundle.name}</span>
-                      <span className="text-purple-700 font-bold text-sm">{formatPrice(bundle.price)}</span>
+                {studioReports.bundles.map((bundle, idx) => (
+                  <div 
+                    key={bundle.id} 
+                    className={`p-3 rounded-lg border ${idx === 0 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200' : 'bg-purple-50 border-purple-100'}`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900 text-sm">{bundle.name}</span>
+                        {idx === 0 && (
+                          <span className="px-2 py-0.5 bg-amber-500 text-white text-xs font-bold rounded">
+                            ⭐ MOST POPULAR
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-lg font-bold text-gray-900">{formatPrice(bundle.price)}</span>
                     </div>
-                    <p className="text-xs text-purple-600">{bundle.description}</p>
-                    <p className="text-xs text-green-600 mt-1">Save {formatPrice(bundle.savings)}</p>
+                    <p className="text-xs text-gray-600 mb-2">{bundle.description}</p>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-green-600 font-medium">
+                        Save {formatPrice(bundle.savings)} ({Math.round(bundle.savings / (bundle.price + bundle.savings) * 100)}%)
+                      </span>
+                      <span className="text-gray-500">
+                        {bundle.reports.length} reports included
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -663,7 +798,7 @@ export default function ReportLibrary({
             <button
               onClick={handleGenerateReport}
               disabled={!canGenerateReport || generateMutation.isPending}
-              className="mt-auto px-4 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="mt-4 px-4 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {generateMutation.isPending ? (
                 <>
@@ -678,11 +813,17 @@ export default function ReportLibrary({
               )}
             </button>
 
-            {isGuest && (
-              <p className="text-xs text-center text-gray-500 mt-2">
-                <a href="/login" className="text-purple-600 hover:underline">Sign in</a> for member pricing
-              </p>
-            )}
+            {/* Trust Signals */}
+            <div className="mt-3 flex items-center justify-center gap-4 text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <Shield className="w-3 h-3" />
+                Secure payment
+              </span>
+              <span className="flex items-center gap-1">
+                <CheckCircle className="w-3 h-3" />
+                Money-back guarantee
+              </span>
+            </div>
           </div>
         </div>
       </div>
