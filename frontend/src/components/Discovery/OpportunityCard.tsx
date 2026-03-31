@@ -1,9 +1,19 @@
 /**
  * OpportunityCard Component - Matches existing OppGrid card design
+ * 
+ * Now with optional 4 P's indicator for market intelligence preview.
  */
 
 import { FileText, Bookmark } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import FourPsIndicator from '../FourPs/FourPsIndicator'
+
+interface FourPsScores {
+  product: number
+  price: number
+  place: number
+  promotion: number
+}
 
 interface OpportunityCardProps {
   opportunity: {
@@ -20,6 +30,8 @@ interface OpportunityCardProps {
     user_saved?: boolean
     ai_generated_title?: string
     ai_summary?: string
+    // Optional pre-loaded 4P's data
+    four_ps_scores?: FourPsScores
   }
   userTier?: string
   onValidate?: (id: number) => void
@@ -29,6 +41,10 @@ interface OpportunityCardProps {
   isValidated?: boolean
   isSaved?: boolean
   className?: string
+  /** Show 4 P's indicator bar */
+  showFourPs?: boolean
+  /** Pre-loaded 4P's scores (for batch loading) */
+  fourPsScores?: FourPsScores
 }
 
 export default function OpportunityCard({
@@ -40,10 +56,30 @@ export default function OpportunityCard({
   onShare,
   isValidated: externalIsValidated,
   isSaved: externalIsSaved,
-  className = ''
+  className = '',
+  showFourPs = false,
+  fourPsScores
 }: OpportunityCardProps) {
   const [isValidated, setIsValidated] = useState(externalIsValidated || opportunity.user_validated || false)
   const [isSaved, setIsSaved] = useState(externalIsSaved || opportunity.user_saved || false)
+  const [fourPs, setFourPs] = useState<FourPsScores | null>(fourPsScores || opportunity.four_ps_scores || null)
+  const [fourPsLoading, setFourPsLoading] = useState(false)
+
+  // Fetch 4P's data if showFourPs is true and we don't have it
+  useEffect(() => {
+    if (showFourPs && !fourPs && !fourPsLoading) {
+      setFourPsLoading(true)
+      fetch(`/api/v1/opportunities/${opportunity.id}/four-ps/mini`)
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.scores) {
+            setFourPs(data.scores)
+          }
+        })
+        .catch(() => {})
+        .finally(() => setFourPsLoading(false))
+    }
+  }, [showFourPs, fourPs, fourPsLoading, opportunity.id])
 
   const handleValidate = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -140,6 +176,23 @@ export default function OpportunityCard({
           </div>
         </div>
       </div>
+
+      {/* 4 P's Indicator (optional) */}
+      {showFourPs && (
+        <div className="mb-4 px-1">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-stone-500">Market Intelligence</span>
+            {fourPsLoading && (
+              <span className="text-xs text-stone-400">Loading...</span>
+            )}
+          </div>
+          {fourPs ? (
+            <FourPsIndicator scores={fourPs} size="md" />
+          ) : !fourPsLoading ? (
+            <div className="h-2 bg-stone-100 rounded-full" />
+          ) : null}
+        </div>
+      )}
 
       {/* Actions Row */}
       <div className="pt-4 border-t border-stone-200 flex items-center justify-between">

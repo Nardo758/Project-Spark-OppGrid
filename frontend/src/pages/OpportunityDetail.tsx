@@ -14,6 +14,7 @@ import PayPerUnlockModal from '../components/PayPerUnlockModal'
 import EnterpriseContactModal from '../components/EnterpriseContactModal'
 import ReportViewer from '../components/ReportViewer'
 import OpportunityMap from '../components/OpportunityMap'
+import { FourPsPanel } from '../components/FourPs'
 import type { AccessInfo } from '../types/paywall'
 
 type Opportunity = {
@@ -399,6 +400,7 @@ export default function OpportunityDetail() {
 
   const researchTabs = [
     { id: 'validation', label: 'Market Validation' },
+    { id: 'four-ps', label: '4 P\'s Intelligence' },
     { id: 'geographic', label: 'Geographic' },
     { id: 'problem', label: 'Problem Analysis' },
     { id: 'sizing', label: 'Market Sizing' },
@@ -769,6 +771,16 @@ export default function OpportunityDetail() {
                   </div>
                 </div>
               </>
+            )}
+
+            {activeTab === 'four-ps' && (
+              <div className="space-y-4">
+                <FourPsPanel 
+                  opportunityId={opp.id}
+                  showQuality={true}
+                  defaultExpanded={false}
+                />
+              </div>
             )}
 
             {activeTab === 'solutions' && (
