@@ -1,6 +1,19 @@
 # OppGrid Report Studio Data Framework
 
-> **Principle:** OppGrid owns the intelligence. External sources (JediRE) enrich but don't replace.
+> **Principle:** OppGrid owns the intelligence. External sources (JediRE + Web) enrich but don't replace.
+
+## Data Sources
+
+| Source | Type | Data |
+|--------|------|------|
+| **OppGrid** | 🔵 Primary | Opportunities, trends, success patterns, Census, traffic |
+| **JediRE** | 🟡 Enrichment | Demand signals, rent data, vacancy, absorption |
+| **Google Trends** | 🌐 Web | Search interest, trend direction, related queries |
+| **Google Places** | 🌐 Web | Competitors, ratings, reviews, price levels |
+| **Indeed/Jobs** | 🌐 Web | Job postings, hiring velocity, top employers |
+| **Zillow/Redfin** | 🌐 Web | Home values, rent estimates, market temperature |
+| **News APIs** | 🌐 Web | Market news, sentiment, trending topics |
+| **BLS** | 🌐 Web | Unemployment, labor force participation |
 
 ---
 

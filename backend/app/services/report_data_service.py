@@ -8,6 +8,7 @@ Data Sources:
                         service_area_boundaries, success_patterns, traffic_roads, 
                         google_maps_businesses, census_*, location_analysis_cache
 - 🟡 JediRE (Enrichment): demand signals, market economics, absorption rates, supply pipeline
+- 🌐 Web (Live): Google Trends, Google Places/Reviews, Indeed jobs, Zillow, News APIs, BLS
 """
 import logging
 from typing import Dict, Any, Optional, List
@@ -51,6 +52,12 @@ class ProductData:
     # JediRE enrichment
     amenity_demand: Optional[List[Dict]] = None
     unmet_demand: Optional[List[Dict]] = None
+    # Web enrichment (Google Trends + News)
+    google_trends_interest: Optional[int] = None  # 0-100
+    google_trends_direction: Optional[str] = None  # rising, stable, declining
+    related_search_queries: Optional[List[str]] = None
+    market_news: Optional[List[Dict]] = None
+    news_sentiment: Optional[float] = None  # -1 to 1
 
 
 @dataclass
@@ -67,6 +74,11 @@ class PriceData:
     median_rent: Optional[int] = None
     spending_power_index: Optional[int] = None
     rent_by_bedroom: Optional[Dict[str, int]] = None
+    # Web enrichment (Zillow/Redfin)
+    zillow_home_value: Optional[int] = None
+    zillow_rent_estimate: Optional[int] = None
+    home_value_change_yoy: Optional[float] = None
+    real_estate_market_temp: Optional[str] = None  # hot, neutral, cold
 
 
 @dataclass
@@ -92,6 +104,12 @@ class PlaceData:
     vacancy_rate: Optional[float] = None
     absorption_rate: Optional[float] = None
     supply_pipeline: Optional[List[Dict]] = None
+    # Web enrichment (Indeed/LinkedIn + BLS)
+    job_postings_count: Optional[int] = None
+    job_market_growth: Optional[str] = None  # growing, stable, limited
+    top_hiring_companies: Optional[List[str]] = None
+    unemployment_rate: Optional[float] = None
+    labor_force_participation: Optional[float] = None
 
 
 @dataclass
@@ -101,6 +119,12 @@ class PromotionData:
     competitive_advantages: Optional[List[str]] = None
     key_risks: Optional[List[str]] = None
     business_model_suggestions: Optional[List[str]] = None
+    # Web enrichment (Google Places/Reviews)
+    google_places_competitors: Optional[List[Dict]] = None
+    google_avg_rating: Optional[float] = None
+    google_total_reviews: Optional[int] = None
+    google_review_sentiment: Optional[str] = None  # positive, neutral, negative
+    google_price_levels: Optional[Dict] = None
     success_factors: Optional[List[str]] = None
     failure_points: Optional[List[str]] = None
     competitor_count: Optional[int] = None
@@ -216,6 +240,9 @@ class ReportDataService:
         
         # Fetch JediRE enrichment
         self._enrich_with_jedire(city, state, business_type, product, price, place, promotion)
+        
+        # Fetch Web enrichment (Google Trends, Places, Jobs, Zillow, News)
+        self._enrich_with_web(city, state, business_type, product, price, place, promotion)
         
         # Calculate data quality
         data_quality = self._calculate_data_quality(product, price, place, promotion, report_type)
@@ -522,6 +549,74 @@ class ReportDataService:
         except Exception as e:
             logger.warning(f"[ReportData] JediRE enrichment failed: {e}")
     
+    def _enrich_with_web(
+        self,
+        city: str,
+        state: str,
+        business_type: Optional[str],
+        product: ProductData,
+        price: PriceData,
+        place: PlaceData,
+        promotion: PromotionData
+    ) -> None:
+        """Enrich data with live web sources (Google, Zillow, Indeed, News)."""
+        try:
+            from app.services.web_enrichment_service import enrich_with_web_data_sync
+            
+            web_data = enrich_with_web_data_sync(city, state, business_type)
+            
+            if not web_data.sources_available:
+                logger.info(f"[ReportData] No web enrichment available for {city}, {state}")
+                return
+            
+            # Enrich PRODUCT with Google Trends + News
+            if web_data.google_trends:
+                product.google_trends_interest = web_data.google_trends.interest_score
+                product.google_trends_direction = web_data.google_trends.trend_direction
+                product.related_search_queries = web_data.google_trends.related_queries
+            
+            if web_data.market_news:
+                product.market_news = web_data.market_news.articles
+                product.news_sentiment = web_data.market_news.sentiment_score
+            
+            # Enrich PRICE with Zillow/Redfin
+            if web_data.real_estate:
+                price.zillow_home_value = web_data.real_estate.median_home_value
+                price.zillow_rent_estimate = web_data.real_estate.median_rent
+                price.home_value_change_yoy = web_data.real_estate.home_value_change_yoy
+                price.real_estate_market_temp = web_data.real_estate.market_temperature
+            
+            # Enrich PLACE with Job Market + Labor Stats
+            if web_data.job_market:
+                place.job_postings_count = web_data.job_market.total_postings
+                place.job_market_growth = web_data.job_market.growth_indicator
+                place.top_hiring_companies = web_data.job_market.hiring_companies
+            
+            if web_data.labor_stats:
+                place.unemployment_rate = web_data.labor_stats.unemployment_rate
+                place.labor_force_participation = web_data.labor_stats.labor_force_participation
+            
+            # Enrich PROMOTION with Google Places/Reviews
+            if web_data.google_places:
+                promotion.google_places_competitors = web_data.google_places.competitors
+                promotion.google_avg_rating = web_data.google_places.avg_rating
+                promotion.google_total_reviews = web_data.google_places.total_reviews
+                promotion.google_review_sentiment = web_data.google_places.review_sentiment
+                promotion.google_price_levels = web_data.google_places.price_levels
+                
+                # Update competitor count if we got more from Google
+                if web_data.google_places.total_competitors > (promotion.competitor_count or 0):
+                    promotion.competitor_count = web_data.google_places.total_competitors
+                
+                # Update avg rating if not already set
+                if not promotion.avg_competitor_rating and web_data.google_places.avg_rating:
+                    promotion.avg_competitor_rating = web_data.google_places.avg_rating
+            
+            logger.info(f"[ReportData] Web enrichment applied: {', '.join(web_data.sources_available)}")
+            
+        except Exception as e:
+            logger.warning(f"[ReportData] Web enrichment failed: {e}")
+    
     def _calculate_data_quality(
         self,
         product: ProductData,
@@ -541,34 +636,46 @@ class ReportDataService:
         """
         quality = DataQuality()
         
-        # Define key fields per pillar (primary = OppGrid, enrichment = JediRE)
+        # Define key fields per pillar (primary = OppGrid, enrichment = JediRE + Web)
         pillar_fields = {
             'product': {
                 'primary': ['opportunity_score', 'pain_intensity', 'urgency_level', 
                            'trend_strength', 'confidence_score', 'signal_density', 
                            'validation_confidence', 'opportunities_count'],
-                'enrichment': ['amenity_demand', 'unmet_demand'],
-                'critical': ['opportunity_score', 'trend_strength'],  # Must-have for reports
+                'enrichment': ['amenity_demand', 'unmet_demand',
+                              # Web: Google Trends + News
+                              'google_trends_interest', 'google_trends_direction',
+                              'related_search_queries', 'market_news'],
+                'critical': ['opportunity_score', 'trend_strength'],
             },
             'price': {
                 'primary': ['market_size_estimate', 'addressable_market_value', 
                            'revenue_benchmark', 'capital_required', 'median_income',
                            'income_growth_rate', 'income_differential'],
-                'enrichment': ['median_rent', 'spending_power_index', 'rent_by_bedroom'],
+                'enrichment': ['median_rent', 'spending_power_index', 'rent_by_bedroom',
+                              # Web: Zillow/Redfin
+                              'zillow_home_value', 'zillow_rent_estimate', 
+                              'home_value_change_yoy', 'real_estate_market_temp'],
                 'critical': ['market_size_estimate', 'median_income'],
             },
             'place': {
                 'primary': ['growth_score', 'growth_category', 'population_growth_rate',
                            'job_growth_rate', 'business_formation_rate', 'population',
                            'traffic_aadt', 'site_recommendations'],
-                'enrichment': ['vacancy_rate', 'absorption_rate', 'supply_pipeline'],
+                'enrichment': ['vacancy_rate', 'absorption_rate', 'supply_pipeline',
+                              # Web: Indeed/LinkedIn + BLS
+                              'job_postings_count', 'job_market_growth', 
+                              'top_hiring_companies', 'unemployment_rate'],
                 'critical': ['growth_score', 'population'],
             },
             'promotion': {
                 'primary': ['competition_level', 'competitive_advantages', 'key_risks',
                            'success_factors', 'failure_points', 'competitor_count',
                            'avg_competitor_rating'],
-                'enrichment': ['search_trends'],
+                'enrichment': ['search_trends',
+                              # Web: Google Places/Reviews
+                              'google_places_competitors', 'google_avg_rating',
+                              'google_total_reviews', 'google_review_sentiment'],
                 'critical': ['competition_level', 'competitor_count'],
             }
         }
