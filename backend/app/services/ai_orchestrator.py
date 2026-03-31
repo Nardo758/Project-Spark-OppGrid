@@ -11,7 +11,9 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 
-AI_CALL_TIMEOUT_SECONDS = 30
+# Increased from 30s to 60s for long-running AI analysis tasks
+# DeepSeek pattern analysis + Claude viability reports can take 30-45 seconds
+AI_CALL_TIMEOUT_SECONDS = 60
 
 
 class AITaskType(Enum):

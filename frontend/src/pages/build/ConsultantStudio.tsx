@@ -193,10 +193,21 @@ export default function ConsultantStudio() {
           business_context: {},
         }),
       })
-      if (!res.ok) throw new Error('Failed to validate idea')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error (${res.status})`)
+      }
       return res.json() as Promise<ValidateIdeaResult>
     },
-    onSuccess: (data) => setValidateResult(data),
+    onSuccess: (data) => {
+      if (!data.success) {
+        console.warn('API returned success=false:', data.error)
+      }
+      setValidateResult(data)
+    },
+    onError: (err: Error) => {
+      console.error('Validate mutation error:', err)
+    }
   })
 
   // Search Ideas mutation
@@ -210,10 +221,21 @@ export default function ConsultantStudio() {
           category: searchCategory || undefined,
         }),
       })
-      if (!res.ok) throw new Error('Failed to search ideas')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error (${res.status})`)
+      }
       return res.json() as Promise<SearchIdeasResult>
     },
-    onSuccess: (data) => setSearchResult(data),
+    onSuccess: (data) => {
+      if (!data.success) {
+        console.warn('Search returned success=false:', data.error)
+      }
+      setSearchResult(data)
+    },
+    onError: (err: Error) => {
+      console.error('Search mutation error:', err)
+    }
   })
 
   // Identify Location mutation
@@ -227,10 +249,21 @@ export default function ConsultantStudio() {
           business_description: locationBusiness,
         }),
       })
-      if (!res.ok) throw new Error('Failed to analyze location')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error (${res.status})`)
+      }
       return res.json() as Promise<IdentifyLocationResult>
     },
-    onSuccess: (data) => setLocationResult(data),
+    onSuccess: (data) => {
+      if (!data.success) {
+        console.warn('Location analysis returned success=false:', data.error)
+      }
+      setLocationResult(data)
+    },
+    onError: (err: Error) => {
+      console.error('Location mutation error:', err)
+    }
   })
 
   // Clone Success mutation
@@ -247,10 +280,21 @@ export default function ConsultantStudio() {
           radius_miles: 3,
         }),
       })
-      if (!res.ok) throw new Error('Failed to analyze business')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error (${res.status})`)
+      }
       return res.json() as Promise<CloneSuccessResult>
     },
-    onSuccess: (data) => setCloneResult(data),
+    onSuccess: (data) => {
+      if (!data.success) {
+        console.warn('Clone analysis returned success=false:', data.error)
+      }
+      setCloneResult(data)
+    },
+    onError: (err: Error) => {
+      console.error('Clone mutation error:', err)
+    }
   })
 
   const [reportError, setReportError] = useState<string | null>(null)
