@@ -7,7 +7,7 @@ Administrative endpoints for managing users, content, and platform
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import date, datetime, timedelta, timezone
 import os
 import httpx
@@ -2462,3 +2462,283 @@ async def get_report_usage_stats(
         ],
         "by_day": [{"date": str(r[0]), "count": r[1]} for r in reports_by_day],
     }
+
+
+# =============================================================================
+# AI PRICING & USAGE ADMIN
+# =============================================================================
+
+@router.get("/ai-pricing/config")
+def get_ai_pricing_config(
+    current_admin: User = Depends(require_admin)
+):
+    """Get current AI pricing configuration."""
+    from app.services.ai_metering_service import MODEL_COSTS, TIER_TOKEN_LIMITS, DEFAULT_MARKUP
+    
+    return {
+        "model_costs": MODEL_COSTS,
+        "tier_token_limits": TIER_TOKEN_LIMITS,
+        "default_markup": DEFAULT_MARKUP,
+        "markup_explanation": "Markup applied to base cost. 1.5 = 50% margin."
+    }
+
+
+@router.patch("/ai-pricing/model-costs")
+def update_model_costs(
+    updates: Dict[str, Dict[str, float]],
+    current_admin: User = Depends(require_admin),
+):
+    """
+    Update model pricing.
+    
+    Body: {"claude-opus-4-5": {"input": 15.0, "output": 75.0}, ...}
+    """
+    from app.services import ai_metering_service
+    
+    for model, costs in updates.items():
+        if "input" in costs and "output" in costs:
+            ai_metering_service.MODEL_COSTS[model] = costs
+    
+    return {
+        "status": "updated",
+        "updated_models": list(updates.keys()),
+        "current_config": ai_metering_service.MODEL_COSTS
+    }
+
+
+@router.patch("/ai-pricing/tier-limits")
+def update_tier_limits(
+    updates: Dict[str, int],
+    current_admin: User = Depends(require_admin),
+):
+    """
+    Update tier token limits.
+    
+    Body: {"starter": 100000, "growth": 500000, ...}
+    """
+    from app.services import ai_metering_service
+    
+    for tier, limit in updates.items():
+        ai_metering_service.TIER_TOKEN_LIMITS[tier] = limit
+    
+    return {
+        "status": "updated",
+        "updated_tiers": list(updates.keys()),
+        "current_config": ai_metering_service.TIER_TOKEN_LIMITS
+    }
+
+
+@router.patch("/ai-pricing/markup")
+def update_markup(
+    markup: float,
+    current_admin: User = Depends(require_admin),
+):
+    """
+    Update default markup multiplier.
+    
+    Example: 1.5 = 50% margin, 2.0 = 100% margin
+    """
+    from app.services import ai_metering_service
+    
+    old_markup = ai_metering_service.DEFAULT_MARKUP
+    ai_metering_service.DEFAULT_MARKUP = markup
+    
+    return {
+        "status": "updated",
+        "old_markup": old_markup,
+        "new_markup": markup
+    }
+
+
+@router.get("/ai-pricing/usage-stats")
+def get_ai_usage_stats(
+    days: int = Query(30, ge=1, le=365),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Get AI usage statistics across all users."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    
+    try:
+        from app.models.ai_usage import UserAIUsage
+        
+        # Total usage
+        total_stats = db.query(
+            func.sum(UserAIUsage.input_tokens).label("total_input"),
+            func.sum(UserAIUsage.output_tokens).label("total_output"),
+            func.sum(UserAIUsage.cost_usd).label("total_cost"),
+            func.sum(UserAIUsage.billed_amount_usd).label("total_billed"),
+            func.count(UserAIUsage.id).label("total_requests")
+        ).filter(UserAIUsage.created_at >= cutoff).first()
+        
+        # By model
+        by_model = db.query(
+            UserAIUsage.model_name,
+            func.sum(UserAIUsage.input_tokens).label("input_tokens"),
+            func.sum(UserAIUsage.output_tokens).label("output_tokens"),
+            func.sum(UserAIUsage.cost_usd).label("cost"),
+            func.count(UserAIUsage.id).label("requests")
+        ).filter(UserAIUsage.created_at >= cutoff).group_by(
+            UserAIUsage.model_name
+        ).all()
+        
+        # By event type
+        by_type = db.query(
+            UserAIUsage.event_type,
+            func.sum(UserAIUsage.input_tokens + UserAIUsage.output_tokens).label("tokens"),
+            func.sum(UserAIUsage.cost_usd).label("cost"),
+            func.count(UserAIUsage.id).label("requests")
+        ).filter(UserAIUsage.created_at >= cutoff).group_by(
+            UserAIUsage.event_type
+        ).all()
+        
+        # Top users
+        top_users = db.query(
+            UserAIUsage.user_id,
+            func.sum(UserAIUsage.input_tokens + UserAIUsage.output_tokens).label("tokens"),
+            func.sum(UserAIUsage.cost_usd).label("cost"),
+            func.count(UserAIUsage.id).label("requests")
+        ).filter(UserAIUsage.created_at >= cutoff).group_by(
+            UserAIUsage.user_id
+        ).order_by(desc("cost")).limit(20).all()
+        
+        return {
+            "period_days": days,
+            "totals": {
+                "input_tokens": int(total_stats.total_input or 0),
+                "output_tokens": int(total_stats.total_output or 0),
+                "cost_usd": float(total_stats.total_cost or 0),
+                "billed_usd": float(total_stats.total_billed or 0),
+                "margin_usd": float((total_stats.total_billed or 0) - (total_stats.total_cost or 0)),
+                "total_requests": int(total_stats.total_requests or 0)
+            },
+            "by_model": [
+                {
+                    "model": r.model_name,
+                    "input_tokens": int(r.input_tokens or 0),
+                    "output_tokens": int(r.output_tokens or 0),
+                    "cost_usd": float(r.cost or 0),
+                    "requests": int(r.requests or 0)
+                }
+                for r in by_model
+            ],
+            "by_event_type": [
+                {
+                    "type": r.event_type,
+                    "tokens": int(r.tokens or 0),
+                    "cost_usd": float(r.cost or 0),
+                    "requests": int(r.requests or 0)
+                }
+                for r in by_type
+            ],
+            "top_users": [
+                {
+                    "user_id": r.user_id,
+                    "tokens": int(r.tokens or 0),
+                    "cost_usd": float(r.cost or 0),
+                    "requests": int(r.requests or 0)
+                }
+                for r in top_users
+            ]
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "note": "AI usage table may not exist. Run migrations."
+        }
+
+
+@router.get("/ai-pricing/user/{user_id}/usage")
+def get_user_ai_usage(
+    user_id: int,
+    days: int = Query(30, ge=1, le=365),
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Get AI usage for a specific user."""
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+    
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    
+    try:
+        from app.models.ai_usage import UserAIUsage
+        
+        usage = db.query(
+            func.sum(UserAIUsage.input_tokens).label("input_tokens"),
+            func.sum(UserAIUsage.output_tokens).label("output_tokens"),
+            func.sum(UserAIUsage.cost_usd).label("cost_usd"),
+            func.sum(UserAIUsage.billed_amount_usd).label("billed_usd"),
+            func.count(UserAIUsage.id).label("requests")
+        ).filter(
+            UserAIUsage.user_id == user_id,
+            UserAIUsage.created_at >= cutoff
+        ).first()
+        
+        recent = db.query(UserAIUsage).filter(
+            UserAIUsage.user_id == user_id,
+            UserAIUsage.created_at >= cutoff
+        ).order_by(desc(UserAIUsage.created_at)).limit(50).all()
+        
+        return {
+            "user_id": user_id,
+            "period_days": days,
+            "totals": {
+                "input_tokens": int(usage.input_tokens or 0),
+                "output_tokens": int(usage.output_tokens or 0),
+                "cost_usd": float(usage.cost_usd or 0),
+                "billed_usd": float(usage.billed_usd or 0),
+                "requests": int(usage.requests or 0)
+            },
+            "recent_usage": [
+                {
+                    "id": u.id,
+                    "event_type": u.event_type,
+                    "model": u.model_name,
+                    "tokens": u.input_tokens + u.output_tokens,
+                    "cost_usd": float(u.cost_usd),
+                    "created_at": u.created_at.isoformat()
+                }
+                for u in recent
+            ]
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/ai-pricing/user/{user_id}/set-limit")
+def set_user_token_limit(
+    user_id: int,
+    monthly_limit: int,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Set a custom token limit for a specific user (overrides tier limit)."""
+    try:
+        from app.models.ai_usage import UserAIQuota
+        
+        quota = db.query(UserAIQuota).filter(UserAIQuota.user_id == user_id).first()
+        
+        if quota:
+            quota.monthly_token_limit = monthly_limit
+            quota.updated_at = datetime.utcnow()
+        else:
+            quota = UserAIQuota(
+                user_id=user_id,
+                monthly_token_limit=monthly_limit
+            )
+            db.add(quota)
+        
+        db.commit()
+        
+        return {
+            "status": "updated",
+            "user_id": user_id,
+            "monthly_token_limit": monthly_limit
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
