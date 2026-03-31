@@ -9,18 +9,15 @@ import json
 import asyncio
 from datetime import datetime
 
-from anthropic import Anthropic
-
 from app.db.database import get_db
 from app.db.database import SessionLocal
 from app.models.opportunity import Opportunity
+from app.services.cached_ai_service import (
+    analyze_opportunity as cached_analyze_opportunity,
+    OPPORTUNITY_ANALYSIS_PROMPT
+)
 
 router = APIRouter()
-
-client = Anthropic(
-    base_url=os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL"),
-    api_key=os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-)
 
 class AnalysisResult(BaseModel):
     opportunity_id: int
@@ -130,35 +127,21 @@ def _build_analysis_stats(db: Session) -> dict:
 
 
 def analyze_single_opportunity(opp: Opportunity) -> dict:
-    prompt = f"""Analyze this opportunity:
-
-TITLE: {opp.title}
-
-DESCRIPTION: {opp.description[:2000] if opp.description else 'No description'}
-
-CATEGORY: {opp.category}
-SUBCATEGORY/SOURCE: {opp.subcategory or 'N/A'}
-VALIDATION COUNT (upvotes): {opp.validation_count}
-SEVERITY RATING: {opp.severity}/5
-GEOGRAPHIC SCOPE: {opp.geographic_scope}
-
-Provide your structured JSON analysis."""
-
+    """
+    Analyze opportunity using cached AI service.
+    Uses Opus with prompt caching for up to 90% cost reduction.
+    """
     try:
-        response = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=1024,
-            system=ANALYSIS_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}]
+        result = cached_analyze_opportunity(
+            title=opp.title,
+            description=opp.description[:2000] if opp.description else 'No description',
+            category=opp.category,
+            subcategory=opp.subcategory,
+            validation_count=opp.validation_count,
+            severity=opp.severity,
+            geographic_scope=opp.geographic_scope
         )
-        
-        response_text = response.content[0].text
-        start_idx = response_text.find('{')
-        end_idx = response_text.rfind('}') + 1
-        if start_idx != -1 and end_idx > start_idx:
-            json_str = response_text[start_idx:end_idx]
-            return json.loads(json_str)
-        return None
+        return result
     except Exception as e:
         print(f"Error analyzing opportunity {opp.id}: {e}")
         return None

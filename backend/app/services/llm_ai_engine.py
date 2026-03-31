@@ -28,8 +28,14 @@ from app.services.ai_engine import ai_engine_service
 logger = logging.getLogger(__name__)
 
 
+_cached_client = None
+
 def get_anthropic_client():
     """Get Anthropic client with credentials from Replit AI Integrations or environment."""
+    global _cached_client
+    if _cached_client is not None:
+        return _cached_client
+    
     api_key = os.getenv("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
     base_url = os.getenv("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
     
@@ -37,7 +43,8 @@ def get_anthropic_client():
         try:
             import anthropic
             logger.info("Using Replit AI Integrations for Anthropic")
-            return anthropic.Anthropic(api_key=api_key, base_url=base_url)
+            _cached_client = anthropic.Anthropic(api_key=api_key, base_url=base_url)
+            return _cached_client
         except Exception as e:
             logger.error(f"Failed to create Anthropic client with AI Integrations: {e}")
     
@@ -53,9 +60,70 @@ def get_anthropic_client():
     
     try:
         import anthropic
-        return anthropic.Anthropic(api_key=api_key)
+        _cached_client = anthropic.Anthropic(api_key=api_key)
+        return _cached_client
     except Exception as e:
         logger.error(f"Failed to create Anthropic client: {e}")
+        return None
+
+
+def call_with_cache(
+    system_prompt: str,
+    user_prompt: str,
+    model: str = "claude-opus-4-5",
+    max_tokens: int = 1024,
+    temperature: float = 0.7
+) -> Optional[str]:
+    """
+    Make an API call with Anthropic prompt caching enabled.
+    
+    The system prompt is cached server-side for 5 minutes, reducing costs
+    by up to 90% on subsequent calls with the same system prompt.
+    
+    Args:
+        system_prompt: The system message (will be cached)
+        user_prompt: The user message
+        model: Model to use (default: claude-opus-4-5)
+        max_tokens: Max response tokens
+        temperature: Sampling temperature
+    
+    Returns:
+        Response text or None on error
+    """
+    client = get_anthropic_client()
+    if not client:
+        logger.error("[CachedAI] No Anthropic client available")
+        return None
+    
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ],
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        
+        # Log cache stats if available
+        if hasattr(response, 'usage'):
+            usage = response.usage
+            cache_read = getattr(usage, 'cache_read_input_tokens', 0)
+            cache_create = getattr(usage, 'cache_creation_input_tokens', 0)
+            if cache_read > 0:
+                logger.info(f"[CachedAI] Cache HIT: {cache_read} tokens from cache (90% savings)")
+            elif cache_create > 0:
+                logger.info(f"[CachedAI] Cache MISS: {cache_create} tokens cached for next call")
+        
+        return response.content[0].text
+        
+    except Exception as e:
+        logger.error(f"[CachedAI] Error: {e}")
         return None
 
 

@@ -12,7 +12,7 @@ import time
 import logging
 
 from app.db.database import get_db
-from app.services.llm_ai_engine import get_anthropic_client
+from app.services.llm_ai_engine import get_anthropic_client, call_with_cache
 from app.core.dependencies import get_current_user_optional
 from app.services.branding_service import get_user_team_branding, inject_branding_into_report
 from app.models.user import User
@@ -34,6 +34,60 @@ PAID_TIERS = [
     SubscriptionTier.BUSINESS,
     SubscriptionTier.ENTERPRISE,
 ]
+
+# =============================================================================
+# SYSTEM PROMPTS (Cached for 90% cost reduction)
+# =============================================================================
+
+BUSINESS_PLAN_SYSTEM = """You are a business strategy expert for OppGrid. Generate comprehensive, actionable business plans.
+
+Focus on:
+- Clear executive summaries
+- Realistic market analysis
+- Practical operational plans
+- Sound financial projections
+
+Always respond in valid JSON format as specified. Be specific, data-driven, and actionable."""
+
+FINANCIALS_SYSTEM = """You are a financial analyst for OppGrid. Generate detailed financial projections and models.
+
+Focus on:
+- Realistic revenue projections
+- Comprehensive cost breakdowns
+- Key financial metrics (burn rate, runway, ROI)
+- Clear assumptions
+
+Always respond in valid JSON format as specified. Be conservative in estimates."""
+
+PITCH_SYSTEM = """You are a pitch deck expert for OppGrid. Create compelling, investor-ready presentations.
+
+Focus on:
+- Clear problem-solution narrative
+- Market opportunity sizing
+- Competitive differentiation
+- Strong call to action
+
+Always respond in valid JSON format as specified. Be concise and impactful."""
+
+VALIDATION_SYSTEM = """You are a validation analyst for OppGrid. Assess opportunity viability and market fit.
+
+Focus on:
+- Market demand signals
+- Competitive landscape
+- Risk assessment
+- Go-to-market feasibility
+
+Always respond in valid JSON format as specified. Be objective and thorough."""
+
+MARKET_ANALYSIS_SYSTEM = """You are a market research analyst for OppGrid. Provide comprehensive market intelligence.
+
+Focus on:
+- Market size and growth
+- Target audience insights
+- Competitive dynamics
+- Trend analysis
+
+Always respond in valid JSON format as specified. Use data-driven reasoning."""
 
 def check_report_access(user: User | None, report_type: str, db: Session) -> tuple[bool, str | None]:
     """Check if user has access to a report type. Returns (has_access, error_message)"""
@@ -309,13 +363,18 @@ Create a detailed JSON business plan with these sections:
 
 Respond only with valid JSON."""
 
-        response = client.messages.create(
+        # Use cached call for 90% cost reduction on system prompt
+        response_text = call_with_cache(
+            system_prompt=BUSINESS_PLAN_SYSTEM,
+            user_prompt=prompt,
             model="claude-opus-4-5",
-            max_tokens=3000,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=3000
         )
         
-        result = parse_ai_response(response.content[0].text)
+        if not response_text:
+            raise Exception("AI service returned no response")
+        
+        result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
         
         return BusinessPlanResponse(
@@ -401,13 +460,18 @@ Create a comprehensive JSON financial model with:
 
 Use realistic numbers based on the business model. Respond only with valid JSON."""
 
-        response = client.messages.create(
+        # Use cached call for 90% cost reduction
+        response_text = call_with_cache(
+            system_prompt=FINANCIALS_SYSTEM,
+            user_prompt=prompt,
             model="claude-opus-4-5",
-            max_tokens=3000,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=3000
         )
         
-        result = parse_ai_response(response.content[0].text)
+        if not response_text:
+            raise Exception("AI service returned no response")
+        
+        result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
         
         return FinancialsResponse(
@@ -504,13 +568,18 @@ Create a comprehensive JSON pitch deck with slides:
 
 Make it compelling and investor-ready. Respond only with valid JSON."""
 
-        response = client.messages.create(
+        # Use cached call for 90% cost reduction
+        response_text = call_with_cache(
+            system_prompt=PITCH_SYSTEM,
+            user_prompt=prompt,
             model="claude-opus-4-5",
-            max_tokens=3000,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=3000
         )
         
-        result = parse_ai_response(response.content[0].text)
+        if not response_text:
+            raise Exception("AI service returned no response")
+        
+        result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
         
         return PitchDeckResponse(
@@ -673,13 +742,18 @@ Generate a detailed JSON feasibility study with these sections:
 
 Be objective and balanced. Respond only with valid JSON."""
 
-        response = client.messages.create(
+        # Use cached call for 90% cost reduction
+        response_text = call_with_cache(
+            system_prompt=VALIDATION_SYSTEM,
+            user_prompt=prompt,
             model="claude-opus-4-5",
-            max_tokens=3000,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=3000
         )
         
-        result = parse_ai_response(response.content[0].text)
+        if not response_text:
+            raise Exception("AI service returned no response")
+        
+        result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
         
         html_content = format_report_html(
@@ -789,13 +863,18 @@ Generate a detailed JSON market analysis with these sections:
 
 Include data points and be specific. Respond only with valid JSON."""
 
-        response = client.messages.create(
+        # Use cached call for 90% cost reduction
+        response_text = call_with_cache(
+            system_prompt=MARKET_ANALYSIS_SYSTEM,
+            user_prompt=prompt,
             model="claude-opus-4-5",
-            max_tokens=3000,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=3000
         )
         
-        result = parse_ai_response(response.content[0].text)
+        if not response_text:
+            raise Exception("AI service returned no response")
+        
+        result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
         
         html_content = format_report_html(
@@ -911,13 +990,18 @@ Generate a detailed JSON strategic assessment with these sections:
 
 Provide actionable, specific recommendations. Respond only with valid JSON."""
 
-        response = client.messages.create(
+        # Use cached call for 90% cost reduction
+        response_text = call_with_cache(
+            system_prompt=BUSINESS_PLAN_SYSTEM,  # Strategic assessment uses business plan system
+            user_prompt=prompt,
             model="claude-opus-4-5",
-            max_tokens=3000,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=3000
         )
         
-        result = parse_ai_response(response.content[0].text)
+        if not response_text:
+            raise Exception("AI service returned no response")
+        
+        result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
         
         html_content = format_report_html(
@@ -1045,13 +1129,18 @@ Generate a detailed JSON PESTLE analysis with these sections:
 
 Be specific to the industry and region. Respond only with valid JSON."""
 
-        response = client.messages.create(
+        # Use cached call for 90% cost reduction
+        response_text = call_with_cache(
+            system_prompt=MARKET_ANALYSIS_SYSTEM,  # PESTLE uses market analysis system
+            user_prompt=prompt,
             model="claude-opus-4-5",
-            max_tokens=3000,
-            messages=[{"role": "user", "content": prompt}]
+            max_tokens=3000
         )
         
-        result = parse_ai_response(response.content[0].text)
+        if not response_text:
+            raise Exception("AI service returned no response")
+        
+        result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
         
         html_content = format_report_html(
