@@ -30,18 +30,23 @@ if config.config_file_name is not None:
 
 target_metadata = Base.metadata
 
-# PostGIS system tables that are owned by the superuser — Alembic must never
-# attempt to create, alter, or drop them. Doing so causes "must be owner of
-# table spatial_ref_sys" errors on hosted PostgreSQL (Replit production).
+import re
+
 POSTGIS_SYSTEM_TABLES = {
     "spatial_ref_sys",
     "geometry_columns",
     "geography_columns",
     "raster_columns",
     "raster_overviews",
-    "layer",
-    "topology",
 }
+
+_POSTGIS_DDL_RE = re.compile(
+    r"""(?ix)
+    \b(ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\b
+    .*?
+    (?:"|')?(""" + "|".join(re.escape(t) for t in POSTGIS_SYSTEM_TABLES) + r""")(?:"|')?
+    """
+)
 
 
 def include_object(obj, name, type_, reflected, compare_to):
@@ -53,18 +58,14 @@ def include_object(obj, name, type_, reflected, compare_to):
 
 def _postgis_ddl_filter(conn, cursor, statement, parameters, context, executemany):
     """
-    Global cursor-level hook: replace any statement that references a
-    PostGIS-owned system table with a harmless no-op.
+    Global cursor-level hook: replace DDL targeting PostGIS-owned system
+    tables with a harmless no-op.
 
-    PostGIS extension setup (and some GeoAlchemy2 paths) can emit:
-        ALTER TABLE "spatial_ref_sys" ADD PRIMARY KEY ("srid")
-    which fails on hosted PostgreSQL because the app user is not the owner.
-    Intercepting at the cursor level means the statement is never sent to the
-    server, so the migration succeeds and the transaction stays clean.
+    Only intercepts ALTER TABLE / CREATE TABLE / DROP TABLE statements
+    that reference known PostGIS catalog tables by exact name.
     """
-    for table in POSTGIS_SYSTEM_TABLES:
-        if table in statement:
-            return "SELECT 1", ()
+    if _POSTGIS_DDL_RE.search(statement):
+        return "SELECT 1", ()
     return statement, parameters
 
 
