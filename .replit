@@ -80,7 +80,7 @@ externalPort = 8000
 
 [deployment]
 run = ["bash", "-c", "cd backend && PYTHONPATH=. python -m uvicorn app.main:app --host 0.0.0.0 --port 5000"]
-deploymentTarget = "autoscale"
+deploymentTarget = "vm"
 ignorePorts = false
 build = ["bash", "-c", "cd backend && PYTHONPATH=. python -m alembic upgrade head 2>&1 || true; cd /home/runner/workspace/frontend && npm run build"]
 
