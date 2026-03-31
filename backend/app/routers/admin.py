@@ -1001,7 +1001,10 @@ async def recategorize_opportunities(
     if not opportunities:
         return {"message": "No opportunities to recategorize", "processed": 0}
     
-    client = Anthropic()
+    from app.services.llm_ai_engine import get_anthropic_client
+    client = get_anthropic_client()
+    if not client:
+        raise HTTPException(status_code=503, detail="AI service not available")
     updated_count = 0
     skipped_count = 0
     errors = []
@@ -2204,14 +2207,13 @@ async def reprocess_general_category_opportunities(
     Raw source data will be preserved.
     """
     import asyncio
+    from app.services.llm_ai_engine import get_anthropic_client
     
     MAX_CONCURRENT_CALLS = 5
     
-    AI_INTEGRATIONS_ANTHROPIC_API_KEY = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-    AI_INTEGRATIONS_ANTHROPIC_BASE_URL = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
-    
-    if not AI_INTEGRATIONS_ANTHROPIC_API_KEY:
-        return {"status": "error", "message": "AI client not configured - missing API key"}
+    client = get_anthropic_client()
+    if not client:
+        return {"status": "error", "message": "AI client not configured - set ANTHROPIC_API_KEY"}
     
     opportunities = db.query(Opportunity).filter(
         Opportunity.category == 'General'
@@ -2219,11 +2221,6 @@ async def reprocess_general_category_opportunities(
     
     if not opportunities:
         return {"status": "no_opportunities", "message": "No opportunities with 'General' category found", "count": 0}
-    
-    client = Anthropic(
-        api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-        base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-    )
     
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_CALLS)
     

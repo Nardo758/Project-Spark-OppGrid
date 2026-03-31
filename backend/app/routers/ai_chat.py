@@ -5,21 +5,15 @@ from typing import Optional, List
 import os
 import logging
 
-from anthropic import Anthropic
-
 from app.db.database import get_db
 from app.models.opportunity import Opportunity
 from app.models.user import User
 from app.core.dependencies import get_current_user_optional
+from app.services.llm_ai_engine import get_anthropic_client
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-client = Anthropic(
-    base_url=os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL"),
-    api_key=os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-)
 
 class ChatMessage(BaseModel):
     role: str
@@ -240,10 +234,20 @@ async def chat_with_ai(
             "content": user_content
         })
         
+        client = get_anthropic_client()
+        if not client:
+            raise HTTPException(status_code=503, detail="AI service not available")
+        
         response = client.messages.create(
             model="claude-opus-4-5",
             max_tokens=1024,
-            system=system_prompt,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ],
             messages=messages
         )
         

@@ -14,18 +14,10 @@ import os
 import json
 import logging
 
-from anthropic import Anthropic
+from app.services.llm_ai_engine import get_anthropic_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-AI_INTEGRATIONS_ANTHROPIC_API_KEY = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-AI_INTEGRATIONS_ANTHROPIC_BASE_URL = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
-
-client = Anthropic(
-    api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-    base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-)
 
 
 class IdeaInput(BaseModel):
@@ -174,6 +166,10 @@ async def generate_idea(input_data: IdeaInput):
 
 Analyze and refine this into a structured business opportunity."""
 
+        client = get_anthropic_client()
+        if not client:
+            raise HTTPException(status_code=503, detail="AI service not available")
+        
         response = client.messages.create(
             model="claude-haiku-4-5",
             max_tokens=1024,
@@ -283,6 +279,10 @@ IDEA DESCRIPTION:
 
 Provide a comprehensive, actionable validation analysis."""
 
+        client = get_anthropic_client()
+        if not client:
+            raise HTTPException(status_code=503, detail="AI service not available")
+        
         response = client.messages.create(
             model="claude-opus-4-5",
             max_tokens=2048,

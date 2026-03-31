@@ -19,11 +19,23 @@ logger = logging.getLogger(__name__)
 
 def get_stripe_credentials() -> Tuple[Optional[str], Optional[str]]:
     """
-    Get Stripe API keys from Replit connector or environment.
+    Get Stripe API keys - prioritizes direct env vars over Replit connector.
+    
+    Priority:
+    1. Direct env vars (STRIPE_SECRET_KEY, STRIPE_PUBLISHABLE_KEY)
+    2. Replit connector (fallback, has 2-agent limit)
     
     Returns:
         Tuple of (secret_key, publishable_key)
     """
+    # Priority 1: Direct API keys (no connector limitations)
+    secret_key = os.getenv("STRIPE_SECRET_KEY")
+    publishable_key = os.getenv("STRIPE_PUBLISHABLE_KEY")
+    if secret_key:
+        logger.info("Using Stripe credentials from direct environment variables")
+        return secret_key, publishable_key
+    
+    # Priority 2: Replit connector (fallback)
     hostname = os.getenv("REPLIT_CONNECTORS_HOSTNAME")
     repl_identity = os.getenv("REPL_IDENTITY")
     web_repl_renewal = os.getenv("WEB_REPL_RENEWAL")
@@ -50,16 +62,12 @@ def get_stripe_credentials() -> Tuple[Optional[str], Optional[str]]:
                 secret_key = settings_data.get("secret")
                 publishable_key = settings_data.get("publishable")
                 if secret_key:
-                    logger.info("Using Stripe credentials from Replit connector")
+                    logger.info("Using Stripe credentials from Replit connector (fallback)")
                     return secret_key, publishable_key
         except Exception as e:
             logger.warning(f"Failed to get Stripe credentials from connector: {e}")
     
-    secret_key = os.getenv("STRIPE_SECRET_KEY")
-    publishable_key = os.getenv("STRIPE_PUBLISHABLE_KEY")
-    if secret_key:
-        logger.info("Using Stripe credentials from environment variables")
-    return secret_key, publishable_key
+    return None, None
 
 
 def get_stripe_client():

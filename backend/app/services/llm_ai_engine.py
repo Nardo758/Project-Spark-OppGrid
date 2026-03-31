@@ -31,40 +31,48 @@ logger = logging.getLogger(__name__)
 _cached_client = None
 
 def get_anthropic_client():
-    """Get Anthropic client with credentials from Replit AI Integrations or environment."""
+    """
+    Get Anthropic client - prioritizes direct API key over Replit connector.
+    
+    Priority:
+    1. Direct API key (ANTHROPIC_API_KEY) - no model limits
+    2. Replit AI Integrations (fallback, has 2-model limit)
+    """
     global _cached_client
     if _cached_client is not None:
         return _cached_client
     
-    api_key = os.getenv("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-    base_url = os.getenv("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
-    
-    if api_key and base_url:
-        try:
-            import anthropic
-            logger.info("Using Replit AI Integrations for Anthropic")
-            _cached_client = anthropic.Anthropic(api_key=api_key, base_url=base_url)
-            return _cached_client
-        except Exception as e:
-            logger.error(f"Failed to create Anthropic client with AI Integrations: {e}")
-    
+    # Priority 1: Direct Anthropic API key (no connector limitations)
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         api_key = os.getenv("CLAUDE_API_KEY")
     if not api_key:
         api_key = os.getenv("CLAUDE_API")
     
-    if not api_key:
-        logger.warning("No Anthropic API key found")
-        return None
+    if api_key:
+        try:
+            import anthropic
+            logger.info("Using direct Anthropic API key (no model limits)")
+            _cached_client = anthropic.Anthropic(api_key=api_key)
+            return _cached_client
+        except Exception as e:
+            logger.error(f"Failed to create Anthropic client with direct key: {e}")
     
-    try:
-        import anthropic
-        _cached_client = anthropic.Anthropic(api_key=api_key)
-        return _cached_client
-    except Exception as e:
-        logger.error(f"Failed to create Anthropic client: {e}")
-        return None
+    # Priority 2: Replit AI Integrations (fallback, has 2-model limit)
+    connector_key = os.getenv("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
+    connector_url = os.getenv("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
+    
+    if connector_key and connector_url:
+        try:
+            import anthropic
+            logger.info("Using Replit AI Integrations for Anthropic (2-model limit applies)")
+            _cached_client = anthropic.Anthropic(api_key=connector_key, base_url=connector_url)
+            return _cached_client
+        except Exception as e:
+            logger.error(f"Failed to create Anthropic client with AI Integrations: {e}")
+    
+    logger.warning("No Anthropic API key found - set ANTHROPIC_API_KEY for unlimited models")
+    return None
 
 
 def call_with_cache(

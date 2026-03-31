@@ -10,21 +10,15 @@ from pydantic import BaseModel
 from typing import List, Optional
 import os
 
-from anthropic import Anthropic
-
 from app.db.database import get_db
 from app.models.user import User
 from app.models.copilot import GlobalChatMessage, CopilotSuggestion
 from app.models.opportunity import Opportunity
 from app.models.watchlist import WatchlistItem, LifecycleState
 from app.core.dependencies import get_current_user
+from app.services.llm_ai_engine import get_anthropic_client
 
 router = APIRouter(prefix="/copilot", tags=["AI Copilot"])
-
-client = Anthropic(
-    base_url=os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL"),
-    api_key=os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
-)
 
 COPILOT_SYSTEM_PROMPT = """You are OppGrid's AI Copilot - a persistent assistant that helps users discover, validate, and launch business opportunities.
 
@@ -270,13 +264,19 @@ async def chat_with_copilot(
     messages = chat_history + [{"role": "user", "content": message}]
 
     try:
+        client = get_anthropic_client()
+        if not client:
+            raise HTTPException(status_code=503, detail="AI service not available")
+        
         response = client.messages.create(
-            model="claude-3-haiku-20240307",
+            model="claude-haiku-4-5",
             max_tokens=1024,
             system=system_prompt,
             messages=messages
         )
         ai_response = response.content[0].text
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
 
@@ -434,8 +434,12 @@ Return only the tags as a comma-separated list, no explanations. Examples: "high
 """
 
     try:
+        client = get_anthropic_client()
+        if not client:
+            raise HTTPException(status_code=503, detail="AI service not available")
+        
         response = client.messages.create(
-            model="claude-3-haiku-20240307",
+            model="claude-haiku-4-5",
             max_tokens=100,
             messages=[{"role": "user", "content": prompt}]
         )

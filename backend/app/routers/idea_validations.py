@@ -177,8 +177,9 @@ async def run_validation(
     row.status = IdeaValidationStatus.PROCESSING
     db.commit()
 
-    # Reuse the existing idea_engine validation logic/prompt by importing + calling it.
-    from app.routers.idea_engine import VALIDATION_PROMPT, client as anthropic_client
+    # Reuse the existing idea_engine validation logic/prompt
+    from app.routers.idea_engine import VALIDATION_PROMPT
+    from app.services.llm_ai_engine import get_anthropic_client
 
     user_prompt = f"""Validate this business opportunity:
 
@@ -191,6 +192,10 @@ IDEA DESCRIPTION:
 Provide a comprehensive, actionable validation analysis."""
 
     try:
+        anthropic_client = get_anthropic_client()
+        if not anthropic_client:
+            raise RuntimeError("AI service not available")
+        
         response = anthropic_client.messages.create(
             model="claude-opus-4-5",
             max_tokens=2048,
