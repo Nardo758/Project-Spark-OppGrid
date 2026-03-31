@@ -13,7 +13,7 @@ Data Sources:
 import logging
 from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, String
 from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta
 
@@ -309,7 +309,7 @@ class ReportDataService:
         
         # Get signal density from service area
         service_area = self.db.query(ServiceAreaBoundary).filter(
-            func.lower(ServiceAreaBoundary.included_cities.cast(str)).contains(city.lower())
+            func.lower(ServiceAreaBoundary.included_cities.cast(String)).contains(city.lower())
         ).first()
         
         if service_area:
@@ -349,7 +349,7 @@ class ReportDataService:
         
         # Get service area TAM
         service_area = self.db.query(ServiceAreaBoundary).filter(
-            func.lower(ServiceAreaBoundary.included_cities.cast(str)).contains(city.lower())
+            func.lower(ServiceAreaBoundary.included_cities.cast(String)).contains(city.lower())
         ).first()
         
         if service_area:
@@ -433,7 +433,7 @@ class ReportDataService:
         
         # Get service area population and coordinates
         service_area = self.db.query(ServiceAreaBoundary).filter(
-            func.lower(ServiceAreaBoundary.included_cities.cast(str)).contains(city.lower())
+            func.lower(ServiceAreaBoundary.included_cities.cast(String)).contains(city.lower())
         ).first()
         
         if service_area:
