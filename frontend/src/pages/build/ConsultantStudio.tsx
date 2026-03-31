@@ -148,7 +148,8 @@ interface SavedReport {
 }
 
 export default function ConsultantStudio() {
-  const { token, isAuthenticated } = useAuthStore()
+  // Optional: Allow guest access (no authentication required)
+  const { token } = useAuthStore()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<TabId>('validate')
 
@@ -469,15 +470,20 @@ export default function ConsultantStudio() {
                   content: JSON.stringify(validateResult, null, 2),
                 })
               }
-              disabled={saveReportMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
+              disabled={saveReportMutation.isPending || !token}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
+                token
+                  ? 'bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+              title={!token ? 'Sign in to save reports' : ''}
             >
               <FileText className="w-4 h-4" />
-              {saveReportMutation.isPending ? 'Generating...' : 'Save as Report'}
+              {!token ? 'Sign in to Save' : saveReportMutation.isPending ? 'Saving...' : 'Save to Account'}
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium">
+            <button className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium">
               <Download className="w-4 h-4" />
-              Export PDF
+              Download PDF
             </button>
           </div>
 
@@ -970,29 +976,7 @@ export default function ConsultantStudio() {
     </div>
   )
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-stone-50 py-12">
-        <div className="max-w-2xl mx-auto px-4 text-center">
-          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <BarChart3 className="w-8 h-8 text-amber-600" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Consultant Studio</h1>
-          <p className="text-lg text-gray-600 mb-8">
-            AI-powered business validation, market analysis, and location intelligence.
-          </p>
-          <Link
-            to="/login?next=/build/consultant-studio"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600"
-          >
-            Sign in to Access
-            <ChevronRight className="w-5 h-5" />
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
+  // No authentication required - guest access allowed
   return (
     <div className="min-h-screen bg-stone-50 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
