@@ -517,34 +517,59 @@ class UnifiedAIService:
         return round(total_with_markup, 6)
     
     async def _record_usage(self, model: Dict, tokens: Dict[str, int]):
-        """Record usage for billing."""
+        """Record usage for billing and analytics.
+
+        BYOK users: always write to local tracking table so admins can see
+        usage analytics, but NEVER send to Stripe meters — the API cost
+        already hit their own key, so metering them again would double-charge.
+
+        OppGrid-credits users: write to local table AND send to Stripe meters
+        so the charge appears on their next invoice.
+        """
         if not self.user_id:
             return
-        
+
+        is_byok = bool(self.byok_key)
+
         try:
-            # Record in database
             from sqlalchemy import text
+
+            # Always write to local analytics table
             self.db.execute(text("""
-                INSERT INTO user_ai_usage (user_id, model_id, input_tokens, output_tokens, total_tokens, created_at)
-                VALUES (:user_id, :model_id, :input_tokens, :output_tokens, :total_tokens, NOW())
+                INSERT INTO user_ai_usage
+                    (user_id, model_name, event_type, input_tokens, output_tokens,
+                     estimated_cost_usd, stripe_recorded)
+                VALUES
+                    (:user_id, :model_name, :event_type, :input_tokens, :output_tokens,
+                     :cost, :stripe_recorded)
             """), {
                 "user_id": self.user_id,
-                "model_id": model["model_id"],
+                "model_name": model.get("api_model_name") or model.get("model_id", "unknown"),
+                "event_type": "byok" if is_byok else "platform",
                 "input_tokens": tokens["input"],
                 "output_tokens": tokens["output"],
-                "total_tokens": tokens["input"] + tokens["output"]
+                "cost": round(
+                    (tokens["input"] / 1_000_000) * float(model.get("cost_per_million_input") or 0)
+                    + (tokens["output"] / 1_000_000) * float(model.get("cost_per_million_output") or 0),
+                    8
+                ),
+                "stripe_recorded": False if is_byok else bool(
+                    self.billing and self.billing.enabled
+                ),
             })
             self.db.commit()
-            
-            # Record to Stripe if enabled
-            if self.billing and self.billing.enabled:
+
+            # Only meter through Stripe when using OppGrid platform credits
+            if not is_byok and self.billing and self.billing.enabled:
                 self.billing.record_usage_by_user_id(
                     user_id=self.user_id,
-                    model=model["api_model_name"],
+                    model=model.get("api_model_name") or model.get("model_id"),
                     input_tokens=tokens["input"],
                     output_tokens=tokens["output"],
-                    db=self.db
+                    db=self.db,
+                    event_type="platform",
                 )
+
         except Exception as e:
             logger.error(f"Failed to record usage: {e}")
 

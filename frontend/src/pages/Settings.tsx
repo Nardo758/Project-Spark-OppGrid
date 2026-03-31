@@ -1356,8 +1356,7 @@ export default function Settings() {
                       <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <h3 className="font-medium text-gray-900 mb-3">Claude API Key (Optional)</h3>
                         <p className="text-sm text-gray-600 mb-4">
-                          Use your own Anthropic API key to track your usage and billing separately. 
-                          If not provided, OppGrid's shared credits will be used.
+                          Use your own Anthropic API key — API costs go directly to your Anthropic account and are <strong>not</strong> metered through OppGrid billing. Usage is still tracked locally for your analytics.
                         </p>
                         
                         {aiPreferences.has_claude_key ? (
@@ -1416,8 +1415,7 @@ export default function Settings() {
                       <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <h3 className="font-medium text-gray-900 mb-3">OpenAI API Key (Optional)</h3>
                         <p className="text-sm text-gray-600 mb-4">
-                          Use your own OpenAI API key to track your usage and billing separately. 
-                          If not provided, OppGrid's shared credits will be used.
+                          Use your own OpenAI API key — API costs go directly to your OpenAI account and are <strong>not</strong> metered through OppGrid billing. Usage is still tracked locally for your analytics.
                         </p>
                         
                         {aiPreferences.has_openai_key ? (
