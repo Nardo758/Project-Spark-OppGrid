@@ -522,3 +522,190 @@ def get_public_custom_workflows(
             "created_at": workflow.created_at
         } for workflow in workflows
     ]
+
+# =============================================================================
+# 4 P's Smart Task Suggestions
+# =============================================================================
+
+PILLAR_TASK_TEMPLATES = {
+    "product": [
+        {"title": "Interview 5 potential customers", "description": "Validate pain points with real users", "priority": "high"},
+        {"title": "Analyze competitor products", "description": "Document feature gaps and opportunities", "priority": "high"},
+        {"title": "Create user survey", "description": "Gather quantitative demand data", "priority": "medium"},
+        {"title": "Research trend data", "description": "Use Google Trends to validate growing demand", "priority": "medium"},
+        {"title": "Define MVP features", "description": "List minimum features to solve core pain", "priority": "high"},
+    ],
+    "price": [
+        {"title": "Research competitor pricing", "description": "Document pricing models in the market", "priority": "high"},
+        {"title": "Calculate unit economics", "description": "Model CAC, LTV, and margins", "priority": "high"},
+        {"title": "Survey willingness to pay", "description": "Ask potential customers about price sensitivity", "priority": "medium"},
+        {"title": "Estimate market size (TAM/SAM/SOM)", "description": "Quantify the addressable market", "priority": "medium"},
+        {"title": "Create pricing tiers", "description": "Design value-based pricing structure", "priority": "medium"},
+    ],
+    "place": [
+        {"title": "Analyze target locations", "description": "Research best markets for launch", "priority": "high"},
+        {"title": "Research local demographics", "description": "Understand population and income data", "priority": "medium"},
+        {"title": "Identify distribution channels", "description": "Map how customers will find you", "priority": "high"},
+        {"title": "Scout physical locations", "description": "If applicable, identify potential sites", "priority": "medium"},
+        {"title": "Analyze foot traffic data", "description": "Research customer accessibility", "priority": "low"},
+    ],
+    "promotion": [
+        {"title": "Map competitive landscape", "description": "Identify and analyze top 5 competitors", "priority": "high"},
+        {"title": "Define unique value proposition", "description": "Articulate why customers choose you", "priority": "high"},
+        {"title": "Create marketing channel plan", "description": "Identify top 3 customer acquisition channels", "priority": "medium"},
+        {"title": "Estimate customer acquisition cost", "description": "Budget for marketing spend", "priority": "medium"},
+        {"title": "Design brand positioning", "description": "Create messaging that differentiates", "priority": "medium"},
+    ],
+}
+
+
+@router.get("/{workspace_id}/smart-tasks", response_model=dict)
+def get_smart_task_suggestions(
+    workspace_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get AI-powered task suggestions based on 4 P's analysis.
+    
+    Analyzes the opportunity's 4 P's scores and recommends tasks
+    to strengthen weak areas.
+    """
+    from app.services.report_data_service import ReportDataService
+    
+    workspace = db.query(EnhancedUserWorkspace).filter(
+        EnhancedUserWorkspace.id == workspace_id,
+        EnhancedUserWorkspace.user_id == current_user.id
+    ).first()
+    
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workspace not found"
+        )
+    
+    opportunity_id = workspace.opportunity_id
+    
+    # Get 4 P's data
+    try:
+        service = ReportDataService(db)
+        four_ps = service.get_full_response(opportunity_id)
+    except Exception as e:
+        four_ps = None
+    
+    suggestions = []
+    focus_areas = []
+    
+    if four_ps and four_ps.get("scores"):
+        scores = four_ps["scores"]
+        quality = four_ps.get("data_quality", {})
+        
+        # Sort pillars by score (weakest first)
+        sorted_pillars = sorted(scores.items(), key=lambda x: x[1])
+        
+        for pillar, score in sorted_pillars:
+            if score < 70:  # Needs attention
+                focus_areas.append({
+                    "pillar": pillar.upper(),
+                    "score": score,
+                    "status": "critical" if score < 40 else "needs_work" if score < 60 else "improving"
+                })
+                
+                # Add tasks for this pillar
+                pillar_tasks = PILLAR_TASK_TEMPLATES.get(pillar, [])
+                for task in pillar_tasks[:3]:  # Top 3 tasks per weak pillar
+                    suggestions.append({
+                        "pillar": pillar.upper(),
+                        "pillar_score": score,
+                        **task
+                    })
+        
+        # Include recommendations from data quality
+        recommendations = quality.get("recommended_actions", [])
+        
+        return {
+            "workspace_id": workspace_id,
+            "opportunity_id": opportunity_id,
+            "four_ps_scores": scores,
+            "overall_score": four_ps.get("overall", 0),
+            "data_quality": round(quality.get("completeness", 0) * 100),
+            "focus_areas": focus_areas,
+            "suggested_tasks": suggestions,
+            "recommendations": recommendations,
+            "message": f"Found {len(suggestions)} suggested tasks based on 4 P's analysis"
+        }
+    
+    # Fallback if no 4 P's data
+    return {
+        "workspace_id": workspace_id,
+        "opportunity_id": opportunity_id,
+        "four_ps_scores": None,
+        "focus_areas": [],
+        "suggested_tasks": [],
+        "recommendations": ["Generate 4 P's analysis to get personalized task suggestions"],
+        "message": "No 4 P's data available. Complete market analysis for smart suggestions."
+    }
+
+
+@router.post("/{workspace_id}/smart-tasks/add", response_model=dict)
+def add_smart_task(
+    workspace_id: int,
+    task_title: str,
+    task_description: Optional[str] = None,
+    task_priority: str = "medium",
+    pillar: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Add a suggested task to the workspace."""
+    
+    workspace = db.query(EnhancedUserWorkspace).filter(
+        EnhancedUserWorkspace.id == workspace_id,
+        EnhancedUserWorkspace.user_id == current_user.id
+    ).first()
+    
+    if not workspace:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Workspace not found"
+        )
+    
+    # Find first active stage or create research stage
+    active_stage = None
+    for stage in workspace.workflow_stages:
+        if stage.status == "in_progress":
+            active_stage = stage
+            break
+    
+    if not active_stage and workspace.workflow_stages:
+        active_stage = workspace.workflow_stages[0]
+    
+    if not active_stage:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No workflow stage available"
+        )
+    
+    # Create the task
+    new_task = EnhancedWorkflowTask(
+        stage_id=active_stage.id,
+        title=task_title,
+        description=task_description or f"Task from 4 P's {pillar.upper() if pillar else 'analysis'}",
+        priority=task_priority,
+        is_completed=False,
+        sort_order=len(active_stage.tasks) + 1
+    )
+    
+    db.add(new_task)
+    workspace.last_activity_at = datetime.utcnow()
+    db.commit()
+    db.refresh(new_task)
+    
+    return {
+        "task_id": new_task.id,
+        "title": new_task.title,
+        "stage_id": active_stage.id,
+        "stage_name": active_stage.name,
+        "pillar": pillar,
+        "message": "Task added successfully"
+    }

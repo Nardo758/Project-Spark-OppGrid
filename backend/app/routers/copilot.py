@@ -48,8 +48,32 @@ LIFECYCLE STATE GUIDANCE:
 - PAUSED: Help resume when ready
 - ARCHIVED: Suggest reviewing lessons learned
 
+4 P's MARKET INTELLIGENCE:
+When 4 P's data is available, use it to give specific, actionable advice:
+
+- PRODUCT (Demand): Pain intensity, trend direction, urgency level
+  → High pain + rising trend = strong opportunity signal
+  → Low scores = needs more validation research
+
+- PRICE (Economics): Market size, median income, spending power
+  → Large market + high income = premium positioning possible
+  → Low scores = research pricing strategies
+
+- PLACE (Location): Growth score, population growth, job market
+  → High growth markets = easier customer acquisition
+  → Low scores = consider market expansion strategy
+
+- PROMOTION (Competition): Competition level, competitor count, advantages
+  → Low competition = first-mover advantage
+  → High competition = focus on differentiation
+
+When a pillar is weak (< 50 score), proactively suggest:
+- Research tasks to strengthen that area
+- Reports to generate for deeper analysis
+- Questions to validate with potential customers
+
 Be concise, actionable, and encouraging. Use bullet points for clarity.
-When an opportunity is in context, reference its specific details."""
+Reference specific 4 P's metrics when available to make advice concrete."""
 
 
 class ChatRequest(BaseModel):
@@ -107,6 +131,57 @@ def get_opportunity_context(db: Session, opportunity_id: int) -> dict:
     }
 
 
+def get_four_ps_context(db: Session, opportunity_id: int) -> dict:
+    """Get 4 P's market intelligence for AI context."""
+    try:
+        from app.services.report_data_service import ReportDataService
+        service = ReportDataService(db)
+        response = service.get_full_response(opportunity_id)
+        
+        if not response:
+            return {}
+        
+        # Extract key insights for the copilot
+        scores = response.get("scores", {})
+        quality = response.get("data_quality", {})
+        product = response.get("product", {})
+        price = response.get("price", {})
+        place = response.get("place", {})
+        promotion = response.get("promotion", {})
+        
+        return {
+            "scores": scores,
+            "overall_score": response.get("overall", 0),
+            "weakest_pillar": quality.get("weakest_pillar"),
+            "data_quality": round(quality.get("completeness", 0) * 100),
+            "recommendations": quality.get("recommended_actions", [])[:3],
+            "key_insights": {
+                "product": {
+                    "pain_intensity": product.get("pain_intensity"),
+                    "trend_direction": product.get("google_trends_direction"),
+                    "urgency": product.get("urgency_level"),
+                },
+                "price": {
+                    "market_size": price.get("market_size_estimate"),
+                    "median_income": price.get("median_income"),
+                },
+                "place": {
+                    "growth_score": place.get("growth_score"),
+                    "growth_category": place.get("growth_category"),
+                    "population": place.get("population"),
+                },
+                "promotion": {
+                    "competition_level": promotion.get("competition_level"),
+                    "competitor_count": promotion.get("competitor_count"),
+                }
+            }
+        }
+    except Exception as e:
+        import logging
+        logging.error(f"[Copilot] Error fetching 4 P's context: {e}")
+        return {}
+
+
 def get_user_lifecycle_context(db: Session, user_id: int, opportunity_id: Optional[int] = None) -> dict:
     """Get user's lifecycle state for an opportunity."""
     if not opportunity_id:
@@ -150,6 +225,39 @@ async def chat_with_copilot(
         opp_context = get_opportunity_context(db, request.opportunity_id)
         if opp_context:
             context_parts.append(f"\nOpportunity in context:\n- Title: {opp_context.get('title')}\n- Category: {opp_context.get('category')}\n- Score: {opp_context.get('score')}\n- Problem: {opp_context.get('ai_problem_statement', 'Not analyzed')[:200]}")
+        
+        # Add 4 P's market intelligence context
+        four_ps = get_four_ps_context(db, request.opportunity_id)
+        if four_ps and four_ps.get("scores"):
+            scores = four_ps["scores"]
+            insights = four_ps.get("key_insights", {})
+            
+            # Format values safely
+            product_i = insights.get("product", {})
+            price_i = insights.get("price", {})
+            place_i = insights.get("place", {})
+            promo_i = insights.get("promotion", {})
+            
+            income = price_i.get("median_income")
+            income_str = f"${income:,}" if income else "N/A"
+            pop = place_i.get("population")
+            pop_str = f"{pop:,}" if pop else "N/A"
+            weakest = four_ps.get("weakest_pillar")
+            weakest_str = weakest.upper() if weakest else "N/A"
+            
+            four_ps_context = f"""
+4 P's Market Intelligence:
+- PRODUCT Score: {scores.get('product', 'N/A')}/100 (Pain: {product_i.get('pain_intensity', 'N/A')}/10, Trend: {product_i.get('trend_direction', 'unknown')})
+- PRICE Score: {scores.get('price', 'N/A')}/100 (Market Size: {price_i.get('market_size', 'N/A')}, Income: {income_str})
+- PLACE Score: {scores.get('place', 'N/A')}/100 (Growth: {place_i.get('growth_category', 'N/A')}, Pop: {pop_str})
+- PROMOTION Score: {scores.get('promotion', 'N/A')}/100 (Competition: {promo_i.get('competition_level', 'N/A')})
+- Overall: {four_ps.get('overall_score', 'N/A')}/100 | Data Quality: {four_ps.get('data_quality', 'N/A')}%
+- Weakest Pillar: {weakest_str}"""
+            
+            if four_ps.get("recommendations"):
+                four_ps_context += f"\n- Recommendations: {'; '.join(four_ps['recommendations'][:2])}"
+            
+            context_parts.append(four_ps_context)
         
         lifecycle = get_user_lifecycle_context(db, current_user.id, request.opportunity_id)
         if lifecycle.get("saved"):
