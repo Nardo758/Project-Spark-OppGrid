@@ -791,6 +791,14 @@
                         Google Scraping
                     </a>
                 </li>
+                <li>
+                    <a href="#ai-models" data-section="ai-models">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                        AI Models
+                    </a>
+                </li>
             </ul>
         </aside>
 
@@ -1833,6 +1841,147 @@
                     </div>
                 </div>
             </section>
+            <!-- AI Models Section -->
+            <section id="section-ai-models" class="hidden">
+                <div class="page-header">
+                    <h1 class="spektral">AI Models</h1>
+                    <p>Manage AI model configurations, pricing, and tier access</p>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-grid" id="ai-models-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-models">-</div>
+                        <div class="stat-label">Total Models</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="active-models">-</div>
+                        <div class="stat-label">Active Models</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="total-providers">-</div>
+                        <div class="stat-label">Providers</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stripe-meters">-</div>
+                        <div class="stat-label">Stripe Meters</div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="content-section" style="margin-bottom: 24px;">
+                    <div class="section-header">
+                        <h2>Quick Actions</h2>
+                    </div>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap; padding: 16px;">
+                        <button class="btn-primary" onclick="openAddModelModal()">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Add Model
+                        </button>
+                        <button class="btn-secondary" onclick="syncStripeMeters()">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                            Sync Stripe Meters
+                        </button>
+                        <button class="btn-secondary" onclick="openCostEstimator()">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                            </svg>
+                            Cost Estimator
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Models Table -->
+                <div class="content-section">
+                    <div class="section-header">
+                        <h2>AI Models</h2>
+                        <div class="section-actions">
+                            <select id="provider-filter" onchange="filterModelsByProvider()" style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                <option value="">All Providers</option>
+                                <option value="anthropic">Anthropic</option>
+                                <option value="openai">OpenAI</option>
+                                <option value="google">Google</option>
+                                <option value="deepseek">DeepSeek</option>
+                                <option value="xai">xAI</option>
+                            </select>
+                            <label style="display: flex; align-items: center; gap: 8px; margin-left: 12px;">
+                                <input type="checkbox" id="show-disabled" onchange="loadAIModels()">
+                                Show Disabled
+                            </label>
+                        </div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Model</th>
+                                <th>Provider</th>
+                                <th>Cost/1M (In/Out)</th>
+                                <th>Context</th>
+                                <th>Min Tier</th>
+                                <th>Priority</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="ai-models-table-body">
+                            <tr><td colspan="8" class="loading">Loading models...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pricing Tiers Section -->
+                <div class="content-section" style="margin-top: 24px;">
+                    <div class="section-header">
+                        <h2>Pricing Tiers</h2>
+                        <div class="section-actions">
+                            <button class="btn-sm" onclick="openAddTierModal()">Add Tier</button>
+                        </div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Tier</th>
+                                <th>Monthly Limit</th>
+                                <th>Daily Limit</th>
+                                <th>Rate Limit</th>
+                                <th>Markup %</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pricing-tiers-table-body">
+                            <tr><td colspan="6" class="loading">Loading tiers...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Stripe Meters Section -->
+                <div class="content-section" style="margin-top: 24px;">
+                    <div class="section-header">
+                        <h2>Stripe Billing Meters</h2>
+                        <div class="section-actions">
+                            <button class="btn-sm" onclick="loadStripeMeters()">Refresh</button>
+                        </div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Meter ID</th>
+                                <th>Display Name</th>
+                                <th>Event Name</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stripe-meters-table-body">
+                            <tr><td colspan="4" class="loading">Loading meters...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
         </main>
     </div>
 

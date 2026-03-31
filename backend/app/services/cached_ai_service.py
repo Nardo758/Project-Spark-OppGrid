@@ -124,13 +124,18 @@ def call_with_cache(
     system_prompt: str,
     model: str = "claude-opus-4-5",
     max_tokens: int = 1024,
-    temperature: float = 0.7
+    temperature: float = 0.7,
+    user_id: Optional[int] = None,
+    db = None,
+    event_type: Optional[str] = None
 ) -> Optional[str]:
     """
     Make an API call with prompt caching enabled.
     
     The system prompt is cached server-side for 5 minutes, reducing costs
     by up to 90% on subsequent calls with the same system prompt.
+    
+    If user_id and db are provided, usage is recorded to Stripe Token Billing.
     """
     client = get_client()
     
@@ -149,9 +154,24 @@ def call_with_cache(
             messages=[{"role": "user", "content": prompt}]
         )
         
-        # Log cache stats if available
+        # Log cache stats and record usage
         if hasattr(response, 'usage'):
             usage = response.usage
+
+            # Record to Stripe Token Billing if user context provided
+            if user_id and db:
+                try:
+                    from app.services.stripe_token_billing import record_token_usage
+                    record_token_usage(
+                        user_id=user_id,
+                        model=model,
+                        input_tokens=getattr(usage, 'input_tokens', 0),
+                        output_tokens=getattr(usage, 'output_tokens', 0),
+                        db=db,
+                        event_type=event_type
+                    )
+                except Exception as e:
+                    logger.warning(f"[CachedAI] Failed to record token usage: {e}")
             cache_read = getattr(usage, 'cache_read_input_tokens', 0)
             cache_create = getattr(usage, 'cache_creation_input_tokens', 0)
             if cache_read > 0:
