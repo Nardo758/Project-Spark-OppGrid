@@ -163,9 +163,9 @@ def get_copilot_context(workspace_id):
 
 ## Priority Order
 
-1. **Backend API** — Foundation for everything else
-2. **OpportunityDetail** — Highest impact, most visible
-3. **OpportunityCard** — Differentiates every card
+1. ✅ **Backend API** — Foundation for everything else
+2. ✅ **OpportunityDetail** — Highest impact, most visible
+3. ✅ **OpportunityCard** — Differentiates every card
 4. **Workspace** — Makes AI copilot smarter
 5. **IdeaEngine** — Search/discovery improvements
 
@@ -173,13 +173,13 @@ def get_copilot_context(workspace_id):
 
 ## Estimated Time
 
-| Phase | Time |
-|-------|------|
-| Phase 1: Backend API | 2 hours |
-| Phase 2: Frontend Components | 3 hours |
-| Phase 3: Workspace Intelligence | 2 hours |
-| Phase 4: IdeaEngine & Discovery | 1.5 hours |
-| **Total** | **~8.5 hours** |
+| Phase | Time | Status |
+|-------|------|--------|
+| Phase 1: Backend API | 2 hours | ✅ DONE |
+| Phase 2: Frontend Components | 3 hours | ✅ DONE |
+| Phase 3: Workspace Intelligence | 2 hours | 🔲 Next |
+| Phase 4: IdeaEngine & Discovery | 1.5 hours | 🔲 Pending |
+| **Total** | **~8.5 hours** | **~5h done** |
 
 ---
 
