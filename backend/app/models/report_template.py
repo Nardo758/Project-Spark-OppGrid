@@ -25,6 +25,7 @@ class ReportTemplate(Base):
     ai_prompt = Column(Text, nullable=False)
     
     min_tier = Column(String(50), default="pro")
+    price_cents = Column(Integer, default=4900)  # Default $49
     is_active = Column(Boolean, default=True)
     display_order = Column(Integer, default=0)
     

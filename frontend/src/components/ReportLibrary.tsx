@@ -46,7 +46,32 @@ type ReportTemplate = {
   description: string
   category: string
   min_tier: string
+  price_cents?: number
   display_order: number
+}
+
+// Fallback prices for templates (in cents) - used if API doesn't have price_cents
+const TEMPLATE_PRICES: Record<string, number> = {
+  ad_creatives: 4900,
+  brand_package: 5900,
+  landing_page: 4900,
+  content_calendar: 3900,
+  email_funnel: 4900,
+  email_sequence: 2900,
+  lead_magnet: 2900,
+  sales_funnel: 3900,
+  seo_content: 3900,
+  tweet_landing: 1900,
+  user_personas: 2900,
+  feature_specs: 4900,
+  mvp_roadmap: 5900,
+  prd: 7900,
+  gtm_calendar: 4900,
+  gtm_strategy: 6900,
+  kpi_dashboard: 3900,
+  pricing_strategy: 5900,
+  competitive_analysis: 4900,
+  customer_interview: 2900,
 }
 
 type CategoryWithTemplates = {
@@ -632,11 +657,14 @@ export default function ReportLibrary({
               
               {categories?.map(cat => (
                 <optgroup key={cat.category} label={`📝 ${cat.display_name}`}>
-                  {cat.templates.map(template => (
-                    <option key={template.slug} value={`template:${template.slug}`}>
-                      {template.name}
-                    </option>
-                  ))}
+                  {cat.templates.map(template => {
+                    const price = template.price_cents || TEMPLATE_PRICES[template.slug] || 4900
+                    return (
+                      <option key={template.slug} value={`template:${template.slug}`}>
+                        {template.name} — {formatPrice(price)}
+                      </option>
+                    )
+                  })}
                 </optgroup>
               ))}
             </select>
@@ -714,18 +742,39 @@ export default function ReportLibrary({
             )}
 
             {selectedReport && selectedReport.type === 'template' && (
-              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+              <div className="mt-3 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
                 {(() => {
                   const template = allTemplates.find(t => t.slug === selectedReport.slug)
+                  const price = template?.price_cents || TEMPLATE_PRICES[selectedReport.slug] || 4900
                   return (
                     <>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-gray-900">{template?.name}</span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(template?.min_tier || null).className}`}>
-                          {getTierBadge(template?.min_tier || null).text}
-                        </span>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-semibold text-gray-900">{template?.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(template?.min_tier || null).className}`}>
+                            {getTierBadge(template?.min_tier || null).text}
+                          </span>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-500">{template?.description}</p>
+                      <p className="text-xs text-gray-600 mb-3">{template?.description}</p>
+                      <div className="flex items-center justify-between p-2 bg-white rounded border border-blue-100">
+                        <div className="text-center">
+                          <div className="text-xs text-gray-500 line-through">Agency cost</div>
+                          <div className="font-medium text-gray-600">$500+</div>
+                        </div>
+                        <div className="text-center px-4 py-1 bg-blue-600 rounded text-white">
+                          <div className="text-xs opacity-90">Your price</div>
+                          <div className="font-bold">{formatPrice(price)}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-green-600">You save</div>
+                          <div className="font-semibold text-green-600">90%+</div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center gap-1 text-xs text-blue-600">
+                        <Clock className="w-3 h-3" />
+                        <span>Ready in 60 seconds</span>
+                      </div>
                     </>
                   )
                 })()}

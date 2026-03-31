@@ -5,6 +5,7 @@ REPORT_TEMPLATES = [
         "description": "High-converting ad copy and creative concepts",
         "category": "popular",
         "min_tier": "pro",
+        "price_cents": 4900,
         "display_order": 1,
         "ai_prompt": """Generate high-converting ad creatives for this business opportunity. Include:
 1. 3 Facebook/Instagram ad variations with headlines, body copy, and CTA
@@ -24,6 +25,7 @@ Format the output as structured sections with ready-to-use copy."""
         "description": "Complete brand identity with logo, colors, and voice",
         "category": "popular",
         "min_tier": "pro",
+        "price_cents": 5900,
         "display_order": 2,
         "ai_prompt": """Create a complete brand identity package for this business opportunity. Include:
 1. Brand name suggestions (5 options with rationale)
@@ -46,6 +48,7 @@ Provide actionable brand guidelines that can be used immediately."""
         "description": "Copy + wireframe blocks",
         "category": "popular",
         "min_tier": "pro",
+        "price_cents": 4900,
         "display_order": 3,
         "ai_prompt": """Create a high-converting landing page blueprint for this business opportunity. Include:
 1. Above-the-fold section (headline, subheadline, hero CTA)
@@ -69,6 +72,7 @@ Format as wireframe blocks with actual copy ready to use."""
         "description": "90-day content marketing plan",
         "category": "marketing",
         "min_tier": "pro",
+        "price_cents": 3900,
         "display_order": 10,
         "ai_prompt": """Create a 90-day content marketing calendar for this business opportunity. Include:
 1. Week-by-week content themes
@@ -92,6 +96,7 @@ Format as a structured calendar with dates and content types."""
         "description": "Complete email marketing funnel with sequences, triggers & more",
         "category": "marketing",
         "min_tier": "pro",
+        "price_cents": 4900,
         "display_order": 11,
         "ai_prompt": """Design a complete email marketing funnel system for this business opportunity. Include:
 1. Lead magnet email sequence (5 emails)
@@ -115,6 +120,7 @@ Provide full email copy for each sequence."""
         "description": "5-email nurture sequence",
         "category": "marketing",
         "min_tier": "pro",
+        "price_cents": 2900,
         "display_order": 12,
         "ai_prompt": """Create a 5-email nurture sequence for this business opportunity. Include:
 1. Email 1: Welcome & value proposition
@@ -139,6 +145,7 @@ Business Context:
         "description": "Irresistible lead generation offers",
         "category": "marketing",
         "min_tier": "pro",
+        "price_cents": 2900,
         "display_order": 13,
         "ai_prompt": """Create 5 lead magnet concepts for this business opportunity. For each include:
 1. Lead magnet title and format (ebook, checklist, template, etc.)
@@ -161,6 +168,7 @@ Provide one fully-developed lead magnet outline ready for creation."""
         "description": "Customer journey optimization strategy",
         "category": "marketing",
         "min_tier": "pro",
+        "price_cents": 3900,
         "display_order": 14,
         "ai_prompt": """Design a complete sales funnel for this business opportunity. Include:
 1. Awareness stage tactics and content
@@ -179,10 +187,11 @@ Business Context:
     },
     {
         "slug": "seo_content",
-        "name": "SEO Content",
+        "name": "SEO Content Strategy",
         "description": "Search-optimized content strategy",
         "category": "marketing",
         "min_tier": "pro",
+        "price_cents": 3900,
         "display_order": 15,
         "ai_prompt": """Create a comprehensive SEO content strategy for this business opportunity. Include:
 1. Primary keyword targets (10 keywords with search volume estimates)
@@ -205,6 +214,7 @@ Business Context:
         "description": "Ultra-minimal 280-character landing page",
         "category": "marketing",
         "min_tier": "pro",
+        "price_cents": 1900,
         "display_order": 16,
         "ai_prompt": """Create 10 tweet-sized landing page concepts for this business opportunity. Each should be:
 1. Under 280 characters
@@ -226,6 +236,7 @@ Business Context:
         "description": "Detailed customer persona cards with motivations",
         "category": "marketing",
         "min_tier": "pro",
+        "price_cents": 2900,
         "display_order": 17,
         "ai_prompt": """Create 4 detailed user personas for this business opportunity. For each persona include:
 1. Name, age, occupation, location
@@ -250,6 +261,7 @@ Format as detailed persona cards ready for team use."""
         "description": "Detailed feature specifications and user stories",
         "category": "product",
         "min_tier": "pro",
+        "price_cents": 4900,
         "display_order": 20,
         "ai_prompt": """Create detailed feature specifications for this business opportunity. Include:
 1. Core feature list with priorities (P0, P1, P2)
@@ -274,6 +286,7 @@ Format as actionable specs for development team."""
         "description": "90-day development plan with feature prioritization",
         "category": "product",
         "min_tier": "pro",
+        "price_cents": 5900,
         "display_order": 21,
         "ai_prompt": """Create a 90-day MVP development roadmap for this business opportunity. Include:
 1. Week 1-2: Foundation and setup
@@ -299,6 +312,7 @@ Business Context:
         "description": "Complete PRD with technical specifications",
         "category": "product",
         "min_tier": "business",
+        "price_cents": 7900,
         "display_order": 22,
         "ai_prompt": """Create a comprehensive Product Requirements Document (PRD) for this business opportunity. Include:
 1. Executive Summary
@@ -328,6 +342,7 @@ Format as a professional PRD document."""
         "description": "90-day launch timeline with team coordination",
         "category": "business",
         "min_tier": "pro",
+        "price_cents": 4900,
         "display_order": 30,
         "ai_prompt": """Create a 90-day Go-To-Market launch calendar for this business opportunity. Include:
 1. Pre-launch phase (Day 1-30): Build anticipation
@@ -354,6 +369,7 @@ Format as actionable calendar with dates and owners."""
         "description": "Go-to-market strategy and launch plan",
         "category": "business",
         "min_tier": "pro",
+        "price_cents": 6900,
         "display_order": 31,
         "ai_prompt": """Create a comprehensive Go-To-Market strategy for this business opportunity. Include:
 1. Market Analysis and Sizing
@@ -379,6 +395,7 @@ Business Context:
         "description": "Pre-built metrics tracker with formulas",
         "category": "business",
         "min_tier": "pro",
+        "price_cents": 3900,
         "display_order": 32,
         "ai_prompt": """Create a comprehensive KPI dashboard framework for this business opportunity. Include:
 1. Financial Metrics (Revenue, MRR, ARR, CAC, LTV, etc.)
@@ -405,6 +422,7 @@ Format as dashboard specification with visualization recommendations."""
         "description": "Strategic pricing framework and psychology",
         "category": "business",
         "min_tier": "business",
+        "price_cents": 5900,
         "display_order": 33,
         "ai_prompt": """Create a comprehensive pricing strategy for this business opportunity. Include:
 1. Value-Based Pricing Analysis
@@ -429,6 +447,7 @@ Business Context:
         "description": "Deep dive into competitors and market gaps",
         "category": "research",
         "min_tier": "pro",
+        "price_cents": 4900,
         "display_order": 40,
         "ai_prompt": """Create a comprehensive competitive analysis for this business opportunity. Include:
 1. Direct Competitors (5-10 companies)
@@ -455,6 +474,7 @@ Format as actionable competitive intelligence report."""
         "description": "Structured interviews for validation and insights",
         "category": "research",
         "min_tier": "pro",
+        "price_cents": 2900,
         "display_order": 41,
         "ai_prompt": """Create a customer interview guide for this business opportunity. Include:
 1. Interview Objectives
