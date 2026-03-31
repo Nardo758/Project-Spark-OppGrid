@@ -1166,31 +1166,95 @@ export default function OpportunityDetail() {
             )}
           </div>
 
-          {/* Expert Preview - Tier 2 */}
+          {/* Tools Section */}
+          <div className="mt-6 pt-6 border-t-2 border-stone-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-stone-900 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-amber-600" />
+                Tools
+              </h3>
+            </div>
+            
+            <div className="grid md:grid-cols-4 gap-3 mb-4">
+              <Link 
+                to={`/build/consultant-studio?opportunity=${opp.id}`}
+                className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-lg p-4 border border-violet-200 hover:border-violet-400 transition-colors group"
+              >
+                <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-violet-200 transition-colors">
+                  <Target className="w-5 h-5 text-violet-600" />
+                </div>
+                <div className="font-semibold text-stone-900 text-sm mb-1">Validate Idea</div>
+                <div className="text-xs text-stone-500">Test feasibility</div>
+              </Link>
+              
+              <Link 
+                to={`/reports?opportunity=${opp.id}`}
+                className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg p-4 border border-blue-200 hover:border-blue-400 transition-colors group"
+              >
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-200 transition-colors">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="font-semibold text-stone-900 text-sm mb-1">Generate Report</div>
+                <div className="text-xs text-stone-500">Market analysis</div>
+              </Link>
+              
+              <Link 
+                to={`/build/consultant-studio?tab=clone&opportunity=${opp.id}`}
+                className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg p-4 border border-emerald-200 hover:border-emerald-400 transition-colors group"
+              >
+                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-emerald-200 transition-colors">
+                  <TrendingUp className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div className="font-semibold text-stone-900 text-sm mb-1">Clone Success</div>
+                <div className="text-xs text-stone-500">Find winning models</div>
+              </Link>
+              
+              <Link 
+                to={`/opportunity/${opp.id}/hub`}
+                className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-4 border border-amber-200 hover:border-amber-400 transition-colors group"
+              >
+                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-amber-200 transition-colors">
+                  <Briefcase className="w-5 h-5 text-amber-600" />
+                </div>
+                <div className="font-semibold text-stone-900 text-sm mb-1">WorkHub</div>
+                <div className="text-xs text-stone-500">Plan & execute</div>
+              </Link>
+            </div>
+          </div>
+
+          {/* Experts Section */}
           <div className="mt-6 pt-6 border-t-2 border-stone-200">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-stone-900 flex items-center gap-2">
                 <Users className="w-5 h-5 text-blue-600" />
                 Recommended Experts
               </h3>
-              <span className="text-xs text-stone-500">
-                {expertsQuery.isLoading ? 'Loading...' : `${expertsQuery.data?.total || 0} experts matched`}
-              </span>
+              <Link 
+                to={`/network?category=${opp.category}`}
+                className="text-sm text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1"
+              >
+                Search all experts
+                <ChevronRight className="w-4 h-4" />
+              </Link>
             </div>
             
-            <div className="grid md:grid-cols-3 gap-4 mb-4">
+            <div className="grid md:grid-cols-3 gap-4">
               {(expertsQuery.data?.experts || []).slice(0, 3).map((expert) => (
-                <div key={expert.id} className="bg-stone-50 rounded-lg p-4 border border-stone-200 hover:border-blue-300 transition-colors">
+                <Link 
+                  key={expert.id} 
+                  to={`/network/expert/${expert.id}`}
+                  className="bg-stone-50 rounded-lg p-4 border border-stone-200 hover:border-blue-300 hover:shadow-md transition-all"
+                >
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-violet-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
                       {(expert.name || '').split(' ').filter(n => n).map(n => n[0]).join('').slice(0, 2) || '?'}
                     </div>
-                    <div>
-                      <div className="font-semibold text-stone-900 text-sm">{expert.name}</div>
-                      <div className="text-xs text-stone-500">{expert.headline}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-stone-900 text-sm truncate">{expert.name}</div>
+                      <div className="text-xs text-stone-500 truncate">{expert.headline}</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-stone-600 mb-3">
+                  <div className="flex items-center gap-3 text-xs text-stone-600 mb-2">
                     {expert.avg_rating && (
                       <span className="flex items-center gap-1">
                         <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
@@ -1200,13 +1264,7 @@ export default function OpportunityDetail() {
                     <span>{expert.completed_projects} projects</span>
                     <span className="text-emerald-600 font-medium">{expert.match_score}% match</span>
                   </div>
-                  <div className="text-xs text-stone-500 mb-2">{expert.match_reason}</div>
-                  {expert.categories?.[0] && (
-                    <div className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded inline-block">
-                      {expert.categories[0]}
-                    </div>
-                  )}
-                </div>
+                </Link>
               ))}
               {expertsQuery.isLoading && (
                 <>
@@ -1214,7 +1272,7 @@ export default function OpportunityDetail() {
                     <div key={i} className="bg-stone-50 rounded-lg p-4 border border-stone-200 animate-pulse">
                       <div className="flex items-center gap-3 mb-3">
                         <div className="w-10 h-10 bg-stone-300 rounded-full"></div>
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex-1">
                           <div className="h-4 w-24 bg-stone-300 rounded"></div>
                           <div className="h-3 w-32 bg-stone-200 rounded"></div>
                         </div>
@@ -1223,22 +1281,13 @@ export default function OpportunityDetail() {
                   ))}
                 </>
               )}
-            </div>
-
-            <div className="bg-gradient-to-r from-blue-50 to-violet-50 rounded-lg p-4 border border-blue-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-stone-900">Ready to work with an expert?</p>
-                  <p className="text-sm text-stone-600">Upgrade to Business for direct messaging and collaboration</p>
+              {!expertsQuery.isLoading && (expertsQuery.data?.experts || []).length === 0 && (
+                <div className="col-span-3 text-center py-6 text-stone-500">
+                  <Users className="w-8 h-8 mx-auto mb-2 text-stone-300" />
+                  <p>No experts matched yet</p>
+                  <Link to="/network" className="text-violet-600 text-sm hover:underline">Browse all experts</Link>
                 </div>
-                <Link 
-                  to="/pricing"
-                  className="flex items-center gap-2 bg-stone-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-stone-800"
-                >
-                  Request Consultation
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-              </div>
+              )}
             </div>
           </div>
         </div>
