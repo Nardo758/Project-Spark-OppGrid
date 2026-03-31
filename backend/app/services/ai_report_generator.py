@@ -150,8 +150,19 @@ CRITICAL FORMATTING REQUIREMENTS - Follow these exactly:
 
 """
     
-    def __init__(self):
+    def __init__(self, db=None, user=None):
         self.client = get_anthropic_client()
+        self.db = db
+        self.user = user
+        self._unified_ai = None
+    
+    @property
+    def unified_ai(self):
+        """Lazy load unified AI service if db available."""
+        if self._unified_ai is None and self.db:
+            from app.services.unified_ai_service import get_ai_service
+            self._unified_ai = get_ai_service(self.db, user=self.user)
+        return self._unified_ai
     
     def _generate_report_id(self, report_type: str) -> str:
         """Generate a unique, trackable report ID."""
@@ -223,6 +234,30 @@ REPORT ID: {report_id}
     )
     def _generate(self, system_prompt: str, user_prompt: str) -> str:
         """Generate content using Claude with retry logic."""
+        # Use unified AI service if available (for billing)
+        if self.unified_ai:
+            try:
+                import asyncio
+                # Run async in sync context
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                result = loop.run_until_complete(
+                    self.unified_ai.complete(
+                        prompt=user_prompt,
+                        system_prompt=system_prompt,
+                        task_type="strategic_analysis",
+                        max_tokens=self.MAX_TOKENS
+                    )
+                )
+                return result["content"]
+            except Exception as e:
+                logger.warning(f"Unified AI failed, falling back to direct: {e}")
+        
+        # Fallback to direct client
         if not self.client:
             return ""
         

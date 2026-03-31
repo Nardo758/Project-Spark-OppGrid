@@ -126,14 +126,24 @@ class SignalToOpportunityProcessor:
     Implements the 8-stage Signal-to-Opportunity algorithm.
     """
     
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user=None):
         self.db = db
+        self.user = user
         self.client = None
+        self._unified_ai = None
         if AI_INTEGRATIONS_ANTHROPIC_API_KEY and AI_INTEGRATIONS_ANTHROPIC_BASE_URL:
             self.client = Anthropic(
                 api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
                 base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
             )
+    
+    @property
+    def unified_ai(self):
+        """Lazy load unified AI service."""
+        if self._unified_ai is None:
+            from app.services.unified_ai_service import get_ai_service
+            self._unified_ai = get_ai_service(self.db, user=self.user)
+        return self._unified_ai
     
     def process_scraped_data(self, limit: int = 500) -> Dict[str, Any]:
         """
@@ -825,8 +835,8 @@ class SignalToOpportunityProcessor:
     def _ai_analyze_cluster_category(self, cluster: List[Dict], detected_category: str) -> Dict[str, Any]:
         """Use Claude AI to analyze cluster signals and determine proper category and opportunity details"""
         
-        if not self.client:
-            logger.warning("Claude client not available, using keyword-based category")
+        if not self.client and not self.unified_ai:
+            logger.warning("No AI client available, using keyword-based category")
             return {
                 'category': self._map_to_opportunity_category(detected_category),
                 'ai_title': None,
@@ -875,13 +885,31 @@ IMPORTANT:
 - Every pain point is a business opportunity - find the angle
 - Frame opportunities professionally for entrepreneurs/investors"""
 
-            response = self.client.messages.create(
-                model="claude-haiku-4-5",
-                max_tokens=500,
-                messages=[{"role": "user", "content": prompt}]
-            )
-            
-            response_text = response.content[0].text.strip()
+            # Use unified AI service if available (for billing)
+            if self.unified_ai:
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                result = loop.run_until_complete(
+                    self.unified_ai.complete(
+                        prompt=prompt,
+                        task_type="simple_classification",
+                        model_id="claude-haiku-4",
+                        max_tokens=500
+                    )
+                )
+                response_text = result["content"].strip()
+            else:
+                response = self.client.messages.create(
+                    model="claude-haiku-4-5",
+                    max_tokens=500,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                response_text = response.content[0].text.strip()
             
             if response_text.startswith('```'):
                 response_text = re.sub(r'^```(?:json)?\n?', '', response_text)

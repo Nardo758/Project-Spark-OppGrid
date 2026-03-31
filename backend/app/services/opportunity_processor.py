@@ -21,14 +21,24 @@ AI_INTEGRATIONS_ANTHROPIC_BASE_URL = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_B
 
 
 class OpportunityProcessor:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user=None):
         self.db = db
+        self.user = user
         self.client = None
+        self._unified_ai = None
         if AI_INTEGRATIONS_ANTHROPIC_API_KEY and AI_INTEGRATIONS_ANTHROPIC_BASE_URL:
             self.client = Anthropic(
                 api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
                 base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
             )
+    
+    @property
+    def unified_ai(self):
+        """Lazy load unified AI service."""
+        if self._unified_ai is None:
+            from app.services.unified_ai_service import get_ai_service
+            self._unified_ai = get_ai_service(self.db, user=self.user)
+        return self._unified_ai
 
     async def process_pending_sources(self, limit: int = 20) -> Dict[str, Any]:
         sources = self.db.query(ScrapedSource).filter(
@@ -227,8 +237,10 @@ class OpportunityProcessor:
             return str(raw_data.get("text") or raw_data.get("content") or raw_data.get("title", ""))
 
     async def _analyze_with_claude(self, raw_text: str, source_type: str, raw_data: Dict = None) -> Dict[str, Any]:
-        if not self.client:
-            logger.warning("Claude client not available, using fallback analysis")
+        # Try unified AI service first (for billing tracking)
+        use_unified = True
+        if not self.client and not self.unified_ai:
+            logger.warning("No AI client available, using fallback analysis")
             return self._fallback_analysis(raw_text, source_type)
 
         prompt = f"""Analyze this raw data from {source_type} and determine if it represents a valid business opportunity.
@@ -270,19 +282,49 @@ Important:
 - Be conservative with opportunity scores - only high-quality signals should score above 70"""
 
         try:
-            def sync_claude_call():
-                return self.client.messages.create(
-                    model="claude-haiku-4-5",
-                    max_tokens=2000,
-                    messages=[{"role": "user", "content": prompt}]
+            # Use unified AI service if available
+            if self.unified_ai:
+                try:
+                    result = await asyncio.wait_for(
+                        self.unified_ai.complete(
+                            prompt=prompt,
+                            task_type="simple_classification",
+                            model_id="claude-haiku-4",
+                            max_tokens=2000
+                        ),
+                        timeout=AI_CALL_TIMEOUT_SECONDS
+                    )
+                    response_text = result["content"]
+                except Exception as e:
+                    logger.warning(f"Unified AI failed, falling back: {e}")
+                    if not self.client:
+                        return self._fallback_analysis(raw_text, source_type)
+                    # Fall through to direct client
+                    def sync_claude_call():
+                        return self.client.messages.create(
+                            model="claude-haiku-4-5",
+                            max_tokens=2000,
+                            messages=[{"role": "user", "content": prompt}]
+                        )
+                    message = await asyncio.wait_for(
+                        asyncio.to_thread(sync_claude_call),
+                        timeout=AI_CALL_TIMEOUT_SECONDS
+                    )
+                    response_text = message.content[0].text
+            else:
+                def sync_claude_call():
+                    return self.client.messages.create(
+                        model="claude-haiku-4-5",
+                        max_tokens=2000,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                
+                message = await asyncio.wait_for(
+                    asyncio.to_thread(sync_claude_call),
+                    timeout=AI_CALL_TIMEOUT_SECONDS
                 )
-            
-            message = await asyncio.wait_for(
-                asyncio.to_thread(sync_claude_call),
-                timeout=AI_CALL_TIMEOUT_SECONDS
-            )
-            
-            response_text = message.content[0].text
+                
+                response_text = message.content[0].text
             
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0]
