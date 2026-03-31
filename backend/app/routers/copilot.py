@@ -9,6 +9,7 @@ from sqlalchemy import desc
 from pydantic import BaseModel
 from typing import List, Optional
 import os
+import logging
 
 from app.db.database import get_db
 from app.models.user import User
@@ -16,7 +17,14 @@ from app.models.copilot import GlobalChatMessage, CopilotSuggestion
 from app.models.opportunity import Opportunity
 from app.models.watchlist import WatchlistItem, LifecycleState
 from app.core.dependencies import get_current_user
-from app.services.llm_ai_engine import get_anthropic_client
+from app.services.unified_ai_service import (
+    get_ai_service,
+    RateLimitError,
+    QuotaExceededError,
+    TierAccessError
+)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/copilot", tags=["AI Copilot"])
 
@@ -74,6 +82,7 @@ class ChatRequest(BaseModel):
     message: str
     page_context: Optional[str] = None
     opportunity_id: Optional[int] = None
+    model_id: Optional[str] = None  # Allow user to select model
 
     @property
     def sanitized_message(self) -> str:
@@ -95,6 +104,8 @@ class ChatMessageResponse(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     chat_history: List[ChatMessageResponse]
+    model_used: Optional[str] = None
+    tokens_used: Optional[int] = None
 
 
 class SuggestionResponse(BaseModel):
@@ -171,8 +182,7 @@ def get_four_ps_context(db: Session, opportunity_id: int) -> dict:
             }
         }
     except Exception as e:
-        import logging
-        logging.error(f"[Copilot] Error fetching 4 P's context: {e}")
+        logger.error(f"[Copilot] Error fetching 4 P's context: {e}")
         return {}
 
 
@@ -204,14 +214,18 @@ async def chat_with_copilot(
     if not message:
         raise HTTPException(status_code=400, detail="Message cannot be empty")
 
+    # Get AI service with user context for billing/tier
+    ai = get_ai_service(db, user=current_user)
+
     recent_messages = db.query(GlobalChatMessage).filter(
         GlobalChatMessage.user_id == current_user.id
     ).order_by(desc(GlobalChatMessage.created_at)).limit(20).all()
     
-    chat_history = [
-        {"role": msg.role, "content": msg.content}
-        for msg in reversed(recent_messages)
-    ]
+    # Build conversation context for the prompt
+    conversation_context = ""
+    for msg in reversed(recent_messages[-6:]):  # Last 6 messages
+        role_label = "User" if msg.role == "user" else "Assistant"
+        conversation_context += f"\n{role_label}: {msg.content}"
 
     context_parts = [f"Current page: {request.page_context or 'unknown'}"]
     
@@ -261,25 +275,36 @@ async def chat_with_copilot(
     
     system_prompt = f"{COPILOT_SYSTEM_PROMPT}\n\n--- CURRENT CONTEXT ---\n{context_message}"
 
-    messages = chat_history + [{"role": "user", "content": message}]
+    # Build the user prompt with conversation history
+    if conversation_context:
+        user_prompt = f"Previous conversation:{conversation_context}\n\nUser: {message}"
+    else:
+        user_prompt = message
 
     try:
-        client = get_anthropic_client()
-        if not client:
-            raise HTTPException(status_code=503, detail="AI service not available")
-        
-        response = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=1024,
-            system=system_prompt,
-            messages=messages
+        # Use unified AI service - Haiku for fast copilot responses
+        result = await ai.complete(
+            prompt=user_prompt,
+            system_prompt=system_prompt,
+            task_type="user_conversation",
+            model_id=request.model_id or "claude-haiku-4",  # Fast model for copilot
+            max_tokens=1024
         )
-        ai_response = response.content[0].text
-    except HTTPException:
-        raise
+        ai_response = result["content"]
+        model_used = result.get("model_id")
+        tokens_used = result["tokens"]["input"] + result["tokens"]["output"]
+        
+    except RateLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except QuotaExceededError as e:
+        raise HTTPException(status_code=402, detail=str(e))
+    except TierAccessError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
+        logger.error(f"Copilot AI error: {e}")
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")
 
+    # Save messages to history
     user_msg = GlobalChatMessage(
         user_id=current_user.id,
         role="user",
@@ -318,7 +343,9 @@ async def chat_with_copilot(
                 created_at=msg.created_at.isoformat()
             )
             for msg in all_messages
-        ]
+        ],
+        model_used=model_used,
+        tokens_used=tokens_used
     )
 
 
@@ -424,6 +451,9 @@ async def suggest_tags_for_opportunity(
     if not opportunity:
         raise HTTPException(status_code=404, detail="Opportunity not found")
 
+    # Get AI service
+    ai = get_ai_service(db, user=current_user)
+
     prompt = f"""Suggest 3-5 short tags (1-2 words each) for this business opportunity:
 
 Title: {opportunity.title}
@@ -434,17 +464,19 @@ Return only the tags as a comma-separated list, no explanations. Examples: "high
 """
 
     try:
-        client = get_anthropic_client()
-        if not client:
-            raise HTTPException(status_code=503, detail="AI service not available")
-        
-        response = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=100,
-            messages=[{"role": "user", "content": prompt}]
+        result = await ai.complete(
+            prompt=prompt,
+            task_type="simple_classification",
+            model_id="claude-haiku-4",  # Fast model for simple task
+            max_tokens=100
         )
-        tags_text = response.content[0].text.strip()
+        tags_text = result["content"].strip()
         tags = [tag.strip() for tag in tags_text.split(",") if tag.strip()]
         return {"tags": tags[:5]}
+    except RateLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except QuotaExceededError as e:
+        raise HTTPException(status_code=402, detail=str(e))
     except Exception as e:
+        logger.error(f"Tag suggestion error: {e}")
         raise HTTPException(status_code=500, detail=f"AI service error: {str(e)}")

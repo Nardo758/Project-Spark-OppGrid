@@ -12,12 +12,35 @@ import time
 import logging
 
 from app.db.database import get_db
-from app.services.llm_ai_engine import get_anthropic_client, call_with_cache
+from app.services.unified_ai_service import (
+    get_ai_service,
+    UnifiedAIService,
+    RateLimitError,
+    QuotaExceededError,
+    TierAccessError
+)
 from app.core.dependencies import get_current_user_optional
 from app.services.branding_service import get_user_team_branding, inject_branding_into_report
 from app.models.user import User
 from app.models.subscription import Subscription, SubscriptionTier, SubscriptionStatus
 from datetime import datetime
+
+
+async def ai_complete_with_cache(
+    ai: UnifiedAIService,
+    system_prompt: str,
+    user_prompt: str,
+    task_type: str = "general",
+    max_tokens: int = 2000
+) -> str:
+    """Helper to call unified AI service with system prompt."""
+    result = await ai.complete(
+        prompt=user_prompt,
+        system_prompt=system_prompt,
+        task_type=task_type,
+        max_tokens=max_tokens
+    )
+    return result["content"]
 
 REPORT_PRICING = {
     "feasibility": {"price": 0, "name": "Feasibility Study"},
@@ -299,13 +322,16 @@ def parse_ai_response(response_text: str) -> Dict[str, Any]:
 
 
 @router.post("/business-plan", response_model=BusinessPlanResponse)
-async def generate_business_plan(request: BusinessPlanRequest, db: Session = Depends(get_db)):
+async def generate_business_plan(
+    request: BusinessPlanRequest,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
+):
     """Generate a comprehensive business plan using AI."""
     start_time = time.time()
     
-    client = get_anthropic_client()
-    if not client:
-        raise HTTPException(status_code=503, detail="AI service not available")
+    # Get unified AI service with user context
+    ai = get_ai_service(db, user=current_user)
     
     try:
         prompt = f"""Generate a comprehensive business plan for this business:
@@ -363,16 +389,14 @@ Create a detailed JSON business plan with these sections:
 
 Respond only with valid JSON."""
 
-        # Use cached call for 90% cost reduction on system prompt
-        response_text = call_with_cache(
+        # Use unified AI service
+        response_text = await ai_complete_with_cache(
+            ai=ai,
             system_prompt=BUSINESS_PLAN_SYSTEM,
             user_prompt=prompt,
-            model="claude-opus-4-5",
+            task_type="strategic_analysis",
             max_tokens=3000
         )
-        
-        if not response_text:
-            raise Exception("AI service returned no response")
         
         result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
@@ -393,12 +417,16 @@ Respond only with valid JSON."""
 
 
 @router.post("/financials", response_model=FinancialsResponse)
-async def generate_financial_model(request: FinancialsRequest, db: Session = Depends(get_db)):
+async def generate_financial_model(
+    request: FinancialsRequest,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
+):
     """Generate financial projections and models using AI."""
     start_time = time.time()
     
-    client = get_anthropic_client()
-    if not client:
+    ai = get_ai_service(db, user=current_user)
+    if not ai:
         raise HTTPException(status_code=503, detail="AI service not available")
     
     try:
@@ -461,15 +489,13 @@ Create a comprehensive JSON financial model with:
 Use realistic numbers based on the business model. Respond only with valid JSON."""
 
         # Use cached call for 90% cost reduction
-        response_text = call_with_cache(
+        response_text = await ai_complete_with_cache(
+            ai=ai,
             system_prompt=FINANCIALS_SYSTEM,
             user_prompt=prompt,
-            model="claude-opus-4-5",
+            task_type="strategic_analysis",
             max_tokens=3000
         )
-        
-        if not response_text:
-            raise Exception("AI service returned no response")
         
         result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
@@ -490,12 +516,16 @@ Use realistic numbers based on the business model. Respond only with valid JSON.
 
 
 @router.post("/pitch-deck", response_model=PitchDeckResponse)
-async def generate_pitch_deck(request: PitchDeckRequest, db: Session = Depends(get_db)):
+async def generate_pitch_deck(
+    request: PitchDeckRequest,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
+):
     """Generate investor pitch deck content using AI."""
     start_time = time.time()
     
-    client = get_anthropic_client()
-    if not client:
+    ai = get_ai_service(db, user=current_user)
+    if not ai:
         raise HTTPException(status_code=503, detail="AI service not available")
     
     try:
@@ -569,15 +599,13 @@ Create a comprehensive JSON pitch deck with slides:
 Make it compelling and investor-ready. Respond only with valid JSON."""
 
         # Use cached call for 90% cost reduction
-        response_text = call_with_cache(
+        response_text = await ai_complete_with_cache(
+            ai=ai,
             system_prompt=PITCH_SYSTEM,
             user_prompt=prompt,
-            model="claude-opus-4-5",
+            task_type="strategic_analysis",
             max_tokens=3000
         )
-        
-        if not response_text:
-            raise Exception("AI service returned no response")
         
         result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
@@ -676,8 +704,8 @@ async def generate_feasibility_study(
     """Generate a feasibility study using AI."""
     start_time = time.time()
     
-    client = get_anthropic_client()
-    if not client:
+    ai = get_ai_service(db, user=current_user)
+    if not ai:
         raise HTTPException(status_code=503, detail="AI service not available")
     
     try:
@@ -743,15 +771,13 @@ Generate a detailed JSON feasibility study with these sections:
 Be objective and balanced. Respond only with valid JSON."""
 
         # Use cached call for 90% cost reduction
-        response_text = call_with_cache(
+        response_text = await ai_complete_with_cache(
+            ai=ai,
             system_prompt=VALIDATION_SYSTEM,
             user_prompt=prompt,
-            model="claude-opus-4-5",
+            task_type="strategic_analysis",
             max_tokens=3000
         )
-        
-        if not response_text:
-            raise Exception("AI service returned no response")
         
         result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
@@ -797,8 +823,8 @@ async def generate_market_analysis(
     
     start_time = time.time()
     
-    client = get_anthropic_client()
-    if not client:
+    ai = get_ai_service(db, user=current_user)
+    if not ai:
         raise HTTPException(status_code=503, detail="AI service not available")
     
     try:
@@ -864,15 +890,13 @@ Generate a detailed JSON market analysis with these sections:
 Include data points and be specific. Respond only with valid JSON."""
 
         # Use cached call for 90% cost reduction
-        response_text = call_with_cache(
+        response_text = await ai_complete_with_cache(
+            ai=ai,
             system_prompt=MARKET_ANALYSIS_SYSTEM,
             user_prompt=prompt,
-            model="claude-opus-4-5",
+            task_type="strategic_analysis",
             max_tokens=3000
         )
-        
-        if not response_text:
-            raise Exception("AI service returned no response")
         
         result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
@@ -918,8 +942,8 @@ async def generate_strategic_assessment(
     
     start_time = time.time()
     
-    client = get_anthropic_client()
-    if not client:
+    ai = get_ai_service(db, user=current_user)
+    if not ai:
         raise HTTPException(status_code=503, detail="AI service not available")
     
     try:
@@ -991,15 +1015,13 @@ Generate a detailed JSON strategic assessment with these sections:
 Provide actionable, specific recommendations. Respond only with valid JSON."""
 
         # Use cached call for 90% cost reduction
-        response_text = call_with_cache(
-            system_prompt=BUSINESS_PLAN_SYSTEM,  # Strategic assessment uses business plan system
+        response_text = await ai_complete_with_cache(
+            ai=ai,
+            system_prompt=BUSINESS_PLAN_SYSTEM,
             user_prompt=prompt,
-            model="claude-opus-4-5",
+            task_type="strategic_analysis",
             max_tokens=3000
         )
-        
-        if not response_text:
-            raise Exception("AI service returned no response")
         
         result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
@@ -1045,8 +1067,8 @@ async def generate_pestle_analysis(
     
     start_time = time.time()
     
-    client = get_anthropic_client()
-    if not client:
+    ai = get_ai_service(db, user=current_user)
+    if not ai:
         raise HTTPException(status_code=503, detail="AI service not available")
     
     try:
@@ -1130,15 +1152,13 @@ Generate a detailed JSON PESTLE analysis with these sections:
 Be specific to the industry and region. Respond only with valid JSON."""
 
         # Use cached call for 90% cost reduction
-        response_text = call_with_cache(
-            system_prompt=MARKET_ANALYSIS_SYSTEM,  # PESTLE uses market analysis system
+        response_text = await ai_complete_with_cache(
+            ai=ai,
+            system_prompt=MARKET_ANALYSIS_SYSTEM,
             user_prompt=prompt,
-            model="claude-opus-4-5",
+            task_type="strategic_analysis",
             max_tokens=3000
         )
-        
-        if not response_text:
-            raise Exception("AI service returned no response")
         
         result = parse_ai_response(response_text)
         processing_time = int((time.time() - start_time) * 1000)
