@@ -166,13 +166,13 @@ async def validate_idea(
                 business_context=request.business_context,
                 session_id=request.session_id,
             ),
-            timeout=40.0
+            timeout=65.0  # Increased from 40s to 65s (AI timeout is 60s + 5s buffer)
         )
         return ValidateIdeaResponse(**result)
     except asyncio.TimeoutError:
         return ValidateIdeaResponse(
             success=False,
-            error="Analysis timed out. Please try again.",
+            error="Analysis timed out after 65 seconds. Please try a simpler question or try again later.",
             idea_description=request.idea_description,
             recommendation="hybrid",
             online_score=50,
@@ -221,13 +221,13 @@ async def search_ideas(
                 filters=filters,
                 session_id=request.session_id,
             ),
-            timeout=15.0
+            timeout=65.0  # Increased from 15s to 65s for AI synthesis
         )
         return SearchIdeasResponse(**result)
     except asyncio.TimeoutError:
         return SearchIdeasResponse(
             success=False,
-            error="Search timed out. Please try again.",
+            error="Search timed out after 65 seconds. Please try a simpler query.",
         )
     except Exception as e:
         return SearchIdeasResponse(
@@ -263,13 +263,13 @@ async def identify_location(
                 additional_params=request.additional_params,
                 session_id=request.session_id,
             ),
-            timeout=25.0
+            timeout=65.0  # Increased from 25s to 65s for geo analysis + AI
         )
         return IdentifyLocationResponse(**result)
     except asyncio.TimeoutError:
         return IdentifyLocationResponse(
             success=False,
-            error="Analysis timed out. Please try again with a simpler query.",
+            error="Analysis timed out after 65 seconds. Please try again with a simpler query.",
             city=request.city,
             business_type=request.business_description,
         )
@@ -309,13 +309,13 @@ async def clone_success(
                 radius_miles=request.radius_miles,
                 session_id=request.session_id,
             ),
-            timeout=25.0
+            timeout=65.0  # Increased from 25s to 65s for location matching
         )
         return CloneSuccessResponse(**result)
     except asyncio.TimeoutError:
         return CloneSuccessResponse(
             success=False,
-            error="Analysis timed out. Please try again.",
+            error="Analysis timed out after 65 seconds. Please try again with a different business.",
             analysis_radius_miles=request.radius_miles,
         )
     except Exception as e:
