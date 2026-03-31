@@ -14,8 +14,41 @@ import PayPerUnlockModal from '../components/PayPerUnlockModal'
 import EnterpriseContactModal from '../components/EnterpriseContactModal'
 import ReportViewer from '../components/ReportViewer'
 import OpportunityMap from '../components/OpportunityMap'
-import { FourPsPanel } from '../components/FourPs'
 import type { AccessInfo } from '../types/paywall'
+
+// Market intelligence data type (from 4 P's API)
+type MarketIntelligence = {
+  scores: { product: number; price: number; place: number; promotion: number }
+  overall: number
+  product: {
+    pain_intensity?: number
+    trend_strength?: number
+    google_trends_interest?: number
+    google_trends_direction?: string
+    urgency_level?: string
+  }
+  price: {
+    market_size_estimate?: string
+    median_income?: number
+    addressable_market_value?: number
+  }
+  place: {
+    growth_score?: number
+    growth_category?: string
+    population?: number
+    population_growth_rate?: number
+    job_growth_rate?: number
+  }
+  promotion: {
+    competition_level?: string
+    competitor_count?: number
+    avg_competitor_rating?: number
+  }
+  data_quality: {
+    completeness: number
+    confidence: number
+  }
+}
 
 type Opportunity = {
   id: number
@@ -206,6 +239,19 @@ export default function OpportunityDetail() {
   const demographics = demographicsQuery.data?.demographics
   const _searchTrends = demographicsQuery.data?.search_trends
   void _searchTrends
+
+  // Fetch market intelligence (4 P's data) for enrichment
+  const marketIntelQuery = useQuery({
+    queryKey: ['market-intel', opportunityId],
+    enabled: Number.isFinite(opportunityId),
+    queryFn: async (): Promise<MarketIntelligence | null> => {
+      const res = await fetch(`/api/v1/opportunities/${opportunityId}/four-ps`)
+      if (!res.ok) return null
+      return res.json()
+    },
+    staleTime: 10 * 60 * 1000, // Cache for 10 minutes
+  })
+  const intel = marketIntelQuery.data
 
   const myValidation = useMemo(() => {
     const uid = user?.id
@@ -400,7 +446,6 @@ export default function OpportunityDetail() {
 
   const researchTabs = [
     { id: 'validation', label: 'Market Validation' },
-    { id: 'four-ps', label: '4 P\'s Intelligence' },
     { id: 'geographic', label: 'Geographic' },
     { id: 'problem', label: 'Problem Analysis' },
     { id: 'sizing', label: 'Market Sizing' },
@@ -532,7 +577,7 @@ export default function OpportunityDetail() {
             </div>
             <h2 className="text-xl font-bold text-stone-900">Problem Statement</h2>
           </div>
-          <p className="text-stone-700 text-lg leading-relaxed">
+          <p className="text-stone-700 text-lg leading-relaxed mb-4">
             {(() => {
               if (opp.ai_problem_statement) return opp.ai_problem_statement
               if (opp.ai_summary) return opp.ai_summary.replace(/\*\*/g, '')
@@ -540,6 +585,62 @@ export default function OpportunityDetail() {
               return desc || 'No problem statement available.'
             })()}
           </p>
+          
+          {/* Market Intelligence Insights */}
+          {intel && (
+            <div className="flex flex-wrap gap-3 pt-4 border-t border-violet-200">
+              {/* Demand Signal */}
+              {intel.product?.pain_intensity && (
+                <div className="flex items-center gap-2 bg-white/70 px-3 py-1.5 rounded-full">
+                  <span className="text-lg">🔥</span>
+                  <span className="text-sm font-medium text-stone-700">
+                    Pain Level: {intel.product.pain_intensity}/10
+                  </span>
+                </div>
+              )}
+              
+              {/* Trend Direction */}
+              {intel.product?.google_trends_direction && (
+                <div className="flex items-center gap-2 bg-white/70 px-3 py-1.5 rounded-full">
+                  <span className="text-lg">{intel.product.google_trends_direction === 'rising' ? '📈' : intel.product.google_trends_direction === 'declining' ? '📉' : '➡️'}</span>
+                  <span className="text-sm font-medium text-stone-700 capitalize">
+                    {intel.product.google_trends_direction} Trend
+                  </span>
+                </div>
+              )}
+              
+              {/* Market Size */}
+              {intel.price?.market_size_estimate && (
+                <div className="flex items-center gap-2 bg-white/70 px-3 py-1.5 rounded-full">
+                  <span className="text-lg">💰</span>
+                  <span className="text-sm font-medium text-stone-700">
+                    {intel.price.market_size_estimate}
+                  </span>
+                </div>
+              )}
+              
+              {/* Competition */}
+              {intel.promotion?.competition_level && (
+                <div className="flex items-center gap-2 bg-white/70 px-3 py-1.5 rounded-full">
+                  <span className="text-lg">{intel.promotion.competition_level === 'low' ? '🏆' : intel.promotion.competition_level === 'high' ? '⚔️' : '🎯'}</span>
+                  <span className="text-sm font-medium text-stone-700 capitalize">
+                    {intel.promotion.competition_level} Competition
+                    {intel.promotion.competitor_count && ` (${intel.promotion.competitor_count})`}
+                  </span>
+                </div>
+              )}
+              
+              {/* Growth Market */}
+              {intel.place?.growth_category && (
+                <div className="flex items-center gap-2 bg-white/70 px-3 py-1.5 rounded-full">
+                  <span className="text-lg">📍</span>
+                  <span className="text-sm font-medium text-stone-700 capitalize">
+                    {intel.place.growth_category} Market
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* TIER 1: Problem Detail (FREE) - Empathize + Define */}
@@ -574,19 +675,42 @@ export default function OpportunityDetail() {
               ))}
             </div>
             <div className="bg-stone-50 rounded-lg border border-stone-200 p-4">
-              <div className="grid grid-cols-3 gap-6">
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
                 <div>
                   <div className="text-sm text-stone-500 mb-1">Market Size</div>
-                  <div className="text-2xl font-bold text-stone-900">{marketSize}</div>
+                  <div className="text-xl font-bold text-stone-900">{intel?.price?.market_size_estimate || marketSize}</div>
                 </div>
                 <div>
                   <div className="text-sm text-stone-500 mb-1">Signals</div>
-                  <div className="text-2xl font-bold text-stone-900">{opp.validation_count.toLocaleString()}</div>
+                  <div className="text-xl font-bold text-stone-900">{opp.validation_count.toLocaleString()}</div>
                 </div>
                 <div>
                   <div className="text-sm text-stone-500 mb-1">Growth</div>
-                  <div className="text-2xl font-bold text-emerald-600">+{growthRate}%</div>
+                  <div className="text-xl font-bold text-emerald-600">
+                    {intel?.place?.population_growth_rate 
+                      ? `+${(intel.place.population_growth_rate * 100).toFixed(1)}%`
+                      : `+${growthRate}%`
+                    }
+                  </div>
                 </div>
+                {intel?.place?.population && (
+                  <div>
+                    <div className="text-sm text-stone-500 mb-1">Population</div>
+                    <div className="text-xl font-bold text-stone-900">{(intel.place.population / 1000000).toFixed(1)}M</div>
+                  </div>
+                )}
+                {intel?.price?.median_income && (
+                  <div>
+                    <div className="text-sm text-stone-500 mb-1">Median Income</div>
+                    <div className="text-xl font-bold text-stone-900">${(intel.price.median_income / 1000).toFixed(0)}K</div>
+                  </div>
+                )}
+                {intel?.place?.growth_score && (
+                  <div>
+                    <div className="text-sm text-stone-500 mb-1">Growth Score</div>
+                    <div className="text-xl font-bold text-violet-600">{intel.place.growth_score}</div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -771,16 +895,6 @@ export default function OpportunityDetail() {
                   </div>
                 </div>
               </>
-            )}
-
-            {activeTab === 'four-ps' && (
-              <div className="space-y-4">
-                <FourPsPanel 
-                  opportunityId={opp.id}
-                  showQuality={true}
-                  defaultExpanded={false}
-                />
-              </div>
             )}
 
             {activeTab === 'solutions' && (
