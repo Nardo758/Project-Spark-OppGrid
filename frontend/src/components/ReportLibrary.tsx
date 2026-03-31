@@ -508,28 +508,38 @@ export default function ReportLibrary({
       
       if (data.url) {
         window.location.href = data.url
+      } else {
+        throw new Error('No checkout URL returned from server')
       }
     } catch (e) {
       setPurchaseError(e instanceof Error ? e.message : 'Checkout failed')
+      console.error('Checkout error:', e)
     } finally {
       setPurchaseLoading(false)
     }
   }
 
   const handleGenerateReport = () => {
-    if (!selectedReport) return
+    console.log('[ReportLibrary] handleGenerateReport called', { selectedReport })
+    if (!selectedReport) {
+      console.warn('[ReportLibrary] No selectedReport, returning')
+      return
+    }
     
     // For templates, check if purchase is required
     if (selectedReport.type === 'template') {
       const pricing = getTemplatePricing(selectedReport.slug)
+      console.log('[ReportLibrary] Template pricing:', { pricing, slug: selectedReport.slug })
       if (!pricing.included && !pricing.purchased) {
         // Need to purchase first
+        console.log('[ReportLibrary] Starting checkout for template')
         handleTemplateCheckout(selectedReport.slug)
         return
       }
     }
     
     const context = getContextForReport()
+    console.log('[ReportLibrary] Generating report with context:', { context })
     generateMutation.mutate({ 
       reportType: selectedReport.slug, 
       context,
