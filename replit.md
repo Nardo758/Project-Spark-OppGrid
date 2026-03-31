@@ -39,3 +39,8 @@ OppGrid utilizes a modern hybrid architecture with a React 18 frontend (Vite, Ta
 *   **Census Bureau ACS 5-Year API:** Provides demographic data.
 *   **Mapbox:** Used for map visualizations.
 *   **SBA (Small Business Administration):** Provides curated loan program data and financing course information.
+
+## Recent Fixes
+*   **Web Enrichment Async Fix:** `enrich_with_web_data_sync` in `web_enrichment_service.py` was crashing with "this event loop is already running" when called from FastAPI's async context. Fixed by creating a fresh `WebEnrichmentService` instance in a separate thread via `ThreadPoolExecutor` + `asyncio.run()`, avoiding shared `AsyncClient` across event loops.
+*   **Consultant Studio Report Save UX:** Replaced auth-prompt logic (unnecessary since page requires login) with proper error/success feedback banners. The "Save as Report" button now shows "Generating..." while pending and displays clear error messages or a success confirmation.
+*   **Deployment PostGIS Fix:** Added `drizzle.config.ts` with `tablesFilter` to exclude PostGIS system tables from Replit's internal schema sync. Removed GeoAlchemy2 from `traffic_road.py` model. Added DDL filter in `alembic/env.py` to block PostGIS system table modifications.

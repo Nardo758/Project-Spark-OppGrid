@@ -671,13 +671,25 @@ def enrich_with_web_data_sync(
     state: str,
     business_type: Optional[str] = None
 ) -> WebEnrichmentResult:
-    """Synchronous wrapper for web enrichment."""
+    """Synchronous wrapper for web enrichment that works inside an async event loop."""
     import asyncio
-    
+    import concurrent.futures
+
+    async def _run():
+        service = WebEnrichmentService()
+        try:
+            return await service.enrich(city, state, business_type)
+        finally:
+            await service.close()
+
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
     except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    return loop.run_until_complete(enrich_with_web_data(city, state, business_type))
+        loop = None
+
+    if loop and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, _run())
+            return future.result(timeout=45)
+    else:
+        return asyncio.run(_run())

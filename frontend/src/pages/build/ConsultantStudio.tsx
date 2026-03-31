@@ -253,7 +253,9 @@ export default function ConsultantStudio() {
     onSuccess: (data) => setCloneResult(data),
   })
 
-  // Save as Report mutation
+  const [reportError, setReportError] = useState<string | null>(null)
+  const [reportSuccess, setReportSuccess] = useState(false)
+
   const saveReportMutation = useMutation({
     mutationFn: async ({
       reportType,
@@ -264,6 +266,8 @@ export default function ConsultantStudio() {
       title: string
       content: string
     }) => {
+      setReportError(null)
+      setReportSuccess(false)
       const res = await fetch('/api/v1/reports/generate', {
         method: 'POST',
         headers: headers(),
@@ -272,12 +276,20 @@ export default function ConsultantStudio() {
           custom_context: content,
         }),
       })
-      if (!res.ok) throw new Error('Failed to save report')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || `Report generation failed (${res.status})`)
+      }
       return res.json()
     },
     onSuccess: (data) => {
       setSavedReports((prev) => [data, ...prev])
       queryClient.invalidateQueries({ queryKey: ['my-reports'] })
+      setReportSuccess(true)
+      setTimeout(() => setReportSuccess(false), 4000)
+    },
+    onError: (err: Error) => {
+      setReportError(err.message)
     },
   })
 
@@ -391,6 +403,19 @@ export default function ConsultantStudio() {
             </div>
           )}
 
+          {reportError && (
+            <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+              <span className="text-sm text-red-800">{reportError}</span>
+              <button onClick={() => setReportError(null)} className="ml-auto text-red-400 hover:text-red-600 text-sm">Dismiss</button>
+            </div>
+          )}
+          {reportSuccess && (
+            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
+              <span className="text-sm text-green-800">Report saved successfully!</span>
+            </div>
+          )}
           <div className="flex gap-3">
             <button
               onClick={() =>
@@ -401,10 +426,10 @@ export default function ConsultantStudio() {
                 })
               }
               disabled={saveReportMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium"
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
             >
               <FileText className="w-4 h-4" />
-              Save as Report
+              {saveReportMutation.isPending ? 'Generating...' : 'Save as Report'}
             </button>
             <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium">
               <Download className="w-4 h-4" />
