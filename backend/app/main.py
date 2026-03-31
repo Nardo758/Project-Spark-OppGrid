@@ -77,6 +77,7 @@ from app.routers import (
     foot_traffic,
     saved_searches,
     enhanced_workspaces,
+    agent,
 )
 
 install_trace_id_factory()
@@ -180,6 +181,7 @@ app.include_router(deep_clone.router, prefix=f"{settings.API_V1_PREFIX}", tags=[
 app.include_router(saved_layers.router, prefix=f"{settings.API_V1_PREFIX}/saved-layers", tags=["Saved Layers"])
 app.include_router(foot_traffic.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Foot Traffic"])
 app.include_router(enhanced_workspaces.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Enhanced Workspaces"])
+app.include_router(agent.router, tags=["Agent API"])
 
 
 @app.on_event("startup")
