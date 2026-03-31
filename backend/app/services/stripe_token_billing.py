@@ -228,10 +228,40 @@ class StripeTokenBilling:
             Subscription.user_id == user_id
         ).first()
         
+        # Always write to local usage tracking table
+        try:
+            from sqlalchemy import text
+            cost_info = self.calculate_estimated_cost(
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                db=db,
+                apply_markup=True,
+            )
+            db.execute(
+                text("""
+                    INSERT INTO user_ai_usage
+                        (user_id, model_name, event_type, input_tokens, output_tokens, estimated_cost_usd, stripe_recorded)
+                    VALUES (:uid, :model, :event, :inp, :out, :cost, :stripe)
+                """),
+                {
+                    "uid": user_id,
+                    "model": model,
+                    "event": event_type,
+                    "inp": input_tokens,
+                    "out": output_tokens,
+                    "cost": cost_info.get("total_cost_usd"),
+                    "stripe": bool(subscription and subscription.stripe_customer_id),
+                }
+            )
+            db.commit()
+        except Exception as local_err:
+            logger.warning(f"[TokenBilling] Local usage write failed: {local_err}")
+
         if not subscription or not subscription.stripe_customer_id:
             logger.debug(f"No Stripe customer for user {user_id} - skipping meter event")
             return None
-        
+
         return self.record_usage(
             customer_id=subscription.stripe_customer_id,
             model=model,
@@ -360,6 +390,199 @@ class StripeTokenBilling:
             logger.error(f"[StripeTokenBilling] Failed to get usage: {e}")
             return {"error": str(e)}
     
+    def calculate_estimated_cost(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        db=None,
+        apply_markup: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Calculate the estimated cost for a token usage event.
+
+        Uses pricing from ai_models table if db provided, otherwise falls
+        back to static defaults. Applies billing_markup_percent from model config.
+
+        Returns dict with input_cost, output_cost, total_cost (USD), and
+        markup_percent applied.
+        """
+        # Default costs per 1M tokens (USD) — used when DB is unavailable
+        DEFAULT_COSTS = {
+            "claude-opus-4-5": {"input": 15.0, "output": 75.0},
+            "claude-sonnet-4-5": {"input": 3.0, "output": 15.0},
+            "claude-sonnet-4-20250514": {"input": 3.0, "output": 15.0},
+            "claude-3-5-haiku-20241022": {"input": 0.25, "output": 1.25},
+            "gpt-4o": {"input": 2.5, "output": 10.0},
+            "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+            "o1": {"input": 15.0, "output": 60.0},
+            "o3-mini": {"input": 1.1, "output": 4.4},
+        }
+
+        cost_per_m_input = 3.0
+        cost_per_m_output = 15.0
+        markup_percent = 0.0
+
+        if db:
+            try:
+                from sqlalchemy import text
+                row = db.execute(
+                    text("SELECT cost_per_million_input, cost_per_million_output, billing_markup_percent FROM ai_models WHERE api_model_name = :m OR model_id = :m LIMIT 1"),
+                    {"m": model}
+                ).fetchone()
+                if row:
+                    cost_per_m_input = float(row[0])
+                    cost_per_m_output = float(row[1])
+                    markup_percent = float(row[2] or 0)
+            except Exception as e:
+                logger.warning(f"[TokenBilling] DB cost lookup failed: {e}")
+                fallback = DEFAULT_COSTS.get(model, {})
+                cost_per_m_input = fallback.get("input", cost_per_m_input)
+                cost_per_m_output = fallback.get("output", cost_per_m_output)
+        else:
+            fallback = DEFAULT_COSTS.get(model, {})
+            cost_per_m_input = fallback.get("input", cost_per_m_input)
+            cost_per_m_output = fallback.get("output", cost_per_m_output)
+
+        input_cost = (input_tokens / 1_000_000) * cost_per_m_input
+        output_cost = (output_tokens / 1_000_000) * cost_per_m_output
+        base_cost = input_cost + output_cost
+
+        if apply_markup and markup_percent > 0:
+            multiplier = 1 + (markup_percent / 100)
+            total_cost = base_cost * multiplier
+        else:
+            total_cost = base_cost
+
+        return {
+            "model": model,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cost_per_million_input_usd": cost_per_m_input,
+            "cost_per_million_output_usd": cost_per_m_output,
+            "input_cost_usd": round(input_cost, 6),
+            "output_cost_usd": round(output_cost, 6),
+            "base_cost_usd": round(base_cost, 6),
+            "markup_percent": markup_percent,
+            "total_cost_usd": round(total_cost, 6),
+        }
+
+    def get_invoice_preview(self, customer_id: str) -> Dict[str, Any]:
+        """
+        Preview the upcoming invoice for a Stripe customer.
+
+        Uses Stripe's Invoice.upcoming() to show metered token charges
+        alongside subscription items before the invoice is finalized.
+        """
+        if not self.stripe:
+            return {"error": "Stripe not configured"}
+
+        try:
+            invoice = self.stripe.Invoice.upcoming(customer=customer_id)
+
+            line_items = []
+            for line in invoice.get("lines", {}).get("data", []):
+                line_items.append({
+                    "description": line.get("description", ""),
+                    "amount_cents": line.get("amount", 0),
+                    "amount_usd": round(line.get("amount", 0) / 100, 2),
+                    "quantity": line.get("quantity"),
+                    "period_start": line.get("period", {}).get("start"),
+                    "period_end": line.get("period", {}).get("end"),
+                    "type": line.get("type", ""),
+                    "proration": line.get("proration", False),
+                })
+
+            return {
+                "customer_id": customer_id,
+                "period_end": invoice.get("period_end"),
+                "subtotal_usd": round(invoice.get("subtotal", 0) / 100, 2),
+                "tax_usd": round(invoice.get("tax", 0) / 100, 2),
+                "total_usd": round(invoice.get("total", 0) / 100, 2),
+                "currency": invoice.get("currency", "usd"),
+                "line_items": line_items,
+                "line_count": len(line_items),
+            }
+
+        except self.stripe.error.InvalidRequestError as e:
+            # No upcoming invoice (e.g. no active subscription)
+            if "No upcoming invoices" in str(e):
+                return {"customer_id": customer_id, "total_usd": 0.0, "line_items": [], "message": "No upcoming invoice"}
+            return {"error": str(e)}
+        except Exception as e:
+            logger.error(f"[StripeTokenBilling] Invoice preview failed: {e}")
+            return {"error": str(e)}
+
+    def sync_price_to_stripe(
+        self,
+        model_id: str,
+        display_name: str,
+        cost_per_token_usd: float,
+        meter_event_name: str,
+        currency: str = "usd"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Create or update a metered Stripe Price for a model.
+
+        This attaches a per-token price to a Stripe meter so that usage
+        recorded via meter events is automatically included in invoices.
+
+        Args:
+            model_id: Internal model identifier
+            display_name: Human-readable product name
+            cost_per_token_usd: Price per token in USD (e.g. 0.000015 for $15/M)
+            meter_event_name: Stripe meter event name to attach
+            currency: Billing currency (default: usd)
+
+        Returns:
+            Stripe Price object dict or None on failure
+        """
+        if not self.stripe:
+            return None
+
+        try:
+            # Cost is per token — Stripe uses integer cents, so we use unit_amount_decimal
+            # for sub-cent precision
+            unit_amount_decimal = str(round(cost_per_token_usd * 100, 10))  # USD → cents
+
+            # Find or create the product
+            products = self.stripe.Product.search(query=f'metadata["model_id"]:"{model_id}"', limit=1)
+            if products.data:
+                product = products.data[0]
+            else:
+                product = self.stripe.Product.create(
+                    name=f"{display_name} Tokens",
+                    metadata={"model_id": model_id, "source": "oppgrid"}
+                )
+
+            # Create the metered price
+            price = self.stripe.Price.create(
+                product=product.id,
+                currency=currency,
+                billing_scheme="per_unit",
+                unit_amount_decimal=unit_amount_decimal,
+                recurring={
+                    "interval": "month",
+                    "usage_type": "metered",
+                    "meter": meter_event_name,
+                },
+                metadata={"model_id": model_id, "meter": meter_event_name}
+            )
+
+            logger.info(f"[StripeTokenBilling] Created price {price.id} for {model_id} @ {unit_amount_decimal}¢/token")
+
+            return {
+                "price_id": price.id,
+                "product_id": product.id,
+                "model_id": model_id,
+                "unit_amount_decimal": unit_amount_decimal,
+                "meter_event_name": meter_event_name,
+            }
+
+        except Exception as e:
+            logger.error(f"[StripeTokenBilling] Failed to sync price for {model_id}: {e}")
+            return None
+
     def setup_default_meters(self) -> Dict[str, Any]:
         """
         Create default meters for all supported models.

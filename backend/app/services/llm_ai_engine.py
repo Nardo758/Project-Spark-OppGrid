@@ -80,7 +80,10 @@ def call_with_cache(
     user_prompt: str,
     model: str = "claude-opus-4-5",
     max_tokens: int = 1024,
-    temperature: float = 0.7
+    temperature: float = 0.7,
+    user_id: Optional[int] = None,
+    db=None,
+    event_type: Optional[str] = None,
 ) -> Optional[str]:
     """
     Make an API call with Anthropic prompt caching enabled.
@@ -94,6 +97,9 @@ def call_with_cache(
         model: Model to use (default: claude-opus-4-5)
         max_tokens: Max response tokens
         temperature: Sampling temperature
+        user_id: Optional user ID to record token usage for billing
+        db: Optional DB session required when user_id is provided
+        event_type: Optional label for the AI call (e.g. "opportunity_analysis")
     
     Returns:
         Response text or None on error
@@ -118,7 +124,7 @@ def call_with_cache(
             messages=[{"role": "user", "content": user_prompt}]
         )
         
-        # Log cache stats if available
+        # Log cache stats and record usage for billing
         if hasattr(response, 'usage'):
             usage = response.usage
             cache_read = getattr(usage, 'cache_read_input_tokens', 0)
@@ -127,7 +133,22 @@ def call_with_cache(
                 logger.info(f"[CachedAI] Cache HIT: {cache_read} tokens from cache (90% savings)")
             elif cache_create > 0:
                 logger.info(f"[CachedAI] Cache MISS: {cache_create} tokens cached for next call")
-        
+
+            # Record to Stripe Token Billing + local tracking if user context provided
+            if user_id and db:
+                try:
+                    from app.services.stripe_token_billing import record_token_usage
+                    record_token_usage(
+                        user_id=user_id,
+                        model=model,
+                        input_tokens=getattr(usage, 'input_tokens', 0),
+                        output_tokens=getattr(usage, 'output_tokens', 0),
+                        db=db,
+                        event_type=event_type,
+                    )
+                except Exception as billing_err:
+                    logger.warning(f"[CachedAI] Token billing record failed: {billing_err}")
+
         return response.content[0].text
         
     except Exception as e:

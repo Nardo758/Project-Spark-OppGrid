@@ -15,6 +15,7 @@ from app.routers import (
     admin,
     admin_models,
     agreements,
+    billing,
     ai_analysis,
     ai_chat,
     ai_cofounder,
@@ -128,6 +129,7 @@ app.include_router(oauth.router, prefix=f"{settings.API_V1_PREFIX}/oauth", tags=
 app.include_router(notifications.router, prefix=f"{settings.API_V1_PREFIX}/notifications", tags=["Notifications"])
 app.include_router(admin.router, prefix=f"{settings.API_V1_PREFIX}/admin", tags=["Admin"])
 app.include_router(admin_models.router, tags=["Admin - AI Models"])
+app.include_router(billing.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Billing"])
 app.include_router(moderation.router, prefix=f"{settings.API_V1_PREFIX}/moderation", tags=["Moderation"])
 app.include_router(subscriptions.router, prefix=f"{settings.API_V1_PREFIX}/subscriptions", tags=["Subscriptions"])
 app.include_router(social.router, prefix=f"{settings.API_V1_PREFIX}/social", tags=["Social Sharing"])
