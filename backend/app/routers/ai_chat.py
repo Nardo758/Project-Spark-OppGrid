@@ -9,7 +9,13 @@ from app.db.database import get_db
 from app.models.opportunity import Opportunity
 from app.models.user import User
 from app.core.dependencies import get_current_user_optional
-from app.services.llm_ai_engine import get_anthropic_client
+from app.services.unified_ai_service import (
+    get_ai_service, 
+    UnifiedAIService,
+    RateLimitError,
+    QuotaExceededError,
+    TierAccessError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +31,13 @@ class ChatRequest(BaseModel):
     conversation_history: Optional[List[ChatMessage]] = []
     category: Optional[str] = None  # Deep Dive category context
     bookmarked_insights: Optional[List[str]] = []  # User's bookmarked messages
+    model_id: Optional[str] = None  # Allow user to select model
 
 class ChatResponse(BaseModel):
     response: str
     suggestions: Optional[List[str]] = None
+    model_used: Optional[str] = None
+    tokens_used: Optional[int] = None
 
 def get_opportunity_context(db: Session, opportunity_id: int) -> str:
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
@@ -203,13 +212,8 @@ async def chat_with_ai(
     current_user: User | None = Depends(get_current_user_optional)
 ):
     try:
-        messages = []
-        
-        for msg in request.conversation_history:
-            messages.append({
-                "role": msg.role,
-                "content": msg.content
-            })
+        # Get AI service with user context
+        ai = get_ai_service(db, user=current_user)
         
         opportunity_context = ""
         if request.opportunity_id:
@@ -225,37 +229,33 @@ async def chat_with_ai(
             bookmarks_context = "\n\nUser's bookmarked insights from this session:\n" + "\n".join(f"- {b}" for b in request.bookmarked_insights[:5])
             system_prompt += bookmarks_context
         
+        # Build conversation context
+        conversation_context = ""
+        if request.conversation_history:
+            for msg in request.conversation_history[-6:]:  # Last 6 messages for context
+                role_label = "User" if msg.role == "user" else "Assistant"
+                conversation_context += f"\n{role_label}: {msg.content}"
+        
         user_content = request.message
         if opportunity_context and not request.conversation_history:
             user_content = f"{opportunity_context}\n\nUser Question: {request.message}"
+        elif conversation_context:
+            user_content = f"Conversation so far:{conversation_context}\n\nUser: {request.message}"
         
-        messages.append({
-            "role": "user",
-            "content": user_content
-        })
-        
-        client = get_anthropic_client()
-        if not client:
-            raise HTTPException(status_code=503, detail="AI service not available")
-        
-        response = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": system_prompt,
-                    "cache_control": {"type": "ephemeral"}
-                }
-            ],
-            messages=messages
+        # Make the AI call
+        result = await ai.complete(
+            prompt=user_content,
+            system_prompt=system_prompt,
+            task_type="user_conversation",
+            model_id=request.model_id,
+            max_tokens=1024
         )
         
-        ai_response = response.content[0].text
+        ai_response = result["content"]
         
         # Get category-specific suggestions or defaults
         suggestions = []
-        if len(messages) <= 2:
+        if len(request.conversation_history or []) <= 2:
             if request.category and request.category in CATEGORY_SUGGESTIONS:
                 suggestions = CATEGORY_SUGGESTIONS[request.category]
             else:
@@ -268,10 +268,19 @@ async def chat_with_ai(
         
         return ChatResponse(
             response=ai_response,
-            suggestions=suggestions
+            suggestions=suggestions,
+            model_used=result.get("model_id"),
+            tokens_used=result["tokens"]["input"] + result["tokens"]["output"]
         )
         
+    except RateLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except QuotaExceededError as e:
+        raise HTTPException(status_code=402, detail=str(e))
+    except TierAccessError as e:
+        raise HTTPException(status_code=403, detail=str(e))
     except Exception as e:
+        logger.error(f"AI chat error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI chat error: {str(e)}"
@@ -293,4 +302,51 @@ async def get_initial_suggestions(opportunity_id: int, db: Session = Depends(get
             "Who are the main competitors?",
             "What's the ideal customer profile?"
         ]
+    }
+
+@router.get("/models")
+async def get_available_models(
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
+):
+    """Get models available to the current user based on their tier."""
+    from app.services.ai_model_registry import AIModelRegistry
+    
+    registry = AIModelRegistry(db)
+    all_models = registry.get_all_models()
+    
+    # Determine user tier
+    user_tier = "free"
+    if current_user:
+        if hasattr(current_user, "subscription") and current_user.subscription:
+            user_tier = current_user.subscription.tier or "free"
+    
+    # Filter by tier access
+    tier_order = ["free", "starter", "growth", "pro", "enterprise"]
+    try:
+        user_level = tier_order.index(user_tier.lower())
+    except ValueError:
+        user_level = 0
+    
+    available_models = []
+    for model in all_models:
+        min_tier = (model.get("min_tier") or "free").lower()
+        try:
+            required_level = tier_order.index(min_tier)
+        except ValueError:
+            required_level = 0
+        
+        if user_level >= required_level:
+            available_models.append({
+                "model_id": model["model_id"],
+                "display_name": model["display_name"],
+                "provider": model["provider"],
+                "description": model.get("description"),
+                "is_default": model.get("is_default", False)
+            })
+    
+    return {
+        "models": available_models,
+        "user_tier": user_tier,
+        "default_model": next((m["model_id"] for m in available_models if m["is_default"]), None)
     }
