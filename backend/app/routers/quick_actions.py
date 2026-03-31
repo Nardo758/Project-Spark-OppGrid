@@ -310,7 +310,7 @@ Create a detailed JSON business plan with these sections:
 Respond only with valid JSON."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -402,7 +402,7 @@ Create a comprehensive JSON financial model with:
 Use realistic numbers based on the business model. Respond only with valid JSON."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -505,7 +505,7 @@ Create a comprehensive JSON pitch deck with slides:
 Make it compelling and investor-ready. Respond only with valid JSON."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -674,7 +674,7 @@ Generate a detailed JSON feasibility study with these sections:
 Be objective and balanced. Respond only with valid JSON."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -790,7 +790,7 @@ Generate a detailed JSON market analysis with these sections:
 Include data points and be specific. Respond only with valid JSON."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -912,7 +912,7 @@ Generate a detailed JSON strategic assessment with these sections:
 Provide actionable, specific recommendations. Respond only with valid JSON."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}]
         )
@@ -1046,7 +1046,7 @@ Generate a detailed JSON PESTLE analysis with these sections:
 Be specific to the industry and region. Respond only with valid JSON."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=3000,
             messages=[{"role": "user", "content": prompt}]
         )

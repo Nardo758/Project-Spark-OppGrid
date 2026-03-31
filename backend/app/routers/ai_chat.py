@@ -241,7 +241,7 @@ async def chat_with_ai(
         })
         
         response = client.messages.create(
-            model="claude-sonnet-4-5-20250514",
+            model="claude-opus-4-5",
             max_tokens=1024,
             system=system_prompt,
             messages=messages

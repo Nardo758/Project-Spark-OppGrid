@@ -192,7 +192,7 @@ Provide a comprehensive, actionable validation analysis."""
 
     try:
         response = anthropic_client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=2048,
             system=VALIDATION_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],

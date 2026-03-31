@@ -284,7 +284,7 @@ IDEA DESCRIPTION:
 Provide a comprehensive, actionable validation analysis."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=2048,
             system=VALIDATION_PROMPT,
             messages=[{"role": "user", "content": user_prompt}]
