@@ -14,6 +14,7 @@ import PayPerUnlockModal from '../components/PayPerUnlockModal'
 import EnterpriseContactModal from '../components/EnterpriseContactModal'
 import ReportViewer from '../components/ReportViewer'
 import OpportunityMap from '../components/OpportunityMap'
+import MarketBadges from '../components/Discovery/MarketBadges'
 import type { AccessInfo } from '../types/paywall'
 
 // Market intelligence data type (from 4 P's API)
@@ -898,6 +899,22 @@ export default function OpportunityDetail() {
           <div className="space-y-4">
             {activeTab === 'validation' && (
               <>
+                {/* Market Intelligence Badges */}
+                {(opp.city || opp.region) && (
+                  <div className="bg-white rounded-lg border-2 border-stone-200 p-6">
+                    <h3 className="text-lg font-bold text-stone-900 mb-4">Market Intelligence</h3>
+                    <MarketBadges 
+                      city={opp.city || undefined}
+                      state={opp.region || undefined}
+                      compact={false}
+                      maxBadges={5}
+                    />
+                    <p className="text-xs text-stone-400 mt-3">
+                      Real-time indicators from JediRe traffic analysis
+                    </p>
+                  </div>
+                )}
+
                 <div className="bg-white rounded-lg border-2 border-stone-200 p-6">
                   <h3 className="text-lg font-bold text-stone-900 mb-4">Demand Signals</h3>
                   <div className="grid grid-cols-3 gap-6">
@@ -1016,6 +1033,25 @@ export default function OpportunityDetail() {
 
             {activeTab === 'geographic' && (
               <div className="space-y-4">
+                {/* Market Intelligence Badges for Location */}
+                {(opp.city || opp.region) && (
+                  <div className="bg-gradient-to-r from-violet-50 to-blue-50 rounded-lg border-2 border-violet-200 p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-semibold text-stone-900 mb-1">
+                          {opp.city ? `${opp.city}, ${opp.region}` : opp.region} Market Signals
+                        </h4>
+                        <MarketBadges 
+                          city={opp.city || undefined}
+                          state={opp.region || undefined}
+                          compact={false}
+                          maxBadges={4}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-white rounded-lg border-2 border-stone-200 p-6">
                   <h3 className="text-lg font-bold text-stone-900 mb-4">Geographic Distribution</h3>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1264,62 +1300,6 @@ export default function OpportunityDetail() {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Tools Section */}
-          <div className="mt-6 pt-6 border-t-2 border-stone-200">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-stone-900 flex items-center gap-2">
-                <Zap className="w-5 h-5 text-amber-600" />
-                Tools
-              </h3>
-            </div>
-            
-            <div className="grid md:grid-cols-4 gap-3 mb-4">
-              <Link 
-                to={`/build/consultant-studio?opportunity=${opp.id}`}
-                className="bg-gradient-to-br from-violet-50 to-purple-50 rounded-lg p-4 border border-violet-200 hover:border-violet-400 transition-colors group"
-              >
-                <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-violet-200 transition-colors">
-                  <Target className="w-5 h-5 text-violet-600" />
-                </div>
-                <div className="font-semibold text-stone-900 text-sm mb-1">Validate Idea</div>
-                <div className="text-xs text-stone-500">Test feasibility</div>
-              </Link>
-              
-              <Link 
-                to={`/reports?opportunity=${opp.id}`}
-                className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-lg p-4 border border-blue-200 hover:border-blue-400 transition-colors group"
-              >
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-blue-200 transition-colors">
-                  <FileText className="w-5 h-5 text-blue-600" />
-                </div>
-                <div className="font-semibold text-stone-900 text-sm mb-1">Generate Report</div>
-                <div className="text-xs text-stone-500">Market analysis</div>
-              </Link>
-              
-              <Link 
-                to={`/build/consultant-studio?tab=clone&opportunity=${opp.id}`}
-                className="bg-gradient-to-br from-emerald-50 to-green-50 rounded-lg p-4 border border-emerald-200 hover:border-emerald-400 transition-colors group"
-              >
-                <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-emerald-200 transition-colors">
-                  <TrendingUp className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div className="font-semibold text-stone-900 text-sm mb-1">Clone Success</div>
-                <div className="text-xs text-stone-500">Find winning models</div>
-              </Link>
-              
-              <Link 
-                to={`/opportunity/${opp.id}/hub`}
-                className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-lg p-4 border border-amber-200 hover:border-amber-400 transition-colors group"
-              >
-                <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mb-3 group-hover:bg-amber-200 transition-colors">
-                  <Briefcase className="w-5 h-5 text-amber-600" />
-                </div>
-                <div className="font-semibold text-stone-900 text-sm mb-1">WorkHub</div>
-                <div className="text-xs text-stone-500">Plan & execute</div>
-              </Link>
-            </div>
           </div>
 
           {/* Experts Section */}
