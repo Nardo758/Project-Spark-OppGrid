@@ -166,13 +166,13 @@ async def validate_idea(
                 business_context=request.business_context,
                 session_id=request.session_id,
             ),
-            timeout=40.0
+            timeout=60.0
         )
         return ValidateIdeaResponse(**result)
     except asyncio.TimeoutError:
         return ValidateIdeaResponse(
             success=False,
-            error="Analysis timed out. Please try again.",
+            error="Analysis timed out after 60s. This can happen when AI services are under heavy load. Please try again.",
             idea_description=request.idea_description,
             recommendation="hybrid",
             online_score=50,
@@ -221,7 +221,7 @@ async def search_ideas(
                 filters=filters,
                 session_id=request.session_id,
             ),
-            timeout=15.0
+            timeout=60.0
         )
         return SearchIdeasResponse(**result)
     except asyncio.TimeoutError:
@@ -263,7 +263,7 @@ async def identify_location(
                 additional_params=request.additional_params,
                 session_id=request.session_id,
             ),
-            timeout=25.0
+            timeout=60.0
         )
         return IdentifyLocationResponse(**result)
     except asyncio.TimeoutError:
@@ -309,7 +309,7 @@ async def clone_success(
                 radius_miles=request.radius_miles,
                 session_id=request.session_id,
             ),
-            timeout=25.0
+            timeout=60.0
         )
         return CloneSuccessResponse(**result)
     except asyncio.TimeoutError:

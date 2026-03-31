@@ -366,8 +366,9 @@ export default function ReportLibrary({
       queryClient.invalidateQueries({ queryKey: ['my-reports'] })
       onReportGenerated?.(report)
     },
-    onError: () => {
+    onError: (err: Error) => {
       setGeneratingSlug(null)
+      setPurchaseError(err.message || 'Report generation failed. Please try again.')
     },
   })
 
@@ -410,11 +411,15 @@ export default function ReportLibrary({
         body: JSON.stringify(body),
       })
       
-      if (!res.ok) throw new Error('Analysis failed')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.detail || `Analysis failed (${res.status})`)
+      }
       const result = await res.json()
       setConsultantResult(result)
     } catch (e) {
       console.error(e)
+      setPurchaseError(e instanceof Error ? e.message : 'Analysis failed. Please try again.')
     } finally {
       setConsultantLoading(false)
     }
