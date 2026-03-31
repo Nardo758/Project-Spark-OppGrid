@@ -21,18 +21,34 @@ logger = logging.getLogger(__name__)
 
 # Meter event names - must match meters created in Stripe Dashboard
 METER_EVENTS = {
-    # By model family
+    # Anthropic
     "claude_opus": "ai_tokens_claude_opus",
     "claude_sonnet": "ai_tokens_claude_sonnet", 
     "claude_haiku": "ai_tokens_claude_haiku",
+    # OpenAI
     "gpt4": "ai_tokens_gpt4",
+    "gpt4o": "ai_tokens_gpt4o",
+    "gpt4o_mini": "ai_tokens_gpt4o_mini",
+    "o1": "ai_tokens_o1",
+    "o1_mini": "ai_tokens_o1_mini",
+    "o3_mini": "ai_tokens_o3_mini",
     "gpt35": "ai_tokens_gpt35",
+    # Google
+    "gemini_pro": "ai_tokens_gemini_pro",
+    "gemini_flash": "ai_tokens_gemini_flash",
+    # DeepSeek
+    "deepseek": "ai_tokens_deepseek",
+    "deepseek_r1": "ai_tokens_deepseek_r1",
+    # xAI
+    "grok": "ai_tokens_grok",
+    "grok3": "ai_tokens_grok3",
     # Generic fallback
     "tokens": "ai_tokens_generic",
 }
 
 # Model to meter mapping
 MODEL_TO_METER = {
+    # Anthropic
     "claude-opus-4-5": "claude_opus",
     "claude-3-opus-20240229": "claude_opus",
     "claude-sonnet-4-5": "claude_sonnet",
@@ -40,11 +56,27 @@ MODEL_TO_METER = {
     "claude-3-5-sonnet-20241022": "claude_sonnet",
     "claude-haiku-4-5": "claude_haiku",
     "claude-3-5-haiku-20241022": "claude_haiku",
+    # OpenAI
     "gpt-4": "gpt4",
     "gpt-4-turbo": "gpt4",
     "gpt-4-turbo-preview": "gpt4",
-    "gpt-4o": "gpt4",
+    "gpt-4o": "gpt4o",
+    "gpt-4o-mini": "gpt4o_mini",
+    "o1": "o1",
+    "o1-mini": "o1_mini",
+    "o3-mini": "o3_mini",
     "gpt-3.5-turbo": "gpt35",
+    # Google
+    "gemini-2.5-pro-preview-05-06": "gemini_pro",
+    "gemini-2.5-flash-preview-05-20": "gemini_flash",
+    "gemini-pro": "gemini_pro",
+    # DeepSeek
+    "deepseek-chat": "deepseek",
+    "deepseek-coder": "deepseek",
+    "deepseek-reasoner": "deepseek_r1",
+    # xAI
+    "grok-2-latest": "grok",
+    "grok-3-latest": "grok3",
 }
 
 
@@ -337,11 +369,28 @@ class StripeTokenBilling:
         results = []
         
         meters_to_create = [
+            # Anthropic
             ("Claude Opus Tokens", "ai_tokens_claude_opus"),
             ("Claude Sonnet Tokens", "ai_tokens_claude_sonnet"),
             ("Claude Haiku Tokens", "ai_tokens_claude_haiku"),
+            # OpenAI
             ("GPT-4 Tokens", "ai_tokens_gpt4"),
+            ("GPT-4o Tokens", "ai_tokens_gpt4o"),
+            ("GPT-4o Mini Tokens", "ai_tokens_gpt4o_mini"),
+            ("o1 Tokens", "ai_tokens_o1"),
+            ("o1 Mini Tokens", "ai_tokens_o1_mini"),
+            ("o3 Mini Tokens", "ai_tokens_o3_mini"),
             ("GPT-3.5 Tokens", "ai_tokens_gpt35"),
+            # Google
+            ("Gemini Pro Tokens", "ai_tokens_gemini_pro"),
+            ("Gemini Flash Tokens", "ai_tokens_gemini_flash"),
+            # DeepSeek
+            ("DeepSeek Tokens", "ai_tokens_deepseek"),
+            ("DeepSeek R1 Tokens", "ai_tokens_deepseek_r1"),
+            # xAI
+            ("Grok Tokens", "ai_tokens_grok"),
+            ("Grok 3 Tokens", "ai_tokens_grok3"),
+            # Generic
             ("Generic AI Tokens", "ai_tokens_generic"),
         ]
         
