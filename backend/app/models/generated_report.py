@@ -60,8 +60,8 @@ class GeneratedReport(Base):
     workspace_id = Column(Integer, ForeignKey("user_workspaces.id", ondelete="SET NULL"), nullable=True, index=True)
     template_id = Column(Integer, ForeignKey("report_templates.id", ondelete="SET NULL"), nullable=True, index=True)
     
-    report_type = Column(Enum(ReportType), nullable=False, index=True)
-    status = Column(Enum(ReportStatus), default=ReportStatus.PENDING, nullable=False)
+    report_type = Column(Enum(ReportType, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
+    status = Column(Enum(ReportStatus, values_callable=lambda x: [e.value for e in x]), default=ReportStatus.PENDING, nullable=False)
     
     title = Column(String(255), nullable=True)
     summary = Column(Text, nullable=True)
