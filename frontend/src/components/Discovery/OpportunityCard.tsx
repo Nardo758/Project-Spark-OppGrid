@@ -1,12 +1,14 @@
 /**
  * OpportunityCard Component - Matches existing OppGrid card design
  * 
- * Now with optional 4 P's indicator for market intelligence preview.
+ * Now with optional 4 P's indicator for market intelligence preview
+ * and JediRe market badges (Hot Market, Buy Window, etc.)
  */
 
 import { FileText, Bookmark } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import FourPsIndicator from '../FourPs/FourPsIndicator'
+import MarketBadges, { type MarketBadge, type CompositeMetrics } from './MarketBadges'
 
 interface FourPsScores {
   product: number
@@ -30,8 +32,14 @@ interface OpportunityCardProps {
     user_saved?: boolean
     ai_generated_title?: string
     ai_summary?: string
+    // Location for badge fetching
+    city?: string
+    state?: string
     // Optional pre-loaded 4P's data
     four_ps_scores?: FourPsScores
+    // Optional pre-loaded market badges
+    market_badges?: MarketBadge[]
+    composite_metrics?: CompositeMetrics
   }
   userTier?: string
   onValidate?: (id: number) => void
@@ -45,6 +53,12 @@ interface OpportunityCardProps {
   showFourPs?: boolean
   /** Pre-loaded 4P's scores (for batch loading) */
   fourPsScores?: FourPsScores
+  /** Show JediRe market badges */
+  showMarketBadges?: boolean
+  /** Pre-loaded market badges */
+  marketBadges?: MarketBadge[]
+  /** Pre-loaded composite metrics (badges computed locally) */
+  compositeMetrics?: CompositeMetrics
 }
 
 export default function OpportunityCard({
@@ -58,12 +72,19 @@ export default function OpportunityCard({
   isSaved: externalIsSaved,
   className = '',
   showFourPs = false,
-  fourPsScores
+  fourPsScores,
+  showMarketBadges = true,
+  marketBadges,
+  compositeMetrics
 }: OpportunityCardProps) {
   const [isValidated, setIsValidated] = useState(externalIsValidated || opportunity.user_validated || false)
   const [isSaved, setIsSaved] = useState(externalIsSaved || opportunity.user_saved || false)
   const [fourPs, setFourPs] = useState<FourPsScores | null>(fourPsScores || opportunity.four_ps_scores || null)
   const [fourPsLoading, setFourPsLoading] = useState(false)
+  
+  // Market badges from props or opportunity
+  const badges = marketBadges || opportunity.market_badges
+  const metrics = compositeMetrics || opportunity.composite_metrics
 
   // Fetch 4P's data if showFourPs is true and we don't have it
   useEffect(() => {
@@ -144,6 +165,20 @@ export default function OpportunityCard({
           <div className="text-2xl font-bold leading-none">{opportunity.feasibility_score || 0}</div>
         </div>
       </div>
+
+      {/* JediRe Market Intelligence Badges */}
+      {showMarketBadges && (badges || metrics || (opportunity.city && opportunity.state)) && (
+        <div className="mb-3">
+          <MarketBadges
+            city={opportunity.city}
+            state={opportunity.state}
+            badges={badges}
+            metrics={metrics}
+            compact={false}
+            maxBadges={3}
+          />
+        </div>
+      )}
 
       {/* Title */}
       <h3 className="font-semibold text-stone-900 text-lg mb-1 group-hover:text-violet-600 transition-colors">

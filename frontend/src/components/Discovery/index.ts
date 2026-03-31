@@ -4,11 +4,12 @@
  * Export all Discovery Feed components and types
  */
 
-export { OpportunityCard } from './OpportunityCard';
-export { OpportunityCardSkeleton } from './OpportunityCardSkeleton';
-export { OpportunityGrid } from './OpportunityGrid';
-export { FilterBar } from './FilterBar';
-export { Pagination } from './Pagination';
+export { default as OpportunityCard } from './OpportunityCard';
+export { default as OpportunityCardSkeleton } from './OpportunityCardSkeleton';
+export { default as OpportunityGrid } from './OpportunityGrid';
+export { default as FilterBar } from './FilterBar';
+export { default as Pagination } from './Pagination';
+export { default as MarketBadges, computeBadges } from './MarketBadges';
 
 export type {
   Opportunity,
@@ -18,3 +19,5 @@ export type {
   UserTier,
   FreshnessBadge,
 } from './types';
+
+export type { MarketBadge, CompositeMetrics } from './MarketBadges';

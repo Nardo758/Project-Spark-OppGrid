@@ -369,6 +369,197 @@ class JediREClient:
             logger.error(f"[JediRE] Error fetching growth indices: {e}")
             return None
     
+    async def get_composite_traffic_metrics(
+        self,
+        city: str,
+        state: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Fetch composite traffic metrics for market intelligence badges.
+        
+        Returns:
+        - surge_index: Traffic Surge Index (daily real-time vs baseline)
+        - digital_physical_gap: Search momentum minus physical traffic YoY
+        - tpi: Traffic Position Index (percentile 0-100)
+        - tvs: Traffic Velocity Score (momentum/acceleration 0-100)
+        
+        Badge rules:
+        - surge_index > 20 → "🔥 Hot Market"
+        - digital_physical_gap > 0 → "📈 Buy Window"
+        - tpi >= 70 → Premium location
+        - tvs > 60 → "⚡ Accelerating"
+        """
+        cache_key = f"composite_traffic:{city.lower()}:{state.upper()}"
+        cached = _get_cached(cache_key)
+        if cached:
+            return cached
+        
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/api/v1/oppgrid/composite-traffic",
+                    params={"city": city, "state": state},
+                    headers=self._get_headers(),
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('success'):
+                        result = data.get('data', {})
+                        _set_cached(cache_key, result)
+                        return result
+                
+                # Fallback: compute from growth indices if endpoint doesn't exist
+                if response.status_code == 404:
+                    return await self._compute_composite_metrics_fallback(city, state)
+                    
+                return None
+                    
+        except Exception as e:
+            logger.error(f"[JediRE] Error fetching composite traffic metrics: {e}")
+            # Try fallback computation
+            return await self._compute_composite_metrics_fallback(city, state)
+    
+    async def _compute_composite_metrics_fallback(
+        self,
+        city: str,
+        state: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Compute composite metrics locally from available data.
+        Used when JediRE doesn't have the dedicated endpoint.
+        """
+        try:
+            # Get growth indices as base
+            growth = await self.get_growth_indices(city, state)
+            economics = await self.get_market_economics(city, state)
+            
+            if not growth and not economics:
+                return None
+            
+            tgi = growth.get('traffic_growth_index', 0) if growth else 0
+            sgi = growth.get('search_growth_index', 0) if growth else 0
+            vacancy = economics.get('vacancy_rate', 5) if economics else 5
+            rent_trend = economics.get('rent_trend', 'stable') if economics else 'stable'
+            
+            # Compute derived metrics
+            # Surge Index: amplified version of TGI for daily signals
+            surge_index = tgi * 1.2  # Amplify for badge threshold
+            
+            # Digital-Physical Gap: search demand vs physical traffic
+            digital_physical_gap = sgi - tgi
+            
+            # TPI: Traffic Position Index (percentile based on growth)
+            # Map TGI to 0-100 percentile (rough approximation)
+            tpi = min(100, max(0, 50 + (tgi * 2)))
+            
+            # TVS: Traffic Velocity Score (momentum)
+            # Higher if both TGI and SGI are positive and trending up
+            base_tvs = 50
+            if tgi > 0:
+                base_tvs += min(25, tgi)
+            if sgi > 0:
+                base_tvs += min(25, sgi)
+            if rent_trend == 'rising':
+                base_tvs += 10
+            if vacancy < 4:
+                base_tvs += 10
+            tvs = min(100, max(0, base_tvs))
+            
+            result = {
+                'surge_index': round(surge_index, 2),
+                'digital_physical_gap': round(digital_physical_gap, 2),
+                'tpi': round(tpi),
+                'tvs': round(tvs),
+                'computed_locally': True,
+                'source_metrics': {
+                    'traffic_growth_index': tgi,
+                    'search_growth_index': sgi,
+                    'vacancy_rate': vacancy,
+                    'rent_trend': rent_trend
+                }
+            }
+            
+            _set_cached(f"composite_traffic:{city.lower()}:{state.upper()}", result)
+            return result
+            
+        except Exception as e:
+            logger.error(f"[JediRE] Error computing composite metrics fallback: {e}")
+            return None
+    
+    def get_market_badges(self, composite_metrics: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Generate market intelligence badges from composite metrics.
+        
+        Returns list of badges with:
+        - id: badge identifier
+        - emoji: display emoji
+        - label: short label
+        - description: tooltip text
+        - color: tailwind color class
+        """
+        badges = []
+        
+        if not composite_metrics:
+            return badges
+        
+        surge = composite_metrics.get('surge_index', 0)
+        gap = composite_metrics.get('digital_physical_gap', 0)
+        tpi = composite_metrics.get('tpi', 50)
+        tvs = composite_metrics.get('tvs', 50)
+        
+        # 🔥 Hot Market: surge_index > 20%
+        if surge > 20:
+            badges.append({
+                'id': 'hot_market',
+                'emoji': '🔥',
+                'label': 'Hot Market',
+                'description': f'Traffic surge {surge:.0f}% above baseline - demand outpacing supply',
+                'color': 'bg-orange-100 text-orange-700 border-orange-200'
+            })
+        
+        # 📈 Buy Window: digital demand exceeds physical
+        if gap > 5:
+            badges.append({
+                'id': 'buy_window',
+                'emoji': '📈',
+                'label': 'Buy Window',
+                'description': f'Digital demand +{gap:.0f}% ahead of physical - opportunity to position before growth materializes',
+                'color': 'bg-emerald-100 text-emerald-700 border-emerald-200'
+            })
+        
+        # 🏆 Premium Location: TPI >= 70
+        if tpi >= 70:
+            badges.append({
+                'id': 'premium_location',
+                'emoji': '🏆',
+                'label': f'Top {100-tpi}%',
+                'description': f'Traffic Position Index {tpi}/100 - premium location tier',
+                'color': 'bg-amber-100 text-amber-700 border-amber-200'
+            })
+        
+        # ⚡ Accelerating: TVS > 60
+        if tvs > 60:
+            badges.append({
+                'id': 'accelerating',
+                'emoji': '⚡',
+                'label': 'Accelerating',
+                'description': f'Traffic velocity score {tvs}/100 - growth momentum increasing',
+                'color': 'bg-violet-100 text-violet-700 border-violet-200'
+            })
+        
+        # 🐢 Decelerating: TVS < 40 (warning badge)
+        if tvs < 40:
+            badges.append({
+                'id': 'decelerating',
+                'emoji': '🐢',
+                'label': 'Slowing',
+                'description': f'Traffic velocity score {tvs}/100 - growth momentum declining',
+                'color': 'bg-stone-100 text-stone-600 border-stone-200'
+            })
+        
+        return badges
+    
     def get_growth_indices_sync(
         self, 
         city: str, 
@@ -728,3 +919,21 @@ def get_full_market_intelligence_sync(
     """Synchronous wrapper for get_full_market_intelligence."""
     client = get_jedire_client()
     return _run_async(client.get_full_market_intelligence(city, state, business_type))
+
+
+def get_composite_traffic_metrics_sync(city: str, state: str) -> Optional[Dict[str, Any]]:
+    """Synchronous wrapper for get_composite_traffic_metrics."""
+    client = get_jedire_client()
+    return _run_async(client.get_composite_traffic_metrics(city, state))
+
+
+def get_market_badges_sync(city: str, state: str) -> List[Dict[str, str]]:
+    """
+    Get market intelligence badges for a city.
+    Combines fetching composite metrics and generating badges.
+    """
+    client = get_jedire_client()
+    metrics = _run_async(client.get_composite_traffic_metrics(city, state))
+    if not metrics:
+        return []
+    return client.get_market_badges(metrics)
