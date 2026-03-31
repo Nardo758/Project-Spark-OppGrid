@@ -923,9 +923,46 @@ async def trigger_report_generation(
             "target_audience": report_context.get("targetMarket", ""),
         }
         
+        # Fetch JediRE market intelligence data if available
+        demand_signals = None
+        market_economics = None
+        try:
+            from app.services.jedire_client import get_jedire_client
+            import asyncio
+            
+            # Parse city and state from location
+            location = report_context.get("location", "")
+            city, state = "", ""
+            if "," in location:
+                parts = location.split(",")
+                city = parts[0].strip()
+                state = parts[1].strip() if len(parts) > 1 else ""
+            else:
+                city = location
+            
+            if city and state:
+                client = get_jedire_client()
+                # Run async calls
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    demand_signals = loop.run_until_complete(client.get_demand_signals(city, state))
+                    market_economics = loop.run_until_complete(client.get_market_economics(city, state))
+                finally:
+                    loop.close()
+                    
+                if demand_signals or market_economics:
+                    logger.info(f"[JediRE] Enriched report with market data for {city}, {state}")
+        except Exception as jedire_err:
+            logger.warning(f"[JediRE] Could not fetch market data: {jedire_err}")
+        
         report_content = ""
         if report_type in ("market_analysis",):
-            report_content = generator.generate_market_analysis_report(opportunity_context)
+            report_content = generator.generate_market_analysis_report(
+                opportunity_context,
+                demand_signals=demand_signals,
+                market_economics=market_economics
+            )
         elif report_type in ("strategic", "strategic_assessment"):
             report_content = generator.generate_strategic_assessment(opportunity_context)
         elif report_type in ("pestle", "pestle_analysis"):

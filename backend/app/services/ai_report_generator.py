@@ -3,11 +3,21 @@ AI Report Generator Service
 
 Uses Anthropic Claude to generate intelligent, opportunity-specific report content.
 Leverages Replit AI Integrations for Anthropic access (no API key required).
+
+Integrates with JediRE for demand signals and market economics from Apartment Locator AI.
 """
 import os
 import logging
 from typing import Dict, Any, Optional, List
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
+
+# Import JediRE client for demand signals
+try:
+    from app.services.jedire_client import get_jedire_client
+    JEDIRE_AVAILABLE = True
+except ImportError:
+    JEDIRE_AVAILABLE = False
+    get_jedire_client = None
 
 logger = logging.getLogger(__name__)
 
@@ -134,22 +144,57 @@ CRITICAL FORMATTING REQUIREMENTS - Follow these exactly:
     def __init__(self):
         self.client = get_anthropic_client()
     
+    def _generate_report_id(self, report_type: str) -> str:
+        """Generate a unique, trackable report ID."""
+        import uuid
+        from datetime import datetime
+        
+        # Format: OG-{TYPE_ABBREV}-{YYYYMMDD}-{SHORT_UUID}
+        type_abbrevs = {
+            "feasibility_study": "FS",
+            "feasibility": "FS",
+            "market_analysis": "MA",
+            "strategic_assessment": "SA",
+            "strategic": "SA",
+            "pestle_analysis": "PE",
+            "pestle": "PE",
+            "business_plan": "BP",
+            "financial_model": "FM",
+            "financial": "FM",
+            "pitch_deck": "PD",
+            "executive_summary": "ES",
+            "problem_analysis": "PA",
+        }
+        abbrev = type_abbrevs.get(report_type.lower().replace(" ", "_"), "RPT")
+        date_str = datetime.utcnow().strftime("%Y%m%d")
+        short_uuid = uuid.uuid4().hex[:6].upper()
+        
+        return f"OG-{abbrev}-{date_str}-{short_uuid}"
+    
     def _format_institutional_report(
         self, 
         content: str, 
         report_type: str,
-        report_id: str = "OG-AUTO"
+        report_id: str = None
     ) -> str:
         """Wrap report content with institutional formatting."""
         from datetime import datetime
         
-        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-        year = datetime.utcnow().year
+        now = datetime.utcnow()
+        timestamp = now.strftime("%Y-%m-%d %H:%M UTC")
+        date_formatted = now.strftime("%B %d, %Y")  # e.g., "March 30, 2026"
+        year = now.year
         
-        # Create report type header
+        # Generate report ID if not provided
+        if not report_id:
+            report_id = self._generate_report_id(report_type)
+        
+        # Create report type header with prominent date
         report_header = f"""
 {self.COMPANY_HEADER}
 REPORT TYPE: {report_type.upper().replace('_', ' ')}
+DATE: {date_formatted}
+REPORT ID: {report_id}
 ────────────────────────────────────────────────────────────────────────────────
 """
         
@@ -271,18 +316,22 @@ Target Audience: {opportunity.get('target_audience', '')}
         self, 
         opportunity: Dict[str, Any], 
         demographics: Optional[Dict[str, Any]] = None,
-        competitors: Optional[List[Dict[str, Any]]] = None
+        competitors: Optional[List[Dict[str, Any]]] = None,
+        demand_signals: Optional[Dict[str, Any]] = None,
+        market_economics: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate market insights for Layer 2 report with demographics and competitive data."""
+        """Generate market insights for Layer 2 report with demographics, competitive, and demand data."""
         system = """You are a market research analyst providing deep-dive market insights.
 Structure your analysis with:
 1. **Market Overview** - Size, growth trajectory, key dynamics
-2. **Demographic Fit** - How the local demographics align with the opportunity
-3. **Competitive Landscape** - Key players, market gaps, positioning opportunities
-4. **Trade Area Analysis** - Geographic considerations and optimal service areas
-5. **Key Success Factors** - What it takes to win in this market
+2. **Consumer Demand Intelligence** - What residents want (from demand signals data)
+3. **Demographic Fit** - How the local demographics align with the opportunity
+4. **Competitive Landscape** - Key players, market gaps, positioning opportunities
+5. **Trade Area Analysis** - Geographic considerations and optimal service areas
+6. **Key Success Factors** - What it takes to win in this market
 
-Use data points where available. Be specific about local market conditions."""
+Use data points where available. Be specific about local market conditions.
+When demand signal data is available, emphasize what local residents are actively seeking."""
         
         demo_info = ""
         if demographics:
@@ -301,6 +350,32 @@ Demographics Data:
             for i, comp in enumerate(competitors[:10], 1):
                 comp_info += f"- {comp.get('name', 'Unknown')}: Rating {comp.get('rating', 'N/A')}, {comp.get('reviews', 0)} reviews\n"
         
+        # Add demand signals from JediRE (Apartment Locator AI data)
+        demand_info = ""
+        if demand_signals and demand_signals.get('signals'):
+            demand_info = "\nConsumer Demand Signals (from local renter preferences):\n"
+            for signal in demand_signals['signals'][:10]:
+                trend_indicator = "↑" if signal.get('trend') == 'rising' else "→" if signal.get('trend') == 'stable' else "↓"
+                demand_info += f"- {signal['amenity_type'].replace('_', ' ').title()}: {signal['demand_pct']}% demand {trend_indicator}\n"
+            demand_info += f"(Based on {demand_signals.get('count', 0)} data points)\n"
+        
+        # Add market economics from JediRE
+        economics_info = ""
+        if market_economics:
+            economics_info = "\nMarket Economics (Rental Market Intelligence):\n"
+            if market_economics.get('median_rent'):
+                economics_info += f"- Median Rent: ${market_economics['median_rent']}\n"
+            if market_economics.get('avg_rent_1br'):
+                economics_info += f"- Avg 1BR: ${market_economics['avg_rent_1br']}\n"
+            if market_economics.get('avg_rent_2br'):
+                economics_info += f"- Avg 2BR: ${market_economics['avg_rent_2br']}\n"
+            if market_economics.get('spending_power_index'):
+                economics_info += f"- Spending Power Index: {market_economics['spending_power_index']}/100\n"
+            if market_economics.get('vacancy_rate'):
+                economics_info += f"- Vacancy Rate: {market_economics['vacancy_rate']}%\n"
+            if market_economics.get('rent_trend'):
+                economics_info += f"- Rent Trend: {market_economics['rent_trend']}\n"
+        
         prompt = f"""Provide market insights for this opportunity:
 
 Title: {opportunity.get('title', 'Unknown')}
@@ -310,6 +385,8 @@ Description: {opportunity.get('description', '')}
 Market Size: {opportunity.get('market_size', 'Under analysis')}
 {demo_info}
 {comp_info}
+{demand_info}
+{economics_info}
 """
         return self._generate(system, prompt)
     
@@ -830,9 +907,11 @@ Target Audience: {opportunity.get('target_audience', '')}
     def generate_market_analysis_report(
         self, 
         opportunity: Dict[str, Any],
-        industry: Optional[str] = None
+        industry: Optional[str] = None,
+        demand_signals: Optional[Dict[str, Any]] = None,
+        market_economics: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Generate comprehensive market analysis report."""
+        """Generate comprehensive market analysis report with JediRE data integration."""
         system = f"""You are a senior market research analyst at OppGrid creating institutional-grade market analysis reports.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
@@ -897,9 +976,39 @@ Structure your report with these numbered sections:
    • Entry Timing Recommendation
    • Strategic Positioning Options
 
-Include specific data points and statistics. Reference OppGrid analysis methodology."""
+Include specific data points and statistics. Reference OppGrid analysis methodology.
+When consumer demand data is provided, incorporate it into the Consumer Analysis section to show real local demand patterns."""
         
         industry_focus = industry or opportunity.get('category', 'Unknown')
+        
+        # Build demand signals info from JediRE
+        demand_info = ""
+        if demand_signals and demand_signals.get('signals'):
+            demand_info = "\n\nCONSUMER DEMAND INTELLIGENCE (Local Renter Preference Data):\n"
+            for signal in demand_signals['signals'][:12]:
+                trend = signal.get('trend', 'stable')
+                trend_icon = "↑ rising" if trend == 'rising' else "↓ declining" if trend == 'declining' else "→ stable"
+                demand_info += f"• {signal['amenity_type'].replace('_', ' ').title()}: {signal['demand_pct']}% of residents prioritize this ({trend_icon})\n"
+            demand_info += f"\n(Data from {demand_signals.get('count', 0)} local preference signals)"
+        
+        # Build market economics info from JediRE
+        economics_info = ""
+        if market_economics:
+            economics_info = "\n\nMARKET ECONOMICS (Rental Market Intelligence):\n"
+            if market_economics.get('median_rent'):
+                economics_info += f"• Median Rent: ${market_economics['median_rent']}/month\n"
+            if market_economics.get('avg_rent_1br'):
+                economics_info += f"• Average 1BR Rent: ${market_economics['avg_rent_1br']}/month\n"
+            if market_economics.get('avg_rent_2br'):
+                economics_info += f"• Average 2BR Rent: ${market_economics['avg_rent_2br']}/month\n"
+            if market_economics.get('spending_power_index'):
+                spi = market_economics['spending_power_index']
+                spi_label = "High" if spi >= 70 else "Moderate" if spi >= 40 else "Lower"
+                economics_info += f"• Spending Power Index: {spi}/100 ({spi_label})\n"
+            if market_economics.get('vacancy_rate'):
+                economics_info += f"• Market Vacancy Rate: {market_economics['vacancy_rate']}%\n"
+            if market_economics.get('rent_trend'):
+                economics_info += f"• Rent Trend: {market_economics['rent_trend'].title()}\n"
         
         prompt = f"""Create a comprehensive market analysis for:
 
@@ -909,6 +1018,8 @@ Location: {opportunity.get('city', '')}, {opportunity.get('region', '')}
 Description: {opportunity.get('description', '')}
 Market Size Estimate: {opportunity.get('market_size', 'Under analysis')}
 Target Audience: {opportunity.get('target_audience', '')}
+{demand_info}
+{economics_info}
 """
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Market Analysis")
