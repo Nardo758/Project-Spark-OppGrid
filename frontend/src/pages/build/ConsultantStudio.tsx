@@ -255,6 +255,7 @@ export default function ConsultantStudio() {
 
   const [reportError, setReportError] = useState<string | null>(null)
   const [reportSuccess, setReportSuccess] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
 
   const saveReportMutation = useMutation({
     mutationFn: async ({
@@ -311,6 +312,55 @@ export default function ConsultantStudio() {
         {rec.charAt(0).toUpperCase() + rec.slice(1)}
       </span>
     )
+  }
+
+  const handleExportPdf = async (data: Record<string, any>, title: string, reportType: string) => {
+    setExportingPdf(true)
+    try {
+      // Convert JSON data to readable HTML for the PDF
+      const htmlContent = jsonToHtml(data)
+      const res = await fetch('/api/v1/reports/export/pdf', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ content: htmlContent, title, report_type: reportType }),
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `OppGrid - ${title.slice(0, 60)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      setReportError('Failed to export PDF. Please try again.')
+    } finally {
+      setExportingPdf(false)
+    }
+  }
+
+  const jsonToHtml = (data: Record<string, any>): string => {
+    const sections: string[] = []
+    for (const [key, value] of Object.entries(data)) {
+      if (value === null || value === undefined) continue
+      const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        sections.push(`<p><strong>${label}:</strong> ${String(value)}</p>`)
+      } else if (Array.isArray(value)) {
+        const items = value.map((v) =>
+          typeof v === 'object' ? `<li>${Object.entries(v).map(([k, val]) => `<strong>${k}:</strong> ${val}`).join(' | ')}</li>` : `<li>${v}</li>`
+        ).join('')
+        sections.push(`<h3>${label}</h3><ul>${items}</ul>`)
+      } else if (typeof value === 'object') {
+        const rows = Object.entries(value).map(([k, v]) =>
+          `<tr><td><strong>${k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</strong></td><td>${typeof v === 'object' ? JSON.stringify(v) : v}</td></tr>`
+        ).join('')
+        sections.push(`<h3>${label}</h3><table><tbody>${rows}</tbody></table>`)
+      }
+    }
+    return sections.join('\n')
   }
 
   const renderValidateTab = () => (
@@ -431,9 +481,13 @@ export default function ConsultantStudio() {
               <FileText className="w-4 h-4" />
               {saveReportMutation.isPending ? 'Generating...' : 'Save as Report'}
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium">
-              <Download className="w-4 h-4" />
-              Export PDF
+            <button
+              onClick={() => handleExportPdf(validateResult!, `Idea Validation: ${ideaDescription.slice(0, 50)}`, 'Feasibility Study')}
+              disabled={exportingPdf}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
+            >
+              {exportingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {exportingPdf ? 'Exporting...' : 'Export PDF'}
             </button>
           </div>
 
