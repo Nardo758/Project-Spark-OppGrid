@@ -764,11 +764,11 @@ export default function OpportunityDetail() {
             </div>
           </div>
 
-          {/* Pain Points - Empathize */}
+          {/* Pain Points - Empathize (FREE: 2, PRO: all) */}
           <div className="mb-8">
             <h3 className="text-lg font-bold text-stone-900 mb-4">Top Pain Points</h3>
             <div className="space-y-3">
-              {painPoints.map((point, idx) => (
+              {painPoints.slice(0, hasPro ? painPoints.length : 2).map((point, idx) => (
                 <div 
                   key={idx} 
                   className={`bg-white rounded-lg p-4 border-l-4 ${
@@ -785,6 +785,17 @@ export default function OpportunityDetail() {
                   </span>
                 </div>
               ))}
+              
+              {/* Locked pain points teaser */}
+              {!hasPro && painPoints.length > 2 && (
+                <button
+                  onClick={() => showUpgradeModal('opportunity', opp.title)}
+                  className="w-full bg-stone-50 rounded-lg p-4 border border-stone-200 border-dashed flex items-center justify-center gap-2 text-stone-500 hover:bg-stone-100 hover:text-stone-700 transition-colors"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span className="text-sm font-medium">+{painPoints.length - 2} more pain points</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -891,22 +902,89 @@ export default function OpportunityDetail() {
                   <h3 className="text-lg font-bold text-stone-900 mb-4">Demand Signals</h3>
                   <div className="grid grid-cols-3 gap-6">
                     <div>
-                      <div className="text-sm text-stone-500">Search Volume</div>
-                      <div className="text-3xl font-bold text-stone-900">127K/mo</div>
+                      <div className="text-sm text-stone-500">Search Interest</div>
+                      <div className="text-3xl font-bold text-stone-900">
+                        {intel?.product?.google_trends_interest 
+                          ? `${intel.product.google_trends_interest}/100`
+                          : `${opp.validation_count || 0} signals`
+                        }
+                      </div>
                     </div>
                     <div>
-                      <div className="text-sm text-stone-500">YoY Growth</div>
-                      <div className="text-3xl font-bold text-emerald-600">+{growthRate + 20}%</div>
+                      <div className="text-sm text-stone-500">Trend Direction</div>
+                      <div className={`text-3xl font-bold ${
+                        intel?.product?.google_trends_direction === 'rising' ? 'text-emerald-600' :
+                        intel?.product?.google_trends_direction === 'declining' ? 'text-red-600' : 'text-stone-900'
+                      }`}>
+                        {intel?.product?.google_trends_direction 
+                          ? intel.product.google_trends_direction.charAt(0).toUpperCase() + intel.product.google_trends_direction.slice(1)
+                          : `+${growthRate}%`
+                        }
+                      </div>
                     </div>
                     <div>
-                      <div className="text-sm text-stone-500">Social Mentions</div>
-                      <div className="text-3xl font-bold text-stone-900">89K/mo</div>
+                      <div className="text-sm text-stone-500">Pain Intensity</div>
+                      <div className="text-3xl font-bold text-orange-600">
+                        {intel?.product?.pain_intensity || opp.ai_pain_intensity || opp.severity || 'N/A'}/10
+                      </div>
                     </div>
                   </div>
+                  
+                  {/* Growth indices if available */}
+                  {(intel?.place?.traffic_growth_index || intel?.place?.search_growth_index) && (
+                    <div className="mt-4 pt-4 border-t border-stone-200">
+                      <h4 className="text-sm font-semibold text-stone-700 mb-3">Leading Indicators</h4>
+                      <div className="grid grid-cols-2 gap-4">
+                        {intel?.place?.traffic_growth_index && (
+                          <div className="bg-blue-50 rounded-lg p-3">
+                            <div className="text-xs text-blue-600 mb-1">Traffic Growth Index</div>
+                            <div className={`text-xl font-bold ${intel.place.traffic_growth_index > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {intel.place.traffic_growth_index > 0 ? '+' : ''}{intel.place.traffic_growth_index.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-stone-500">Real-time vs historical traffic</div>
+                          </div>
+                        )}
+                        {intel?.place?.search_growth_index && (
+                          <div className="bg-purple-50 rounded-lg p-3">
+                            <div className="text-xs text-purple-600 mb-1">Search Growth Index</div>
+                            <div className={`text-xl font-bold ${intel.place.search_growth_index > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {intel.place.search_growth_index > 0 ? '+' : ''}{intel.place.search_growth_index.toFixed(1)}%
+                            </div>
+                            <div className="text-xs text-stone-500">Online interest trend</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-white rounded-lg border-2 border-stone-200 p-6">
                   <h3 className="text-lg font-bold text-stone-900 mb-4">Competitive Landscape</h3>
+                  
+                  {/* Real competitor stats if available */}
+                  {intel?.promotion && (
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                      <div className="bg-stone-50 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-stone-900">
+                          {intel.promotion.competitor_count || '—'}
+                        </div>
+                        <div className="text-xs text-stone-500">Competitors</div>
+                      </div>
+                      <div className="bg-stone-50 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-stone-900 capitalize">
+                          {intel.promotion.competition_level || '—'}
+                        </div>
+                        <div className="text-xs text-stone-500">Competition Level</div>
+                      </div>
+                      <div className="bg-stone-50 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-amber-600">
+                          {intel.promotion.avg_competitor_rating ? `${intel.promotion.avg_competitor_rating.toFixed(1)}★` : '—'}
+                        </div>
+                        <div className="text-xs text-stone-500">Avg Rating</div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div className="space-y-3">
                     {(opp.ai_competitive_advantages || ['Market leader gap exists', 'Fragmented competitor landscape', 'No dominant solution']).map((comp, idx) => (
                       <div key={idx} className="bg-stone-50 rounded-lg p-4">
