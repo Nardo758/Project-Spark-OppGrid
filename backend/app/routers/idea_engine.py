@@ -7,14 +7,22 @@ This router handles:
 - Payment processing for validation service
 """
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from typing import Optional, List
+from sqlalchemy.orm import Session
 import os
 import json
 import logging
 
-from app.services.llm_ai_engine import get_anthropic_client
+from app.db.database import get_db
+from app.models.user import User
+from app.core.dependencies import get_current_user_optional
+from app.services.unified_ai_service import (
+    get_ai_service,
+    RateLimitError,
+    QuotaExceededError
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -147,7 +155,11 @@ Scoring guidelines:
 
 
 @router.post("/generate", response_model=GeneratedIdea)
-async def generate_idea(input_data: IdeaInput):
+async def generate_idea(
+    input_data: IdeaInput,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_current_user_optional)
+):
     """
     FREE: Generate and refine a business idea using AI.
     Returns a structured opportunity with preview insights.
@@ -159,6 +171,9 @@ async def generate_idea(input_data: IdeaInput):
         )
     
     try:
+        # Get AI service with user context
+        ai = get_ai_service(db, user=current_user)
+        
         user_prompt = f"""User's business idea or problem:
 {input_data.idea}
 
@@ -166,18 +181,16 @@ async def generate_idea(input_data: IdeaInput):
 
 Analyze and refine this into a structured business opportunity."""
 
-        client = get_anthropic_client()
-        if not client:
-            raise HTTPException(status_code=503, detail="AI service not available")
-        
-        response = client.messages.create(
-            model="claude-haiku-4-5",
-            max_tokens=1024,
-            system=IDEA_GENERATION_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}]
+        # Use haiku for fast, cheap idea generation
+        result = await ai.complete(
+            prompt=user_prompt,
+            system_prompt=IDEA_GENERATION_PROMPT,
+            task_type="simple_classification",
+            model_id="claude-haiku-4",  # Fast, cheap model for idea gen
+            max_tokens=1024
         )
         
-        response_text = response.content[0].text
+        response_text = result["content"]
         start_idx = response_text.find('{')
         end_idx = response_text.rfind('}') + 1
         
@@ -207,6 +220,10 @@ Analyze and refine this into a structured business opportunity."""
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to process AI response"
         )
+    except RateLimitError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except QuotaExceededError as e:
+        raise HTTPException(status_code=402, detail=str(e))
     except Exception as e:
         logger.error(f"Idea generation error: {e}")
         raise HTTPException(

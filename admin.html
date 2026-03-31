@@ -1841,6 +1841,7 @@
                     </div>
                 </div>
             </section>
+
             <!-- AI Models Section -->
             <section id="section-ai-models" class="hidden">
                 <div class="page-header">
@@ -1981,7 +1982,6 @@
                     </table>
                 </div>
             </section>
-
         </main>
     </div>
 
@@ -2073,6 +2073,7 @@
                 case 'scraper': loadWebhookCalendar(); break;
                 case 'command-center': loadCommandCenter(); break;
                 case 'google-scraping': loadGoogleScraping(); break;
+                case 'ai-models': loadAIModels(); loadPricingTiers(); loadStripeMeters(); break;
             }
         }
 
@@ -5225,6 +5226,545 @@
         document.getElementById('gs-job-status-filter')?.addEventListener('change', () => loadGoogleScrapingJobs());
 
         // ===== END GOOGLE SCRAPING FUNCTIONS =====
+
+        // ===== AI MODELS FUNCTIONS =====
+        
+        let allModels = [];
+
+        async function loadAIModels() {
+            try {
+                const showDisabled = document.getElementById('show-disabled')?.checked || false;
+                const response = await fetchWithAuth(`${API_BASE_URL}/admin/models?include_disabled=${showDisabled}`);
+                const data = await response.json();
+                
+                allModels = data.models || [];
+                
+                // Update stats
+                document.getElementById('total-models').textContent = data.total || allModels.length;
+                document.getElementById('active-models').textContent = allModels.filter(m => m.is_enabled).length;
+                document.getElementById('total-providers').textContent = (data.providers || []).length;
+                
+                renderModelsTable(allModels);
+            } catch (error) {
+                console.error('Failed to load AI models:', error);
+                document.getElementById('ai-models-table-body').innerHTML = 
+                    '<tr><td colspan="8" class="error">Failed to load models</td></tr>';
+            }
+        }
+
+        function filterModelsByProvider() {
+            const provider = document.getElementById('provider-filter').value;
+            const filtered = provider ? allModels.filter(m => m.provider === provider) : allModels;
+            renderModelsTable(filtered);
+        }
+
+        function renderModelsTable(models) {
+            const tbody = document.getElementById('ai-models-table-body');
+            
+            if (!models.length) {
+                tbody.innerHTML = '<tr><td colspan="8">No models found</td></tr>';
+                return;
+            }
+
+            const providerColors = {
+                anthropic: 'var(--amber-500)',
+                openai: 'var(--green-500)',
+                google: 'var(--blue-500)',
+                deepseek: 'var(--violet-600)',
+                xai: 'var(--red-500)'
+            };
+
+            tbody.innerHTML = models.map(model => `
+                <tr>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            ${model.is_default ? '<span style="color: var(--amber-500);" title="Default">★</span>' : ''}
+                            <div>
+                                <strong>${model.display_name}</strong>
+                                <div style="font-size: 12px; color: var(--stone-500);">${model.model_id}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;">
+                            <span style="width: 8px; height: 8px; border-radius: 50%; background: ${providerColors[model.provider] || 'var(--stone-400)'}"></span>
+                            ${model.provider}
+                        </span>
+                    </td>
+                    <td>$${parseFloat(model.cost_per_million_input).toFixed(2)} / $${parseFloat(model.cost_per_million_output).toFixed(2)}</td>
+                    <td>${(model.context_window / 1000).toFixed(0)}K</td>
+                    <td><span class="badge">${model.min_tier || 'free'}</span></td>
+                    <td>${model.priority}</td>
+                    <td>
+                        <span class="status-badge ${model.is_enabled ? 'active' : 'inactive'}">
+                            ${model.is_enabled ? 'Active' : 'Disabled'}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 4px;">
+                            <button class="btn-sm" onclick="testModel('${model.model_id}')" title="Test">⚡</button>
+                            <button class="btn-sm" onclick="editModel('${model.model_id}')" title="Edit">✏️</button>
+                            <button class="btn-sm" onclick="toggleModelStatus('${model.model_id}', ${!model.is_enabled})" title="${model.is_enabled ? 'Disable' : 'Enable'}">
+                                ${model.is_enabled ? '🔴' : '🟢'}
+                            </button>
+                            ${!model.is_default ? `<button class="btn-sm" onclick="setDefaultModel('${model.model_id}')" title="Set as Default">⭐</button>` : ''}
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function toggleModelStatus(modelId, enabled) {
+            try {
+                await fetchWithAuth(`${API_BASE_URL}/admin/models/${modelId}/toggle?enabled=${enabled}`, { method: 'POST' });
+                showToast(enabled ? 'Model enabled' : 'Model disabled', 'success');
+                loadAIModels();
+            } catch (error) {
+                showToast('Failed to toggle model status', 'error');
+            }
+        }
+
+        async function setDefaultModel(modelId) {
+            try {
+                await fetchWithAuth(`${API_BASE_URL}/admin/models/${modelId}/set-default`, { method: 'POST' });
+                showToast('Default model updated', 'success');
+                loadAIModels();
+            } catch (error) {
+                showToast('Failed to set default model', 'error');
+            }
+        }
+
+        async function testModel(modelId) {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal" style="max-width: 500px;">
+                    <div class="modal-header">
+                        <h2>Test Model: ${modelId}</h2>
+                        <button onclick="this.closest('.modal-overlay').remove()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="margin-bottom: 16px;">
+                            <label>Test Prompt:</label>
+                            <textarea id="test-prompt" style="width: 100%; height: 80px; margin-top: 8px; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">Say hello in one sentence.</textarea>
+                        </div>
+                        <div id="test-result" style="display: none; padding: 12px; background: var(--stone-100); border-radius: 6px;">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+                        <button class="btn-primary" onclick="runModelTest('${modelId}')">Run Test</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        async function runModelTest(modelId) {
+            const prompt = document.getElementById('test-prompt').value;
+            const resultDiv = document.getElementById('test-result');
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loading">Testing...</div>';
+
+            try {
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/admin/models/${modelId}/test?prompt=${encodeURIComponent(prompt)}`,
+                    { method: 'POST' }
+                );
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div style="margin-bottom: 8px;"><strong>Response:</strong></div>
+                        <div style="white-space: pre-wrap; margin-bottom: 12px;">${data.response}</div>
+                        <div style="font-size: 12px; color: var(--stone-500);">
+                            Tokens: ${data.tokens?.input || 0} in / ${data.tokens?.output || 0} out | 
+                            Cost: $${(data.cost_usd || 0).toFixed(6)}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div style="color: var(--red-500);">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div style="color: var(--red-500);">Test failed: ${error.message}</div>`;
+            }
+        }
+
+        function openAddModelModal() {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h2>Add New Model</h2>
+                        <button onclick="this.closest('.modal-overlay').remove()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="add-model-form">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                <div>
+                                    <label>Model ID *</label>
+                                    <input type="text" name="model_id" required placeholder="e.g., gpt-4o-mini" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Display Name *</label>
+                                    <input type="text" name="display_name" required placeholder="e.g., GPT-4o Mini" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Provider *</label>
+                                    <select name="provider" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                        <option value="anthropic">Anthropic</option>
+                                        <option value="openai">OpenAI</option>
+                                        <option value="google">Google</option>
+                                        <option value="deepseek">DeepSeek</option>
+                                        <option value="xai">xAI</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>API Model Name *</label>
+                                    <input type="text" name="api_model_name" required placeholder="e.g., gpt-4o-mini" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Cost/1M Input ($) *</label>
+                                    <input type="number" name="cost_per_million_input" step="0.01" required placeholder="0.15" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Cost/1M Output ($) *</label>
+                                    <input type="number" name="cost_per_million_output" step="0.01" required placeholder="0.60" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Context Window</label>
+                                    <input type="number" name="context_window" value="128000" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Min Tier</label>
+                                    <select name="min_tier" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                        <option value="free">Free</option>
+                                        <option value="starter">Starter</option>
+                                        <option value="growth">Growth</option>
+                                        <option value="pro">Pro</option>
+                                        <option value="enterprise">Enterprise</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>Priority (0-100)</label>
+                                    <input type="number" name="priority" value="50" min="0" max="100" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Stripe Meter Event</label>
+                                    <input type="text" name="stripe_meter_event_name" placeholder="ai_tokens_xxx" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                            </div>
+                            <div style="margin-top: 16px;">
+                                <label>Description</label>
+                                <textarea name="description" rows="2" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);"></textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                        <button class="btn-primary" onclick="submitAddModel()">Add Model</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        async function submitAddModel() {
+            const form = document.getElementById('add-model-form');
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData);
+            
+            // Convert numbers
+            data.cost_per_million_input = parseFloat(data.cost_per_million_input);
+            data.cost_per_million_output = parseFloat(data.cost_per_million_output);
+            data.context_window = parseInt(data.context_window);
+            data.priority = parseInt(data.priority);
+            data.task_types = ['general'];
+
+            try {
+                await fetchWithAuth(`${API_BASE_URL}/admin/models`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                showToast('Model added successfully', 'success');
+                document.querySelector('.modal-overlay').remove();
+                loadAIModels();
+            } catch (error) {
+                showToast('Failed to add model: ' + error.message, 'error');
+            }
+        }
+
+        async function editModel(modelId) {
+            const model = allModels.find(m => m.model_id === modelId);
+            if (!model) return;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal" style="max-width: 600px;">
+                    <div class="modal-header">
+                        <h2>Edit Model: ${model.display_name}</h2>
+                        <button onclick="this.closest('.modal-overlay').remove()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="edit-model-form">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                <div>
+                                    <label>Display Name</label>
+                                    <input type="text" name="display_name" value="${model.display_name}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>API Model Name</label>
+                                    <input type="text" name="api_model_name" value="${model.api_model_name}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Cost/1M Input ($)</label>
+                                    <input type="number" name="cost_per_million_input" step="0.01" value="${model.cost_per_million_input}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Cost/1M Output ($)</label>
+                                    <input type="number" name="cost_per_million_output" step="0.01" value="${model.cost_per_million_output}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Context Window</label>
+                                    <input type="number" name="context_window" value="${model.context_window}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Min Tier</label>
+                                    <select name="min_tier" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                        <option value="free" ${model.min_tier === 'free' ? 'selected' : ''}>Free</option>
+                                        <option value="starter" ${model.min_tier === 'starter' ? 'selected' : ''}>Starter</option>
+                                        <option value="growth" ${model.min_tier === 'growth' ? 'selected' : ''}>Growth</option>
+                                        <option value="pro" ${model.min_tier === 'pro' ? 'selected' : ''}>Pro</option>
+                                        <option value="enterprise" ${model.min_tier === 'enterprise' ? 'selected' : ''}>Enterprise</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label>Priority (0-100)</label>
+                                    <input type="number" name="priority" value="${model.priority}" min="0" max="100" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                                <div>
+                                    <label>Billing Markup %</label>
+                                    <input type="number" name="billing_markup_percent" step="0.01" value="${model.billing_markup_percent || 0}" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                                </div>
+                            </div>
+                            <div style="margin-top: 16px;">
+                                <label>Description</label>
+                                <textarea name="description" rows="2" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">${model.description || ''}</textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-danger" onclick="deleteModel('${modelId}')" style="margin-right: auto;">Delete</button>
+                        <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+                        <button class="btn-primary" onclick="submitEditModel('${modelId}')">Save Changes</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        async function submitEditModel(modelId) {
+            const form = document.getElementById('edit-model-form');
+            const formData = new FormData(form);
+            const data = {};
+            
+            for (const [key, value] of formData) {
+                if (value) {
+                    if (['cost_per_million_input', 'cost_per_million_output', 'billing_markup_percent'].includes(key)) {
+                        data[key] = parseFloat(value);
+                    } else if (['context_window', 'priority'].includes(key)) {
+                        data[key] = parseInt(value);
+                    } else {
+                        data[key] = value;
+                    }
+                }
+            }
+
+            try {
+                await fetchWithAuth(`${API_BASE_URL}/admin/models/${modelId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                showToast('Model updated successfully', 'success');
+                document.querySelector('.modal-overlay').remove();
+                loadAIModels();
+            } catch (error) {
+                showToast('Failed to update model: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteModel(modelId) {
+            if (!confirm(`Are you sure you want to delete model "${modelId}"?`)) return;
+
+            try {
+                await fetchWithAuth(`${API_BASE_URL}/admin/models/${modelId}`, { method: 'DELETE' });
+                showToast('Model deleted', 'success');
+                document.querySelector('.modal-overlay').remove();
+                loadAIModels();
+            } catch (error) {
+                showToast('Failed to delete model: ' + error.message, 'error');
+            }
+        }
+
+        // ===== PRICING TIERS =====
+
+        async function loadPricingTiers() {
+            try {
+                const response = await fetchWithAuth(`${API_BASE_URL}/admin/models/tiers/list`);
+                const data = await response.json();
+                const tiers = data.tiers || [];
+
+                const tbody = document.getElementById('pricing-tiers-table-body');
+                tbody.innerHTML = tiers.map(tier => `
+                    <tr>
+                        <td><strong>${tier.display_name}</strong> <span style="color: var(--stone-500);">(${tier.tier_name})</span></td>
+                        <td>${tier.monthly_token_limit ? (tier.monthly_token_limit / 1000000).toFixed(1) + 'M' : 'Unlimited'}</td>
+                        <td>${tier.daily_token_limit ? (tier.daily_token_limit / 1000).toFixed(0) + 'K' : 'Unlimited'}</td>
+                        <td>${tier.requests_per_minute}/min</td>
+                        <td>${tier.markup_percent || 0}%</td>
+                        <td>
+                            <button class="btn-sm" onclick="editTier('${tier.tier_name}')">Edit</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load pricing tiers:', error);
+            }
+        }
+
+        function openAddTierModal() {
+            showToast('Use editTier for now - tier creation via migration', 'info');
+        }
+
+        async function editTier(tierName) {
+            showToast('Tier editing coming soon', 'info');
+        }
+
+        // ===== STRIPE METERS =====
+
+        async function loadStripeMeters() {
+            try {
+                const response = await fetchWithAuth(`${API_BASE_URL}/admin/models/stripe/meters`);
+                const data = await response.json();
+                const meters = data.meters || [];
+
+                document.getElementById('stripe-meters').textContent = meters.length;
+
+                const tbody = document.getElementById('stripe-meters-table-body');
+                if (meters.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4">No Stripe meters configured. Click "Sync Stripe Meters" to create them.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = meters.map(meter => `
+                    <tr>
+                        <td><code>${meter.id}</code></td>
+                        <td>${meter.display_name}</td>
+                        <td><code>${meter.event_name}</code></td>
+                        <td><span class="status-badge ${meter.status === 'active' ? 'active' : 'inactive'}">${meter.status}</span></td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load Stripe meters:', error);
+                document.getElementById('stripe-meters-table-body').innerHTML = 
+                    '<tr><td colspan="4" class="error">Failed to load meters (Stripe may not be configured)</td></tr>';
+            }
+        }
+
+        async function syncStripeMeters() {
+            try {
+                showToast('Syncing Stripe meters...', 'info');
+                const response = await fetchWithAuth(`${API_BASE_URL}/admin/models/stripe/sync-meters`, { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.error) {
+                    showToast(data.error, 'error');
+                } else {
+                    showToast(`Synced: ${data.synced} new, ${data.existing} existing`, 'success');
+                    loadStripeMeters();
+                }
+            } catch (error) {
+                showToast('Failed to sync meters: ' + error.message, 'error');
+            }
+        }
+
+        function openCostEstimator() {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal" style="max-width: 700px;">
+                    <div class="modal-header">
+                        <h2>Monthly Cost Estimator</h2>
+                        <button onclick="this.closest('.modal-overlay').remove()">×</button>
+                    </div>
+                    <div class="modal-body">
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px;">
+                            <div>
+                                <label>Requests/Day</label>
+                                <input type="number" id="est-requests" value="1000" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                            </div>
+                            <div>
+                                <label>Avg Input Tokens</label>
+                                <input type="number" id="est-input" value="500" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                            </div>
+                            <div>
+                                <label>Avg Output Tokens</label>
+                                <input type="number" id="est-output" value="1000" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
+                            </div>
+                        </div>
+                        <button class="btn-primary" onclick="runCostEstimate()" style="margin-bottom: 20px;">Calculate</button>
+                        <div id="cost-estimate-results"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        async function runCostEstimate() {
+            const requests = document.getElementById('est-requests').value;
+            const inputTokens = document.getElementById('est-input').value;
+            const outputTokens = document.getElementById('est-output').value;
+            const resultsDiv = document.getElementById('cost-estimate-results');
+
+            try {
+                const response = await fetchWithAuth(
+                    `${API_BASE_URL}/admin/models/stats/cost-estimate?requests_per_day=${requests}&avg_input_tokens=${inputTokens}&avg_output_tokens=${outputTokens}`
+                );
+                const data = await response.json();
+
+                resultsDiv.innerHTML = `
+                    <table class="data-table" style="font-size: 14px;">
+                        <thead>
+                            <tr>
+                                <th>Model</th>
+                                <th>Daily Cost</th>
+                                <th>Monthly Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.estimates.map(e => `
+                                <tr>
+                                    <td>${e.display_name}</td>
+                                    <td>$${e.daily_cost_usd.toFixed(2)}</td>
+                                    <td>$${e.monthly_cost_usd.toFixed(2)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Failed to calculate: ${error.message}</div>`;
+            }
+        }
+
+        // ===== END AI MODELS FUNCTIONS =====
 
         init();
     </script>
