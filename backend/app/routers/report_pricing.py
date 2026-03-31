@@ -39,7 +39,8 @@ def validate_redirect_url(url: str, request: Request) -> bool:
 
 from app.models.user import User
 from app.models.opportunity import Opportunity
-from app.models.purchased_report import PurchasedReport, PurchasedBundle, ConsultantLicense, PurchaseType, GuestReportPurchase
+from app.models.purchased_report import PurchasedReport, PurchasedBundle, ConsultantLicense, PurchaseType, GuestReportPurchase, PurchasedTemplate
+from app.models.report_template import ReportTemplate
 from app.core.dependencies import get_current_user, get_current_active_user, get_current_user_optional
 from app.core.report_pricing import (
     REPORT_PRODUCTS,
@@ -50,6 +51,8 @@ from app.core.report_pricing import (
     is_report_included_for_tier,
     get_report_price,
     get_bundle_price,
+    get_tier_report_discount,
+    calculate_discounted_price,
 )
 from app.services.stripe_service import stripe_service, get_stripe_client
 from app.services.usage_service import usage_service
@@ -1515,4 +1518,436 @@ def unlock_clone_analysis_free(
         "success": True,
         "message": "Clone Analysis unlocked successfully",
         "usage_reason": free_check["reason"],
+    }
+
+
+# ============================================================================
+# TEMPLATE PRICING ENDPOINTS
+# ============================================================================
+
+class TemplatePricingItem(BaseModel):
+    slug: str
+    name: str
+    description: str
+    category: str
+    min_tier: str
+    base_price_cents: int
+    member_price_cents: int
+    discount_percent: int
+    is_included: bool  # True if user's tier >= min_tier
+    is_purchased: bool  # True if user already purchased this template
+
+
+class TemplatePricingResponse(BaseModel):
+    templates: List[TemplatePricingItem]
+    user_tier: Optional[str] = None
+    tier_discount_percent: int = 0
+
+
+@router.get("/template-pricing", response_model=TemplatePricingResponse)
+def get_template_pricing(
+    current_user: User = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """Get all template pricing with member/non-member prices"""
+    templates = db.query(ReportTemplate).filter(
+        ReportTemplate.is_active == True
+    ).order_by(ReportTemplate.display_order).all()
+    
+    # Get user tier and discount
+    user_tier = "free"
+    tier_discount = 0
+    purchased_slugs = set()
+    
+    if current_user:
+        subscription = usage_service.get_or_create_subscription(current_user, db)
+        user_tier = subscription.tier.value if hasattr(subscription.tier, 'value') else str(subscription.tier)
+        tier_discount = get_tier_report_discount(user_tier)
+        
+        # Get purchased templates
+        purchases = db.query(PurchasedTemplate).filter(
+            PurchasedTemplate.user_id == current_user.id
+        ).all()
+        purchased_slugs = {p.template_slug for p in purchases}
+    
+    # Tier order for access check
+    tier_order = ["free", "starter", "growth", "pro", "team", "business", "enterprise"]
+    user_tier_idx = tier_order.index(user_tier.lower()) if user_tier.lower() in tier_order else 0
+    
+    result = []
+    for template in templates:
+        min_tier_idx = tier_order.index(template.min_tier.lower()) if template.min_tier.lower() in tier_order else 99
+        is_included = user_tier_idx >= min_tier_idx
+        
+        base_price = template.price_cents
+        member_price = calculate_discounted_price(base_price, user_tier) if current_user else base_price
+        
+        result.append(TemplatePricingItem(
+            slug=template.slug,
+            name=template.name,
+            description=template.description,
+            category=template.category,
+            min_tier=template.min_tier,
+            base_price_cents=base_price,
+            member_price_cents=member_price if not is_included else 0,
+            discount_percent=tier_discount if not is_included else 100,
+            is_included=is_included,
+            is_purchased=template.slug in purchased_slugs,
+        ))
+    
+    return TemplatePricingResponse(
+        templates=result,
+        user_tier=user_tier if current_user else None,
+        tier_discount_percent=tier_discount,
+    )
+
+
+@router.get("/template-pricing/{slug}")
+def get_single_template_pricing(
+    slug: str,
+    current_user: User = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+):
+    """Get pricing for a single template"""
+    template = db.query(ReportTemplate).filter(
+        ReportTemplate.slug == slug,
+        ReportTemplate.is_active == True
+    ).first()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Get user tier
+    user_tier = "free"
+    tier_discount = 0
+    is_purchased = False
+    
+    if current_user:
+        subscription = usage_service.get_or_create_subscription(current_user, db)
+        user_tier = subscription.tier.value if hasattr(subscription.tier, 'value') else str(subscription.tier)
+        tier_discount = get_tier_report_discount(user_tier)
+        
+        # Check if purchased
+        existing = db.query(PurchasedTemplate).filter(
+            PurchasedTemplate.user_id == current_user.id,
+            PurchasedTemplate.template_slug == slug
+        ).first()
+        is_purchased = existing is not None
+    
+    # Check tier access
+    tier_order = ["free", "starter", "growth", "pro", "team", "business", "enterprise"]
+    user_tier_idx = tier_order.index(user_tier.lower()) if user_tier.lower() in tier_order else 0
+    min_tier_idx = tier_order.index(template.min_tier.lower()) if template.min_tier.lower() in tier_order else 99
+    is_included = user_tier_idx >= min_tier_idx
+    
+    base_price = template.price_cents
+    member_price = calculate_discounted_price(base_price, user_tier)
+    
+    return {
+        "slug": template.slug,
+        "name": template.name,
+        "description": template.description,
+        "category": template.category,
+        "min_tier": template.min_tier,
+        "base_price_cents": base_price,
+        "base_price_formatted": f"${base_price / 100:.0f}",
+        "member_price_cents": member_price if not is_included else 0,
+        "member_price_formatted": f"${member_price / 100:.0f}" if not is_included else "Included",
+        "discount_percent": tier_discount,
+        "savings_cents": base_price - member_price if tier_discount > 0 else 0,
+        "is_included": is_included,
+        "is_purchased": is_purchased,
+        "user_tier": user_tier if current_user else None,
+        "access_status": "included" if is_included else ("purchased" if is_purchased else "purchase_required"),
+    }
+
+
+class TemplateCheckoutRequest(BaseModel):
+    template_slug: str
+    success_url: str
+    cancel_url: str
+
+
+class TemplateCheckoutResponse(BaseModel):
+    session_id: str
+    url: str
+
+
+@router.post("/template-checkout", response_model=TemplateCheckoutResponse)
+def create_template_checkout(
+    checkout_data: TemplateCheckoutRequest,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Create a Stripe Checkout session for template purchase"""
+    template = db.query(ReportTemplate).filter(
+        ReportTemplate.slug == checkout_data.template_slug,
+        ReportTemplate.is_active == True
+    ).first()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Check if already purchased
+    existing = db.query(PurchasedTemplate).filter(
+        PurchasedTemplate.user_id == current_user.id,
+        PurchasedTemplate.template_slug == checkout_data.template_slug
+    ).first()
+    
+    if existing:
+        raise HTTPException(status_code=400, detail="You have already purchased this template")
+    
+    # Check if included in tier
+    subscription = usage_service.get_or_create_subscription(current_user, db)
+    user_tier = subscription.tier.value if hasattr(subscription.tier, 'value') else str(subscription.tier)
+    
+    tier_order = ["free", "starter", "growth", "pro", "team", "business", "enterprise"]
+    user_tier_idx = tier_order.index(user_tier.lower()) if user_tier.lower() in tier_order else 0
+    min_tier_idx = tier_order.index(template.min_tier.lower()) if template.min_tier.lower() in tier_order else 99
+    
+    if user_tier_idx >= min_tier_idx:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This template is included with your {user_tier} subscription. No purchase needed."
+        )
+    
+    # Calculate discounted price
+    base_price = template.price_cents
+    discount_percent = get_tier_report_discount(user_tier)
+    final_price = calculate_discounted_price(base_price, user_tier)
+    
+    if final_price <= 0:
+        raise HTTPException(status_code=400, detail="Invalid price for this template")
+    
+    # Validate redirect URLs
+    if not validate_redirect_url(checkout_data.success_url, request) or not validate_redirect_url(checkout_data.cancel_url, request):
+        raise HTTPException(status_code=400, detail="Invalid redirect URL")
+    
+    # Ensure customer exists
+    if not subscription.stripe_customer_id:
+        customer = stripe_service.create_customer(
+            email=current_user.email,
+            name=current_user.name,
+            metadata={"user_id": current_user.id}
+        )
+        subscription.stripe_customer_id = customer.id
+        db.commit()
+    
+    stripe_client = get_stripe_client()
+    
+    # Create product description with discount info
+    description = template.description
+    if discount_percent > 0:
+        description += f" ({discount_percent}% member discount applied)"
+    
+    session = stripe_client.checkout.Session.create(
+        customer=subscription.stripe_customer_id,
+        mode="payment",
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": "usd",
+                "product_data": {
+                    "name": f"OppGrid Template: {template.name}",
+                    "description": description,
+                },
+                "unit_amount": final_price,
+            },
+            "quantity": 1,
+        }],
+        success_url=checkout_data.success_url,
+        cancel_url=checkout_data.cancel_url,
+        metadata={
+            "user_id": str(current_user.id),
+            "template_slug": checkout_data.template_slug,
+            "template_id": str(template.id),
+            "payment_type": "template_purchase",
+            "original_price": str(base_price),
+            "discount_percent": str(discount_percent),
+        },
+    )
+    
+    log_event(
+        db,
+        action="report_pricing.template_checkout_created",
+        actor=current_user,
+        actor_type="user",
+        request=request,
+        resource_type="template",
+        resource_id=template.id,
+        metadata={
+            "session_id": session.id,
+            "template_slug": checkout_data.template_slug,
+            "original_price_cents": base_price,
+            "final_price_cents": final_price,
+            "discount_percent": discount_percent,
+        },
+    )
+    
+    return TemplateCheckoutResponse(session_id=session.id, url=session.url)
+
+
+@router.post("/confirm-template-purchase")
+def confirm_template_purchase(
+    session_id: str,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Confirm a successful template payment and grant access"""
+    stripe_client = get_stripe_client()
+    
+    try:
+        session = stripe_client.checkout.Session.retrieve(session_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid session: {str(e)}")
+    
+    if session.payment_status != "paid":
+        raise HTTPException(status_code=400, detail=f"Payment not completed. Status: {session.payment_status}")
+    
+    payment_type = session.metadata.get("payment_type")
+    if payment_type != "template_purchase":
+        raise HTTPException(status_code=400, detail="Invalid payment type")
+    
+    user_id = int(session.metadata.get("user_id", 0))
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Payment belongs to another user")
+    
+    template_slug = session.metadata.get("template_slug")
+    template_id = int(session.metadata.get("template_id", 0))
+    original_price = int(session.metadata.get("original_price", 0))
+    discount_percent = int(session.metadata.get("discount_percent", 0))
+    
+    # Check if already recorded
+    existing = db.query(PurchasedTemplate).filter(
+        PurchasedTemplate.user_id == current_user.id,
+        PurchasedTemplate.template_slug == template_slug,
+        PurchasedTemplate.stripe_session_id == session_id
+    ).first()
+    
+    if existing:
+        return {
+            "success": True,
+            "message": "Template already confirmed",
+            "template_slug": template_slug,
+        }
+    
+    # Record purchase
+    purchase = PurchasedTemplate(
+        user_id=current_user.id,
+        template_slug=template_slug,
+        template_id=template_id if template_id else None,
+        amount_paid=session.amount_total,
+        original_price=original_price,
+        discount_percent=discount_percent,
+        stripe_session_id=session_id,
+        uses_remaining=-1,  # Unlimited uses
+    )
+    db.add(purchase)
+    db.commit()
+    
+    log_event(
+        db,
+        action="report_pricing.template_purchase_confirmed",
+        actor=current_user,
+        actor_type="user",
+        request=request,
+        resource_type="template",
+        resource_id=template_id,
+        metadata={
+            "session_id": session_id,
+            "template_slug": template_slug,
+            "amount_paid": session.amount_total,
+            "discount_percent": discount_percent,
+        },
+    )
+    
+    return {
+        "success": True,
+        "message": f"Template '{template_slug}' unlocked successfully",
+        "template_slug": template_slug,
+    }
+
+
+@router.get("/my-template-purchases")
+def get_my_template_purchases(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Get user's purchased templates"""
+    purchases = db.query(PurchasedTemplate).filter(
+        PurchasedTemplate.user_id == current_user.id
+    ).order_by(PurchasedTemplate.purchased_at.desc()).all()
+    
+    return {
+        "purchases": [
+            {
+                "id": p.id,
+                "template_slug": p.template_slug,
+                "amount_paid": p.amount_paid,
+                "original_price": p.original_price,
+                "discount_percent": p.discount_percent,
+                "uses_remaining": p.uses_remaining,
+                "purchased_at": p.purchased_at.isoformat() if p.purchased_at else None,
+            }
+            for p in purchases
+        ],
+        "total": len(purchases),
+    }
+
+
+@router.get("/can-use-template/{slug}")
+def can_use_template(
+    slug: str,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Check if user can use a template (included in tier or purchased)"""
+    template = db.query(ReportTemplate).filter(
+        ReportTemplate.slug == slug,
+        ReportTemplate.is_active == True
+    ).first()
+    
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    
+    # Check tier access
+    subscription = usage_service.get_or_create_subscription(current_user, db)
+    user_tier = subscription.tier.value if hasattr(subscription.tier, 'value') else str(subscription.tier)
+    
+    tier_order = ["free", "starter", "growth", "pro", "team", "business", "enterprise"]
+    user_tier_idx = tier_order.index(user_tier.lower()) if user_tier.lower() in tier_order else 0
+    min_tier_idx = tier_order.index(template.min_tier.lower()) if template.min_tier.lower() in tier_order else 99
+    
+    if user_tier_idx >= min_tier_idx:
+        return {
+            "can_use": True,
+            "reason": "included_in_tier",
+            "user_tier": user_tier,
+        }
+    
+    # Check purchase
+    purchase = db.query(PurchasedTemplate).filter(
+        PurchasedTemplate.user_id == current_user.id,
+        PurchasedTemplate.template_slug == slug
+    ).first()
+    
+    if purchase:
+        return {
+            "can_use": True,
+            "reason": "purchased",
+            "purchased_at": purchase.purchased_at.isoformat() if purchase.purchased_at else None,
+            "uses_remaining": purchase.uses_remaining,
+        }
+    
+    # Need to purchase
+    price = calculate_discounted_price(template.price_cents, user_tier)
+    return {
+        "can_use": False,
+        "reason": "purchase_required",
+        "price_cents": price,
+        "price_formatted": f"${price / 100:.0f}",
+        "original_price_cents": template.price_cents,
+        "discount_percent": get_tier_report_discount(user_tier),
     }

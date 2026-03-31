@@ -10,7 +10,7 @@ import time
 from app.db.database import get_db
 from app.models import (
     ReportTemplate, GeneratedReport, ReportType, ReportStatus,
-    User, Subscription, Opportunity, UserWorkspace
+    User, Subscription, Opportunity, UserWorkspace, PurchasedTemplate
 )
 from app.core.dependencies import get_current_user
 from app.services.llm_ai_engine import llm_ai_engine_service
@@ -177,10 +177,21 @@ async def generate_report(
         raise HTTPException(status_code=404, detail="Report template not found")
     
     user_tier = get_user_tier(current_user, db)
-    if not tier_has_access(user_tier, template.min_tier):
+    has_tier_access = tier_has_access(user_tier, template.min_tier)
+    
+    # Check if user purchased this template
+    has_purchased = False
+    if not has_tier_access:
+        purchase = db.query(PurchasedTemplate).filter(
+            PurchasedTemplate.user_id == current_user.id,
+            PurchasedTemplate.template_slug == request.template_slug
+        ).first()
+        has_purchased = purchase is not None
+    
+    if not has_tier_access and not has_purchased:
         raise HTTPException(
             status_code=403,
-            detail=f"This report requires {template.min_tier.upper()} tier or higher. Current tier: {user_tier.upper()}"
+            detail=f"This report requires {template.min_tier.upper()} tier or purchase. Current tier: {user_tier.upper()}. Purchase this template to use it."
         )
     
     context_parts = []

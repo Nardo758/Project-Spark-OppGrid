@@ -22,6 +22,7 @@ from app.models.stripe_event import (
     PayPerUnlockAttemptStatus,
 )
 from app.models.idea_validation import IdeaValidation, IdeaValidationStatus
+from app.models.purchased_report import PurchasedTemplate
 from app.services.stripe_service import get_stripe_client
 from app.services.usage_service import usage_service
 from datetime import datetime, timedelta, timezone
@@ -403,6 +404,8 @@ def handle_checkout_completed(session: dict, db: Session):
         _handle_report_purchase(session, user, db)
     elif payment_type == "bundle_purchase":
         _handle_bundle_purchase(session, user, db)
+    elif payment_type == "template_purchase":
+        _handle_template_purchase(session, user, db)
     else:
         _handle_subscription_checkout(session, user, db)
 
@@ -551,6 +554,60 @@ def _handle_bundle_purchase(session: dict, user: User, db: Session):
     db.commit()
     
     logger.info(f"Bundle purchase completed: {bundle_type} ({len(reports)} reports) for user {user.id}")
+
+
+def _handle_template_purchase(session: dict, user: User, db: Session):
+    """Handle template purchase completion from checkout session."""
+    metadata = session.get("metadata", {})
+    template_slug = metadata.get("template_slug", "")
+    template_id = metadata.get("template_id")
+    original_price = int(metadata.get("original_price", 0))
+    discount_percent = int(metadata.get("discount_percent", 0))
+    
+    logger.info(f"Processing template purchase for user {user.id}: {template_slug}")
+    
+    # Check if already purchased
+    existing = db.query(PurchasedTemplate).filter(
+        PurchasedTemplate.user_id == user.id,
+        PurchasedTemplate.template_slug == template_slug,
+    ).first()
+    
+    if existing:
+        logger.info(f"Template already purchased: {template_slug} for user {user.id}")
+        return
+    
+    # Record purchase
+    purchase = PurchasedTemplate(
+        user_id=user.id,
+        template_slug=template_slug,
+        template_id=int(template_id) if template_id else None,
+        amount_paid=session.get("amount_total", 0),
+        original_price=original_price,
+        discount_percent=discount_percent,
+        stripe_session_id=session.get("id"),
+        uses_remaining=-1,  # Unlimited uses
+    )
+    db.add(purchase)
+    
+    # Record transaction
+    tx = Transaction(
+        user_id=user.id,
+        type=TransactionType.UNLOCK,
+        status=TransactionStatus.SUCCEEDED,
+        amount_cents=session.get("amount_total", 0),
+        currency=session.get("currency", "usd"),
+        metadata_json=json.dumps({
+            "type": "template_purchase",
+            "template_slug": template_slug,
+            "original_price": original_price,
+            "discount_percent": discount_percent,
+            "session_id": session.get("id"),
+        }),
+    )
+    db.add(tx)
+    db.commit()
+    
+    logger.info(f"Template purchase completed: {template_slug} for user {user.id} (${session.get('amount_total', 0)/100:.2f}, {discount_percent}% discount)")
 
 
 def _handle_studio_report_purchase(session: dict, db: Session):

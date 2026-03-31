@@ -77,6 +77,30 @@ class ConsultantLicense(Base):
     user = relationship("User")
 
 
+class PurchasedTemplate(Base):
+    """Track template report purchases by users"""
+    __tablename__ = "purchased_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    
+    template_slug = Column(String(100), nullable=False, index=True)
+    template_id = Column(Integer, ForeignKey("report_templates.id", ondelete="SET NULL"), nullable=True)
+    
+    amount_paid = Column(Integer, default=0)  # Amount in cents after discount
+    original_price = Column(Integer, default=0)  # Original price before discount
+    discount_percent = Column(Integer, default=0)  # Discount applied
+    stripe_session_id = Column(String(255), nullable=True)
+    stripe_payment_intent_id = Column(String(255), nullable=True)
+    
+    uses_remaining = Column(Integer, default=-1)  # -1 = unlimited, >0 = limited uses
+    
+    purchased_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    
+    user = relationship("User")
+
+
 class GuestReportPurchase(Base):
     """Track report purchases by guest users (no account required)"""
     __tablename__ = "guest_report_purchases"

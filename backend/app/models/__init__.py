@@ -57,7 +57,7 @@ from .census_demographics import (
     CensusPopulationEstimate, CensusMigrationFlow, MarketGrowthTrajectory,
     ServiceAreaBoundary, GrowthCategory
 )
-from .purchased_report import PurchasedReport, PurchasedBundle, ConsultantLicense, PurchaseType
+from .purchased_report import PurchasedReport, PurchasedBundle, ConsultantLicense, PurchaseType, PurchasedTemplate
 from .expert_collaboration import (
     ExpertCategory, ExpertSpecialization, ExpertStageExpertise,
     EngagementType, EngagementStatus, ExpertPermissionLevel,
@@ -183,6 +183,7 @@ __all__ = [
     "PurchasedBundle",
     "ConsultantLicense",
     "PurchaseType",
+    "PurchasedTemplate",
     "ExpertCategory",
     "ExpertSpecialization",
     "ExpertStageExpertise",

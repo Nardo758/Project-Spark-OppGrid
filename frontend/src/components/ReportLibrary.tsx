@@ -285,6 +285,44 @@ export default function ReportLibrary({
     },
   })
 
+  // Fetch template pricing with member discounts
+  type TemplatePricingItem = {
+    slug: string
+    name: string
+    base_price_cents: number
+    member_price_cents: number
+    discount_percent: number
+    is_included: boolean
+    is_purchased: boolean
+  }
+  
+  const { data: templatePricing } = useQuery<{ templates: TemplatePricingItem[]; user_tier: string | null; tier_discount_percent: number }>({
+    queryKey: ['template-pricing', token],
+    queryFn: async () => {
+      const hdrs: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) hdrs['Authorization'] = `Bearer ${token}`
+      const res = await fetch('/api/v1/report-pricing/template-pricing', { headers: hdrs })
+      if (!res.ok) throw new Error('Failed to fetch template pricing')
+      return res.json()
+    },
+  })
+  
+  // Helper to get template pricing info
+  const getTemplatePricing = (slug: string) => {
+    const pricing = templatePricing?.templates.find(t => t.slug === slug)
+    if (!pricing) {
+      const fallbackPrice = TEMPLATE_PRICES[slug] || 4900
+      return { base: fallbackPrice, member: fallbackPrice, discount: 0, included: false, purchased: false }
+    }
+    return {
+      base: pricing.base_price_cents,
+      member: pricing.member_price_cents,
+      discount: pricing.discount_percent,
+      included: pricing.is_included,
+      purchased: pricing.is_purchased,
+    }
+  }
+
   const generateMutation = useMutation({
     mutationFn: async ({ reportType, context, isStudio }: { reportType: string; context: string; isStudio: boolean }) => {
       setGeneratingSlug(reportType)
@@ -441,8 +479,56 @@ export default function ReportLibrary({
 
   const canGenerateReport = selectedReport && (consultantResult || canAnalyze())
 
+  // Template checkout handler
+  const handleTemplateCheckout = async (templateSlug: string) => {
+    setPurchaseLoading(true)
+    setPurchaseError(null)
+    
+    try {
+      const baseUrl = window.location.origin
+      const returnPath = window.location.pathname
+      const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}`
+      const cancelUrl = `${baseUrl}/billing/return?status=canceled&return_to=${encodeURIComponent(returnPath)}`
+      
+      const res = await fetch('/api/v1/report-pricing/template-checkout', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          template_slug: templateSlug,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        }),
+      })
+      
+      const data = await res.json()
+      
+      if (!res.ok) {
+        throw new Error(data.detail || 'Failed to start checkout')
+      }
+      
+      if (data.url) {
+        window.location.href = data.url
+      }
+    } catch (e) {
+      setPurchaseError(e instanceof Error ? e.message : 'Checkout failed')
+    } finally {
+      setPurchaseLoading(false)
+    }
+  }
+
   const handleGenerateReport = () => {
     if (!selectedReport) return
+    
+    // For templates, check if purchase is required
+    if (selectedReport.type === 'template') {
+      const pricing = getTemplatePricing(selectedReport.slug)
+      if (!pricing.included && !pricing.purchased) {
+        // Need to purchase first
+        handleTemplateCheckout(selectedReport.slug)
+        return
+      }
+    }
+    
     const context = getContextForReport()
     generateMutation.mutate({ 
       reportType: selectedReport.slug, 
@@ -450,6 +536,12 @@ export default function ReportLibrary({
       isStudio: selectedReport.type === 'studio'
     })
   }
+  
+  // Check if selected template needs purchase
+  const needsTemplatePurchase = selectedReport?.type === 'template' && (() => {
+    const pricing = getTemplatePricing(selectedReport.slug)
+    return !pricing.included && !pricing.purchased
+  })()
 
   if (isLoading) {
     return (
@@ -658,10 +750,17 @@ export default function ReportLibrary({
               {categories?.map(cat => (
                 <optgroup key={cat.category} label={`📝 ${cat.display_name}`}>
                   {cat.templates.map(template => {
-                    const price = template.price_cents || TEMPLATE_PRICES[template.slug] || 4900
+                    const pricing = getTemplatePricing(template.slug)
+                    const priceDisplay = pricing.included 
+                      ? '✓ Included' 
+                      : pricing.purchased 
+                        ? '✓ Purchased'
+                        : pricing.discount > 0
+                          ? `${formatPrice(pricing.member)} (${pricing.discount}% off)`
+                          : formatPrice(pricing.base)
                     return (
                       <option key={template.slug} value={`template:${template.slug}`}>
-                        {template.name} — {formatPrice(price)}
+                        {template.name} — {priceDisplay}
                       </option>
                     )
                   })}
@@ -745,33 +844,81 @@ export default function ReportLibrary({
               <div className="mt-3 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
                 {(() => {
                   const template = allTemplates.find(t => t.slug === selectedReport.slug)
-                  const price = template?.price_cents || TEMPLATE_PRICES[selectedReport.slug] || 4900
+                  const pricing = getTemplatePricing(selectedReport.slug)
+                  const userTier = templatePricing?.user_tier
+                  
                   return (
                     <>
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-semibold text-gray-900">{template?.name}</span>
                         <div className="flex items-center gap-2">
-                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(template?.min_tier || null).className}`}>
-                            {getTierBadge(template?.min_tier || null).text}
-                          </span>
+                          {pricing.included && (
+                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">
+                              ✓ INCLUDED
+                            </span>
+                          )}
+                          {pricing.purchased && !pricing.included && (
+                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">
+                              ✓ PURCHASED
+                            </span>
+                          )}
+                          {!pricing.included && !pricing.purchased && (
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(template?.min_tier || null).className}`}>
+                              {getTierBadge(template?.min_tier || null).text}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <p className="text-xs text-gray-600 mb-3">{template?.description}</p>
-                      <div className="flex items-center justify-between p-2 bg-white rounded border border-blue-100">
-                        <div className="text-center">
-                          <div className="text-xs text-gray-500 line-through">Agency cost</div>
-                          <div className="font-medium text-gray-600">$500+</div>
+                      
+                      {pricing.included || pricing.purchased ? (
+                        <div className="p-3 bg-green-50 rounded border border-green-200 text-center">
+                          <CheckCircle className="w-5 h-5 text-green-600 mx-auto mb-1" />
+                          <div className="text-sm font-semibold text-green-700">
+                            {pricing.included ? 'Included in your plan' : 'Already purchased'}
+                          </div>
+                          <div className="text-xs text-green-600">Generate unlimited times</div>
                         </div>
-                        <div className="text-center px-4 py-1 bg-blue-600 rounded text-white">
-                          <div className="text-xs opacity-90">Your price</div>
-                          <div className="font-bold">{formatPrice(price)}</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-xs text-green-600">You save</div>
-                          <div className="font-semibold text-green-600">90%+</div>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex items-center gap-1 text-xs text-blue-600">
+                      ) : (
+                        <>
+                          {/* Member vs Non-member pricing */}
+                          <div className="grid grid-cols-2 gap-2 mb-2">
+                            <div className="text-center p-2 bg-gray-100 rounded border border-gray-200">
+                              <div className="text-xs text-gray-500">Non-member</div>
+                              <div className="font-semibold text-gray-700">{formatPrice(pricing.base)}</div>
+                            </div>
+                            <div className={`text-center p-2 rounded ${
+                              pricing.discount > 0 
+                                ? 'bg-blue-600 text-white' 
+                                : 'bg-gray-100 border border-gray-200'
+                            }`}>
+                              <div className={`text-xs ${pricing.discount > 0 ? 'opacity-90' : 'text-gray-500'}`}>
+                                {userTier ? `${userTier.charAt(0).toUpperCase() + userTier.slice(1)} price` : 'Member price'}
+                              </div>
+                              <div className="font-bold">
+                                {pricing.discount > 0 ? formatPrice(pricing.member) : formatPrice(pricing.base)}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {pricing.discount > 0 && (
+                            <div className="flex items-center justify-center gap-2 text-green-600 text-sm font-medium">
+                              <TrendingDown className="w-4 h-4" />
+                              <span>You save {pricing.discount}% as a member!</span>
+                            </div>
+                          )}
+                          
+                          {!userTier && (
+                            <div className="mt-2 text-center text-xs text-gray-500">
+                              <a href="/pricing" className="text-blue-600 hover:underline">
+                                Sign up for member pricing →
+                              </a>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      
+                      <div className="mt-3 flex items-center gap-1 text-xs text-blue-600">
                         <Clock className="w-3 h-3" />
                         <span>Ready in 60 seconds</span>
                       </div>
@@ -846,13 +993,27 @@ export default function ReportLibrary({
 
             <button
               onClick={handleGenerateReport}
-              disabled={!canGenerateReport || generateMutation.isPending}
-              className="mt-4 px-4 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              disabled={!canGenerateReport || generateMutation.isPending || purchaseLoading}
+              className={`mt-4 px-4 py-3 font-semibold rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
+                needsTemplatePurchase 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                  : 'bg-amber-500 text-white hover:bg-amber-600'
+              }`}
             >
               {generateMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Generating...
+                </>
+              ) : purchaseLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Starting checkout...
+                </>
+              ) : needsTemplatePurchase ? (
+                <>
+                  <DollarSign className="w-4 h-4" />
+                  Purchase & Generate — {formatPrice(getTemplatePricing(selectedReport?.slug || '').member)}
                 </>
               ) : (
                 <>
