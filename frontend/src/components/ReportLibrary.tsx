@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   FileText, 
-  ChevronDown, 
   Loader2, 
   CheckCircle,
   Sparkles,
@@ -18,6 +17,12 @@ import {
   ClipboardList,
   Wand2,
   Download,
+  Lightbulb,
+  MapPin,
+  Copy,
+  Globe,
+  Store,
+  Building2,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
@@ -49,35 +54,41 @@ type GeneratedReport = {
   completed_at?: string
 }
 
+type InputMode = 'validate' | 'search' | 'location' | 'clone'
+
+const INPUT_MODES = [
+  {
+    id: 'validate' as InputMode,
+    label: 'Validate Idea',
+    icon: Lightbulb,
+    description: 'Describe your business idea and get an Online/Physical/Hybrid recommendation with viability analysis.',
+  },
+  {
+    id: 'search' as InputMode,
+    label: 'Search Ideas',
+    icon: SearchIcon,
+    description: 'Browse our database of validated opportunities by keyword or category to find inspiration.',
+  },
+  {
+    id: 'location' as InputMode,
+    label: 'Identify Location',
+    icon: MapPin,
+    description: 'Enter a city + business type to get market analysis, demographics, and competition data.',
+  },
+  {
+    id: 'clone' as InputMode,
+    label: 'Clone Success',
+    icon: Copy,
+    description: 'Analyze a successful business and find similar markets where you could replicate it.',
+  },
+]
+
 const categoryIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   popular: Sparkles,
   marketing: Megaphone,
   product: ClipboardList,
   business: BarChart3,
   research: SearchIcon,
-}
-
-const templateIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  ad_creatives: Megaphone,
-  brand_package: Sparkles,
-  landing_page: FileText,
-  content_calendar: Calendar,
-  email_funnel: Mail,
-  email_sequence: Mail,
-  lead_magnet: Target,
-  sales_funnel: TrendingUp,
-  seo_content: SearchIcon,
-  tweet_landing: FileText,
-  user_personas: Users,
-  feature_specs: ClipboardList,
-  mvp_roadmap: Target,
-  prd: FileText,
-  gtm_calendar: Calendar,
-  gtm_strategy: TrendingUp,
-  kpi_dashboard: BarChart3,
-  pricing_strategy: DollarSign,
-  competitive_analysis: SearchIcon,
-  customer_interview: Users,
 }
 
 interface ReportLibraryProps {
@@ -95,44 +106,71 @@ export default function ReportLibrary({
 }: ReportLibraryProps) {
   const { isAuthenticated, token } = useAuthStore()
   const queryClient = useQueryClient()
+  
+  // Input mode state
+  const [inputMode, setInputMode] = useState<InputMode>('validate')
+  
+  // Validate Idea inputs
+  const [ideaDescription, setIdeaDescription] = useState(customContext || '')
+  
+  // Search Ideas inputs
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchCategory, setSearchCategory] = useState('')
+  
+  // Identify Location inputs
+  const [locationCity, setLocationCity] = useState('')
+  const [locationBusiness, setLocationBusiness] = useState('')
+  
+  // Clone Success inputs
+  const [cloneBusinessName, setCloneBusinessName] = useState('')
+  const [cloneBusinessAddress, setCloneBusinessAddress] = useState('')
+  const [cloneTargetCity, setCloneTargetCity] = useState('')
+  
+  // Report generation state
+  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
   const [generatingSlug, setGeneratingSlug] = useState<string | null>(null)
   const [generatedReport, setGeneratedReport] = useState<GeneratedReport | null>(null)
-  const [contextInput, setContextInput] = useState(customContext || '')
-  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
+  
+  // Consultant results
+  const [consultantResult, setConsultantResult] = useState<any>(null)
+  const [consultantLoading, setConsultantLoading] = useState(false)
 
+  // Guest state
   const [guestEmail, setGuestEmail] = useState('')
   const [purchaseLoading, setPurchaseLoading] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
-  // Guest mode
   const isGuest = !isAuthenticated
+
+  const headers = (): Record<string, string> => {
+    const h: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) h['Authorization'] = `Bearer ${token}`
+    return h
+  }
 
   const { data: categories, isLoading } = useQuery<CategoryWithTemplates[]>({
     queryKey: ['report-templates', isGuest],
     queryFn: async () => {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      const hdrs: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (token) hdrs['Authorization'] = `Bearer ${token}`
       const endpoint = isGuest ? '/api/v1/reports/templates/public' : '/api/v1/reports/templates'
-      const res = await fetch(endpoint, { headers })
+      const res = await fetch(endpoint, { headers: hdrs })
       if (!res.ok) throw new Error('Failed to fetch templates')
       return res.json()
     },
   })
 
   const generateMutation = useMutation({
-    mutationFn: async ({ templateSlug }: { templateSlug: string }) => {
+    mutationFn: async ({ templateSlug, context }: { templateSlug: string; context: string }) => {
       setGeneratingSlug(templateSlug)
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) headers['Authorization'] = `Bearer ${token}`
-      
       const res = await fetch('/api/v1/reports/generate', {
         method: 'POST',
-        headers,
+        headers: headers(),
         body: JSON.stringify({
           template_slug: templateSlug,
           opportunity_id: opportunityId,
           workspace_id: workspaceId,
-          custom_context: contextInput || customContext,
+          custom_context: context,
         }),
       })
       
@@ -154,6 +192,55 @@ export default function ReportLibrary({
     },
   })
 
+  // Run consultant analysis
+  const runConsultantAnalysis = async () => {
+    setConsultantLoading(true)
+    setConsultantResult(null)
+    
+    try {
+      let endpoint = ''
+      let body: any = {}
+      
+      switch (inputMode) {
+        case 'validate':
+          endpoint = '/api/v1/consultant/validate-idea'
+          body = { idea_description: ideaDescription, business_context: {} }
+          break
+        case 'search':
+          endpoint = '/api/v1/consultant/search-ideas'
+          body = { query: searchQuery || undefined, category: searchCategory || undefined }
+          break
+        case 'location':
+          endpoint = '/api/v1/consultant/identify-location'
+          body = { city: locationCity, business_description: locationBusiness }
+          break
+        case 'clone':
+          endpoint = '/api/v1/consultant/clone-success'
+          body = { 
+            business_name: cloneBusinessName, 
+            business_address: cloneBusinessAddress,
+            target_city: cloneTargetCity || undefined,
+            radius_miles: 3
+          }
+          break
+      }
+      
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(body),
+      })
+      
+      if (!res.ok) throw new Error('Analysis failed')
+      const result = await res.json()
+      setConsultantResult(result)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setConsultantLoading(false)
+    }
+  }
+
   const getTierBadge = (tier: string) => {
     const badges: Record<string, { text: string; className: string }> = {
       free: { text: 'FREE', className: 'bg-green-100 text-green-700' },
@@ -164,62 +251,51 @@ export default function ReportLibrary({
     return badges[tier] || { text: tier.toUpperCase(), className: 'bg-gray-100 text-gray-600' }
   }
 
-  // Flatten all templates into a single list for dropdown
   const allTemplates = categories?.flatMap(cat => cat.templates) || []
-
-  // Group templates by category for organized dropdown
   const groupedTemplates = categories?.reduce((acc, cat) => {
     acc[cat.display_name] = cat.templates
     return acc
   }, {} as Record<string, ReportTemplate[]>) || {}
 
-  const hasContext = opportunityId || workspaceId || contextInput.trim()
-  const canGenerate = hasContext && selectedTemplate
-
-  const handleGenerate = () => {
-    if (!selectedTemplate) return
-    
-    if (isGuest) {
-      // Guest purchase flow
-      if (!guestEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
-        setPurchaseError('Please enter a valid email address')
-        return
-      }
-      handleGuestPurchase()
-    } else {
-      // Authenticated generate
-      generateMutation.mutate({ templateSlug: selectedTemplate.slug })
+  const getContextForReport = () => {
+    switch (inputMode) {
+      case 'validate':
+        return consultantResult 
+          ? `Idea: ${ideaDescription}\n\nAnalysis: ${JSON.stringify(consultantResult, null, 2)}`
+          : ideaDescription
+      case 'search':
+        return consultantResult
+          ? `Search: ${searchQuery} (${searchCategory})\n\nResults: ${JSON.stringify(consultantResult, null, 2)}`
+          : `Search query: ${searchQuery}, Category: ${searchCategory}`
+      case 'location':
+        return consultantResult
+          ? `Location: ${locationBusiness} in ${locationCity}\n\nAnalysis: ${JSON.stringify(consultantResult, null, 2)}`
+          : `${locationBusiness} in ${locationCity}`
+      case 'clone':
+        return consultantResult
+          ? `Clone: ${cloneBusinessName}\n\nAnalysis: ${JSON.stringify(consultantResult, null, 2)}`
+          : `Clone ${cloneBusinessName} at ${cloneBusinessAddress}`
+      default:
+        return ''
     }
   }
 
-  const handleGuestPurchase = async () => {
-    if (!selectedTemplate) return
-    
-    setPurchaseLoading(true)
-    setPurchaseError(null)
-    try {
-      const baseUrl = window.location.origin
-      const res = await fetch('/api/v1/report-pricing/studio-checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          report_type: selectedTemplate.slug,
-          custom_context: contextInput,
-          email: guestEmail,
-          success_url: `${baseUrl}/billing/return?status=success`,
-          cancel_url: `${baseUrl}/billing/return?status=canceled`,
-        })
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Checkout failed')
-      if (data.url) {
-        window.location.href = data.url
-      }
-    } catch (e) {
-      setPurchaseError(e instanceof Error ? e.message : 'Checkout failed')
-    } finally {
-      setPurchaseLoading(false)
+  const canAnalyze = () => {
+    switch (inputMode) {
+      case 'validate': return ideaDescription.trim().length > 10
+      case 'search': return searchQuery.trim() || searchCategory
+      case 'location': return locationCity.trim() && locationBusiness.trim()
+      case 'clone': return cloneBusinessName.trim() && cloneBusinessAddress.trim()
+      default: return false
     }
+  }
+
+  const canGenerateReport = selectedTemplate && (consultantResult || canAnalyze())
+
+  const handleGenerateReport = () => {
+    if (!selectedTemplate) return
+    const context = getContextForReport()
+    generateMutation.mutate({ templateSlug: selectedTemplate.slug, context })
   }
 
   if (isLoading) {
@@ -227,7 +303,7 @@ export default function ReportLibrary({
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="flex items-center justify-center gap-2 text-gray-500">
           <Loader2 className="w-5 h-5 animate-spin" />
-          <span>Loading report library...</span>
+          <span>Loading...</span>
         </div>
       </div>
     )
@@ -235,27 +311,149 @@ export default function ReportLibrary({
 
   return (
     <div className="space-y-6">
-      {/* Two-Column Input Section */}
+      {/* Two-Column Layout */}
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <div className="grid md:grid-cols-2 gap-6">
-          {/* LEFT: Business Context Input */}
+          
+          {/* LEFT: Business Context with 4 Modes */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
               Business Context
             </label>
-            <textarea
-              value={contextInput}
-              onChange={(e) => setContextInput(e.target.value)}
-              placeholder="Describe your business idea, market, or opportunity..."
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none text-sm"
-              rows={4}
-            />
-            <p className="text-xs text-gray-400 mt-1">{contextInput.length}/2000</p>
+            
+            {/* Mode Tabs */}
+            <div className="flex flex-wrap gap-1 mb-4 p-1 bg-gray-100 rounded-lg">
+              {INPUT_MODES.map((mode) => {
+                const Icon = mode.icon
+                const isActive = inputMode === mode.id
+                return (
+                  <button
+                    key={mode.id}
+                    onClick={() => {
+                      setInputMode(mode.id)
+                      setConsultantResult(null)
+                    }}
+                    className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-2 py-2 rounded-md text-xs font-medium transition-all ${
+                      isActive
+                        ? 'bg-white text-gray-900 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate hidden sm:inline">{mode.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Mode Description */}
+            <p className="text-xs text-gray-500 mb-3">
+              {INPUT_MODES.find(m => m.id === inputMode)?.description}
+            </p>
+
+            {/* Mode-Specific Inputs */}
+            {inputMode === 'validate' && (
+              <textarea
+                value={ideaDescription}
+                onChange={(e) => setIdeaDescription(e.target.value)}
+                placeholder="Describe your business idea in detail... e.g., A subscription service that delivers locally-roasted coffee beans to offices..."
+                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none text-sm"
+                rows={4}
+              />
+            )}
+
+            {inputMode === 'search' && (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Keyword (e.g., coffee, fitness, delivery...)"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                />
+                <select
+                  value={searchCategory}
+                  onChange={(e) => setSearchCategory(e.target.value)}
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-sm"
+                >
+                  <option value="">All Categories</option>
+                  <option value="work_productivity">💼 Work & Productivity</option>
+                  <option value="money_finance">💰 Money & Finance</option>
+                  <option value="health_wellness">🏥 Health & Wellness</option>
+                  <option value="technology">💻 Technology</option>
+                  <option value="transportation">🚗 Transportation</option>
+                </select>
+              </div>
+            )}
+
+            {inputMode === 'location' && (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={locationCity}
+                  onChange={(e) => setLocationCity(e.target.value)}
+                  placeholder="City (e.g., Miami, Florida)"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                />
+                <input
+                  type="text"
+                  value={locationBusiness}
+                  onChange={(e) => setLocationBusiness(e.target.value)}
+                  placeholder="Business type (e.g., Coffee shop, Fitness studio...)"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                />
+              </div>
+            )}
+
+            {inputMode === 'clone' && (
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={cloneBusinessName}
+                  onChange={(e) => setCloneBusinessName(e.target.value)}
+                  placeholder="Business name (e.g., Sweetgreen, Blue Bottle...)"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                />
+                <input
+                  type="text"
+                  value={cloneBusinessAddress}
+                  onChange={(e) => setCloneBusinessAddress(e.target.value)}
+                  placeholder="Business address (e.g., 123 Main St, San Francisco, CA)"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                />
+                <input
+                  type="text"
+                  value={cloneTargetCity}
+                  onChange={(e) => setCloneTargetCity(e.target.value)}
+                  placeholder="Target city to find matches (optional)"
+                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                />
+              </div>
+            )}
+
+            {/* Analyze Button */}
+            <button
+              onClick={runConsultantAnalysis}
+              disabled={!canAnalyze() || consultantLoading}
+              className="mt-3 w-full px-4 py-2.5 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
+            >
+              {consultantLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Analyze {INPUT_MODES.find(m => m.id === inputMode)?.label}
+                </>
+              )}
+            </button>
           </div>
 
-          {/* RIGHT: Report Selection & Generate */}
+          {/* RIGHT: Report Selection */}
           <div className="flex flex-col">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-3">
               Select Report Type
             </label>
             <select
@@ -278,9 +476,8 @@ export default function ReportLibrary({
               ))}
             </select>
 
-            {/* Selected template info */}
             {selectedTemplate && (
-              <div className="mt-2 p-3 bg-gray-50 rounded-lg">
+              <div className="mt-3 p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-900">{selectedTemplate.name}</span>
                   <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(selectedTemplate.min_tier).className}`}>
@@ -291,10 +488,9 @@ export default function ReportLibrary({
               </div>
             )}
 
-            {/* Guest email input */}
             {isGuest && selectedTemplate && (
               <div className="mt-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
                   <Mail className="w-3 h-3 inline mr-1" />
                   Email for delivery
                 </label>
@@ -303,7 +499,7 @@ export default function ReportLibrary({
                   value={guestEmail}
                   onChange={(e) => setGuestEmail(e.target.value)}
                   placeholder="your@email.com"
-                  className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+                  className="w-full p-2 border border-gray-200 rounded-lg text-sm"
                 />
               </div>
             )}
@@ -314,21 +510,20 @@ export default function ReportLibrary({
               </div>
             )}
 
-            {/* Generate Button */}
             <button
-              onClick={handleGenerate}
-              disabled={!canGenerate || generateMutation.isPending || purchaseLoading}
+              onClick={handleGenerateReport}
+              disabled={!canGenerateReport || generateMutation.isPending}
               className="mt-auto px-4 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {generateMutation.isPending || purchaseLoading ? (
+              {generateMutation.isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  {isGuest ? 'Processing...' : 'Generating...'}
+                  Generating...
                 </>
               ) : (
                 <>
                   <Wand2 className="w-4 h-4" />
-                  {isGuest ? 'Purchase Report' : 'Generate Report'}
+                  Generate Report
                 </>
               )}
             </button>
@@ -341,6 +536,119 @@ export default function ReportLibrary({
           </div>
         </div>
       </div>
+
+      {/* Consultant Analysis Results */}
+      {consultantResult && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 animate-fade-in">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-gray-900">
+              {INPUT_MODES.find(m => m.id === inputMode)?.label} Results
+            </h3>
+            <button
+              onClick={() => setConsultantResult(null)}
+              className="text-gray-400 hover:text-gray-600 text-sm"
+            >
+              ✕ Clear
+            </button>
+          </div>
+
+          {/* Validate Idea Results */}
+          {inputMode === 'validate' && consultantResult.success && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-600">Recommendation:</span>
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${
+                  consultantResult.recommendation === 'online' ? 'bg-blue-100 text-blue-700' :
+                  consultantResult.recommendation === 'physical' ? 'bg-green-100 text-green-700' :
+                  'bg-purple-100 text-purple-700'
+                }`}>
+                  {consultantResult.recommendation === 'online' && <Globe className="w-4 h-4" />}
+                  {consultantResult.recommendation === 'physical' && <Store className="w-4 h-4" />}
+                  {consultantResult.recommendation === 'hybrid' && <Building2 className="w-4 h-4" />}
+                  {consultantResult.recommendation?.charAt(0).toUpperCase() + consultantResult.recommendation?.slice(1)}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-blue-50 rounded-lg p-3">
+                  <div className="text-xs text-blue-600 mb-1">Online Score</div>
+                  <div className="text-2xl font-bold text-blue-700">{consultantResult.online_score}%</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3">
+                  <div className="text-xs text-green-600 mb-1">Physical Score</div>
+                  <div className="text-2xl font-bold text-green-700">{consultantResult.physical_score}%</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Search Results */}
+          {inputMode === 'search' && consultantResult.success && (
+            <div className="space-y-3">
+              <div className="text-sm text-gray-600">Found {consultantResult.total_count || 0} opportunities</div>
+              {consultantResult.opportunities?.slice(0, 5).map((opp: any) => (
+                <div key={opp.id} className="p-3 bg-gray-50 rounded-lg">
+                  <div className="font-medium text-gray-900">{opp.title}</div>
+                  {opp.description && <div className="text-xs text-gray-500 mt-1 line-clamp-2">{opp.description}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Location Results */}
+          {inputMode === 'location' && consultantResult.success && (
+            <div className="space-y-3">
+              <div className="text-sm text-gray-600">
+                {consultantResult.business_description} in {consultantResult.city}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-500">Competition</div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {consultantResult.geo_analysis?.competitors?.length || 0}
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-500">Market Density</div>
+                  <div className="text-lg font-bold text-gray-900 capitalize">
+                    {consultantResult.geo_analysis?.market_density || 'N/A'}
+                  </div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-500">Category</div>
+                  <div className="text-lg font-bold text-gray-900">
+                    {consultantResult.inferred_category || 'N/A'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Clone Results */}
+          {inputMode === 'clone' && consultantResult.success && (
+            <div className="space-y-3">
+              <div className="text-sm text-gray-600">
+                Found {consultantResult.matching_locations?.length || 0} matching locations
+              </div>
+              {consultantResult.matching_locations?.slice(0, 3).map((loc: any, idx: number) => (
+                <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center">
+                  <div>
+                    <div className="font-medium text-gray-900">{loc.name}</div>
+                    <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-amber-600">{loc.similarity_score}%</div>
+                    <div className="text-xs text-gray-500">match</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-3 text-xs text-gray-400">
+            Processed in {consultantResult.processing_time_ms}ms
+          </div>
+        </div>
+      )}
 
       {/* Generated Report Output */}
       {generatedReport && (
@@ -356,11 +664,8 @@ export default function ReportLibrary({
                   <Download className="w-4 h-4" />
                   Export
                 </button>
-                <button
-                  onClick={() => setGeneratedReport(null)}
-                  className="text-white/80 hover:text-white text-sm"
-                >
-                  ✕ Close
+                <button onClick={() => setGeneratedReport(null)} className="text-white/80 hover:text-white">
+                  ✕
                 </button>
               </div>
             </div>
@@ -381,41 +686,11 @@ export default function ReportLibrary({
             )}
             {generatedReport.confidence_score && (
               <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
-                <span>Confidence Score:</span>
+                <span>Confidence:</span>
                 <span className="font-semibold text-purple-600">{generatedReport.confidence_score}%</span>
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Quick Access Report Categories */}
-      {!generatedReport && (
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {categories?.slice(0, 4).map((category) => {
-            const CategoryIcon = categoryIcons[category.category] || FileText
-            return (
-              <button
-                key={category.category}
-                onClick={() => {
-                  if (category.templates.length > 0) {
-                    setSelectedTemplate(category.templates[0])
-                  }
-                }}
-                className="p-4 bg-white rounded-xl border border-gray-200 hover:border-amber-300 hover:shadow-sm transition-all text-left"
-              >
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="p-2 bg-purple-100 rounded-lg">
-                    <CategoryIcon className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-900">{category.display_name}</div>
-                    <div className="text-xs text-gray-500">{category.templates.length} reports</div>
-                  </div>
-                </div>
-              </button>
-            )
-          })}
         </div>
       )}
     </div>
