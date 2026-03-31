@@ -278,7 +278,15 @@ async def generate_report(
 
 {prompt}"""
         result = await llm_ai_engine_service.generate_response(full_prompt, model="claude")
-        content = result.get("content", result.get("response", str(result)))
+        
+        # Check for AI errors
+        if result.get("error"):
+            logger.error(f"AI service error: {result.get('error_message', result.get('error'))}")
+            raise Exception(f"AI service unavailable: {result.get('error_message', 'Unknown error')}")
+        
+        content = result.get("response") or result.get("raw")
+        if not content:
+            raise Exception("AI returned empty response")
         
         generation_time_ms = int((time.time() - start_time) * 1000)
         
