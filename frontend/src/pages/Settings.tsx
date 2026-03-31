@@ -1236,54 +1236,123 @@ export default function Settings() {
                   </div>
                 ) : (
                   <div className="space-y-6">
+                    {/* Model Selector */}
                     <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                      <h3 className="font-medium text-gray-900 mb-3">AI Provider</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button
-                          onClick={() => saveAIPreferences({ provider: 'claude', mode: 'replit' })}
-                          disabled={savingAI}
-                          className={`p-4 rounded-lg border-2 transition-all text-left ${
-                            aiPreferences?.provider === 'claude'
-                              ? 'border-purple-500 bg-purple-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-amber-500 flex items-center justify-center">
-                              <span className="text-white text-sm font-bold">C</span>
-                            </div>
-                            <span className="font-medium text-gray-900">Claude</span>
-                          </div>
-                          <p className="text-xs text-gray-500">Anthropic's Claude - Best for nuanced analysis</p>
-                        </button>
-                        
-                        <button
-                          onClick={() => {
-                            if (aiPreferences?.has_openai_key) {
-                              saveAIPreferences({ provider: 'openai', mode: 'byok' })
-                            } else {
-                              saveAIPreferences({ provider: 'openai', mode: 'replit' })
-                            }
-                          }}
-                          disabled={savingAI}
-                          className={`p-4 rounded-lg border-2 transition-all text-left ${
-                            aiPreferences?.provider === 'openai'
-                              ? 'border-green-500 bg-green-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 flex items-center justify-center">
-                              <span className="text-white text-sm font-bold">O</span>
-                            </div>
-                            <span className="font-medium text-gray-900">OpenAI</span>
-                          </div>
-                          <p className="text-xs text-gray-500">GPT-4o - Fast and versatile</p>
-                        </button>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-medium text-gray-900">Select AI Model</h3>
+                        {loadingModels && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
                       </div>
+
+                      {availableModels.length > 0 ? (
+                        (() => {
+                          // Group models by provider
+                          const providerOrder = ['anthropic', 'openai', 'google', 'deepseek', 'xai']
+                          const grouped: Record<string, AvailableModel[]> = {}
+                          for (const m of availableModels) {
+                            const p = m.provider.toLowerCase()
+                            if (!grouped[p]) grouped[p] = []
+                            grouped[p].push(m)
+                          }
+                          const providerMeta: Record<string, { label: string; initials: string; gradient: string }> = {
+                            anthropic: { label: 'Anthropic', initials: 'A', gradient: 'from-orange-400 to-amber-500' },
+                            openai:    { label: 'OpenAI',    initials: 'O', gradient: 'from-green-500 to-emerald-600' },
+                            google:    { label: 'Google',    initials: 'G', gradient: 'from-blue-500 to-cyan-500' },
+                            deepseek:  { label: 'DeepSeek',  initials: 'D', gradient: 'from-blue-600 to-violet-600' },
+                            xai:       { label: 'xAI',       initials: 'X', gradient: 'from-gray-700 to-gray-900' },
+                          }
+                          const sortedProviders = Object.keys(grouped).sort(
+                            (a, b) => providerOrder.indexOf(a) - providerOrder.indexOf(b)
+                          )
+                          return (
+                            <div className="space-y-4">
+                              {sortedProviders.map(provider => {
+                                const meta = providerMeta[provider] || { label: provider, initials: provider[0].toUpperCase(), gradient: 'from-gray-400 to-gray-600' }
+                                return (
+                                  <div key={provider}>
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className={`w-5 h-5 rounded-full bg-gradient-to-r ${meta.gradient} flex items-center justify-center`}>
+                                        <span className="text-white text-[9px] font-bold">{meta.initials}</span>
+                                      </div>
+                                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{meta.label}</span>
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-2">
+                                      {grouped[provider].map(m => {
+                                        const isSelected = aiPreferences?.model === m.model_id
+                                        return (
+                                          <button
+                                            key={m.model_id}
+                                            onClick={() => saveAIPreferences({ model: m.model_id, provider })}
+                                            disabled={savingAI}
+                                            className={`w-full p-3 rounded-lg border-2 text-left transition-all ${
+                                              isSelected
+                                                ? 'border-purple-500 bg-purple-50'
+                                                : 'border-gray-200 bg-white hover:border-gray-300'
+                                            }`}
+                                          >
+                                            <div className="flex items-center justify-between">
+                                              <div>
+                                                <span className="text-sm font-medium text-gray-900">{m.display_name}</span>
+                                                {m.is_default && (
+                                                  <span className="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-medium rounded">
+                                                    Default
+                                                  </span>
+                                                )}
+                                                {m.description && (
+                                                  <p className="text-xs text-gray-500 mt-0.5">{m.description}</p>
+                                                )}
+                                              </div>
+                                              {isSelected && <Check className="w-4 h-4 text-purple-600 flex-shrink-0" />}
+                                            </div>
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })()
+                      ) : !loadingModels ? (
+                        /* Fallback: two hardcoded options if model list fails to load */
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            onClick={() => saveAIPreferences({ provider: 'anthropic', mode: 'replit' })}
+                            disabled={savingAI}
+                            className={`p-4 rounded-lg border-2 transition-all text-left ${
+                              aiPreferences?.provider === 'anthropic' || aiPreferences?.provider === 'claude'
+                                ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-orange-400 to-amber-500 flex items-center justify-center">
+                                <span className="text-white text-sm font-bold">A</span>
+                              </div>
+                              <span className="font-medium text-gray-900">Claude</span>
+                            </div>
+                            <p className="text-xs text-gray-500">Anthropic — best for nuanced analysis</p>
+                          </button>
+                          <button
+                            onClick={() => saveAIPreferences({ provider: 'openai', mode: 'replit' })}
+                            disabled={savingAI}
+                            className={`p-4 rounded-lg border-2 transition-all text-left ${
+                              aiPreferences?.provider === 'openai'
+                                ? 'border-green-500 bg-green-50' : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-green-500 to-emerald-600 flex items-center justify-center">
+                                <span className="text-white text-sm font-bold">O</span>
+                              </div>
+                              <span className="font-medium text-gray-900">OpenAI</span>
+                            </div>
+                            <p className="text-xs text-gray-500">GPT-4o — fast and versatile</p>
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
 
-                    {aiPreferences?.provider === 'claude' && (
+                    {(aiPreferences?.provider === 'anthropic' || aiPreferences?.provider === 'claude') && (
                       <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
                         <h3 className="font-medium text-gray-900 mb-3">Claude API Key (Optional)</h3>
                         <p className="text-sm text-gray-600 mb-4">
@@ -1405,9 +1474,12 @@ export default function Settings() {
 
                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="text-sm text-blue-800">
-                        <strong>Current configuration:</strong> Using{' '}
-                        {aiPreferences?.provider === 'claude' ? 'Claude' : 'OpenAI'}{' '}
-                        {(aiPreferences?.provider === 'claude' && aiPreferences?.has_claude_key) ||
+                        <strong>Current configuration:</strong>{' '}
+                        {availableModels.find(m => m.model_id === aiPreferences?.model)?.display_name
+                          || aiPreferences?.model
+                          || (aiPreferences?.provider === 'claude' || aiPreferences?.provider === 'anthropic' ? 'Claude' : aiPreferences?.provider === 'openai' ? 'OpenAI' : 'Default')
+                        }{' '}
+                        {((aiPreferences?.provider === 'anthropic' || aiPreferences?.provider === 'claude') && aiPreferences?.has_claude_key) ||
                          (aiPreferences?.provider === 'openai' && aiPreferences?.has_openai_key)
                           ? '(your API key)'
                           : '(OppGrid credits)'
