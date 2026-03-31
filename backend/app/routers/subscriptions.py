@@ -11,6 +11,7 @@ import io
 import json
 import logging
 import os
+import stripe
 
 logger = logging.getLogger(__name__)
 
@@ -423,10 +424,17 @@ def create_portal_session(
             detail="No billing account found. Please subscribe first."
         )
 
-    session = stripe_service.create_portal_session(
-        customer_id=subscription.stripe_customer_id,
-        return_url=return_url
-    )
+    try:
+        session = stripe_service.create_portal_session(
+            customer_id=subscription.stripe_customer_id,
+            return_url=return_url
+        )
+    except stripe.InvalidRequestError as e:
+        logger.error(f"Stripe InvalidRequestError creating portal session for customer {subscription.stripe_customer_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to open billing portal. Your billing account may be invalid. Please contact support."
+        )
 
     return {"url": session.url}
 
