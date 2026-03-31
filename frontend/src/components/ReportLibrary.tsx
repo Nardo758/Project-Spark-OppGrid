@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   FileText, 
@@ -366,8 +367,9 @@ export default function ReportLibrary({
       queryClient.invalidateQueries({ queryKey: ['my-reports'] })
       onReportGenerated?.(report)
     },
-    onError: () => {
+    onError: (err: Error) => {
       setGeneratingSlug(null)
+      setGenerateError(err.message || 'Failed to generate report. Please try again.')
     },
   })
 
@@ -519,10 +521,18 @@ export default function ReportLibrary({
     }
   }
 
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
   const handleGenerateReport = () => {
     console.log('[ReportLibrary] handleGenerateReport called', { selectedReport })
+    setGenerateError(null)
     if (!selectedReport) {
       console.warn('[ReportLibrary] No selectedReport, returning')
+      return
+    }
+
+    if (!isAuthenticated || !token) {
+      setGenerateError('Please sign in to generate reports.')
       return
     }
     
@@ -998,6 +1008,20 @@ export default function ReportLibrary({
             {purchaseError && (
               <div className="mt-2 p-2 bg-red-50 text-red-700 text-xs rounded-lg">
                 {purchaseError}
+              </div>
+            )}
+
+            {generateError && (
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">{generateError}</p>
+                {!isAuthenticated && (
+                  <Link
+                    to="/login"
+                    className="inline-block mt-2 px-4 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600"
+                  >
+                    Sign In
+                  </Link>
+                )}
               </div>
             )}
 
