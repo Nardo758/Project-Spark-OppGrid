@@ -327,9 +327,10 @@ Target Audience: {opportunity.get('target_audience', '')}
         demographics: Optional[Dict[str, Any]] = None,
         competitors: Optional[List[Dict[str, Any]]] = None,
         demand_signals: Optional[Dict[str, Any]] = None,
-        market_economics: Optional[Dict[str, Any]] = None
+        market_economics: Optional[Dict[str, Any]] = None,
+        report_data: Optional[Any] = None  # ReportDataContext from ReportDataService
     ) -> str:
-        """Generate market insights for Layer 2 report with demographics, competitive, and demand data."""
+        """Generate market insights for Layer 2 report with demographics, competitive, demand data, and 4 P's."""
         system = """You are a market research analyst providing deep-dive market insights.
 Structure your analysis with:
 1. **Market Overview** - Size, growth trajectory, key dynamics
@@ -385,6 +386,76 @@ Demographics Data:
             if market_economics.get('rent_trend'):
                 economics_info += f"- Rent Trend: {market_economics['rent_trend']}\n"
         
+        # Extract 4 P's data from ReportDataContext if provided
+        four_ps_info = ""
+        if report_data:
+            four_ps_info = "\n📊 COMPREHENSIVE 4 P's MARKET DATA:\n"
+            
+            # PRODUCT
+            if report_data.product:
+                four_ps_info += "\n**PRODUCT (Demand Validation):**\n"
+                if report_data.product.opportunity_score:
+                    four_ps_info += f"- Opportunity Score: {report_data.product.opportunity_score:.0f}/100\n"
+                if report_data.product.pain_intensity:
+                    four_ps_info += f"- Pain Intensity: {report_data.product.pain_intensity:.1f}/10\n"
+                if report_data.product.trend_strength:
+                    four_ps_info += f"- Trend Strength: {report_data.product.trend_strength:.0f}/100\n"
+                if report_data.product.signal_density:
+                    four_ps_info += f"- Signal Density: {report_data.product.signal_density:.0%}\n"
+                if report_data.product.amenity_demand and not demand_signals:
+                    four_ps_info += "Top Consumer Demands:\n"
+                    for sig in report_data.product.amenity_demand[:5]:
+                        four_ps_info += f"  • {sig.get('amenity_type', '').replace('_', ' ').title()}: {sig.get('demand_pct', 0)}%\n"
+            
+            # PRICE
+            if report_data.price:
+                four_ps_info += "\n**PRICE (Economics):**\n"
+                if report_data.price.market_size_estimate:
+                    four_ps_info += f"- Market Size: {report_data.price.market_size_estimate}\n"
+                if report_data.price.median_income:
+                    four_ps_info += f"- Median Income: ${report_data.price.median_income:,}\n"
+                if report_data.price.median_rent and not market_economics:
+                    four_ps_info += f"- Median Rent: ${report_data.price.median_rent}/month\n"
+                if report_data.price.spending_power_index:
+                    four_ps_info += f"- Spending Power Index: {report_data.price.spending_power_index}/100\n"
+                if report_data.price.revenue_benchmark:
+                    four_ps_info += f"- Revenue Benchmark: ${report_data.price.revenue_benchmark:,.0f}/year\n"
+            
+            # PLACE
+            if report_data.place:
+                four_ps_info += "\n**PLACE (Location Intelligence):**\n"
+                if report_data.place.growth_score:
+                    four_ps_info += f"- Market Growth Score: {report_data.place.growth_score:.0f}/100\n"
+                if report_data.place.growth_category:
+                    four_ps_info += f"- Growth Category: {report_data.place.growth_category}\n"
+                if report_data.place.population:
+                    four_ps_info += f"- Population: {report_data.place.population:,}\n"
+                if report_data.place.population_growth_rate:
+                    four_ps_info += f"- Population Growth: {report_data.place.population_growth_rate}%\n"
+                if report_data.place.job_growth_rate:
+                    four_ps_info += f"- Job Growth: {report_data.place.job_growth_rate}%\n"
+                if report_data.place.vacancy_rate and not market_economics:
+                    four_ps_info += f"- Vacancy Rate: {report_data.place.vacancy_rate}%\n"
+            
+            # PROMOTION
+            if report_data.promotion:
+                four_ps_info += "\n**PROMOTION (Competition):**\n"
+                if report_data.promotion.competition_level:
+                    four_ps_info += f"- Competition Level: {report_data.promotion.competition_level}\n"
+                if report_data.promotion.competitor_count:
+                    four_ps_info += f"- Competitors: {report_data.promotion.competitor_count}\n"
+                if report_data.promotion.avg_competitor_rating:
+                    four_ps_info += f"- Avg Competitor Rating: {report_data.promotion.avg_competitor_rating:.1f}/5.0\n"
+                if report_data.promotion.success_factors:
+                    four_ps_info += f"- Success Factors: {', '.join(report_data.promotion.success_factors[:3])}\n"
+                if report_data.promotion.key_risks:
+                    four_ps_info += f"- Key Risks: {', '.join(report_data.promotion.key_risks[:3])}\n"
+            
+            # Data quality note
+            if report_data.data_quality:
+                dq = report_data.data_quality
+                four_ps_info += f"\n(Data Quality: {dq.completeness:.0%} complete, {dq.confidence:.0%} confidence)\n"
+        
         prompt = f"""Provide market insights for this opportunity:
 
 Title: {opportunity.get('title', 'Unknown')}
@@ -396,6 +467,7 @@ Market Size: {opportunity.get('market_size', 'Under analysis')}
 {comp_info}
 {demand_info}
 {economics_info}
+{four_ps_info}
 """
         return self._generate(system, prompt)
     
