@@ -814,15 +814,29 @@ export default function ReportLibrary({
             </button>
 
             {/* Trust Signals */}
-            <div className="mt-3 flex items-center justify-center gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <Shield className="w-3 h-3" />
-                Secure payment
-              </span>
-              <span className="flex items-center gap-1">
-                <CheckCircle className="w-3 h-3" />
-                Money-back guarantee
-              </span>
+            <div className="mt-3 flex flex-col items-center gap-2">
+              <div className="flex items-center gap-4 text-xs text-gray-500">
+                <span className="flex items-center gap-1">
+                  <Shield className="w-3 h-3" />
+                  Secure payment
+                </span>
+                <span className="flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" />
+                  Money-back guarantee
+                </span>
+              </div>
+              {/* Stripe Badge */}
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full">
+                <svg className="w-8 h-3.5" viewBox="0 0 60 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M59.64 14.28c0-4.98-2.41-8.91-7.02-8.91-4.63 0-7.44 3.93-7.44 8.87 0 5.85 3.31 8.81 8.06 8.81 2.32 0 4.07-.52 5.39-1.26v-3.89c-1.32.66-2.84 1.07-4.77 1.07-1.89 0-3.56-.66-3.78-2.96h9.52c0-.25.04-1.26.04-1.73zm-9.62-1.85c0-2.2 1.34-3.11 2.57-3.11 1.19 0 2.46.91 2.46 3.11h-5.03z" fill="#635BFF"/>
+                  <path d="M38.99 5.37c-1.91 0-3.14.9-3.82 1.52l-.25-1.21h-4.28v22.83l4.86-1.03.01-5.54c.7.5 1.72 1.22 3.42 1.22 3.45 0 6.6-2.78 6.6-8.9-.02-5.6-3.21-8.89-6.54-8.89zm-1.15 13.68c-1.14 0-1.81-.41-2.28-.91l-.02-7.18c.5-.56 1.19-.95 2.3-.95 1.76 0 2.97 1.97 2.97 4.51 0 2.59-1.19 4.53-2.97 4.53z" fill="#635BFF"/>
+                  <path d="M28.24 4.18l4.88-1.05V0l-4.88 1.03v3.15zM28.24 5.68h4.88v17.22h-4.88V5.68z" fill="#635BFF"/>
+                  <path d="M23.24 6.97l-.31-1.29h-4.2v17.22h4.86V11.3c1.15-1.5 3.09-1.22 3.7-1.01V5.68c-.63-.24-2.92-.68-4.05 1.29z" fill="#635BFF"/>
+                  <path d="M13.54 2.12l-4.75 1.01-.02 15.76c0 2.91 2.18 5.05 5.1 5.05 1.61 0 2.79-.3 3.44-.65v-3.95c-.63.25-3.74 1.15-3.74-1.74V9.56h3.74V5.68h-3.74l-.03-3.56z" fill="#635BFF"/>
+                  <path d="M4.87 9.83c0-.76.63-1.05 1.66-1.05 1.49 0 3.37.45 4.86 1.26V5.54c-1.63-.65-3.24-.9-4.86-.9C2.64 4.64 0 6.61 0 9.99c0 5.27 7.26 4.43 7.26 6.7 0 .9-.78 1.19-1.88 1.19-1.63 0-3.71-.67-5.36-1.57v4.57c1.82.78 3.67 1.12 5.36 1.12 3.97 0 6.7-1.96 6.7-5.39-.02-5.69-7.31-4.68-7.31-6.78z" fill="#635BFF"/>
+                </svg>
+                <span className="text-xs text-gray-500">Powered by Stripe</span>
+              </div>
             </div>
           </div>
         </div>
