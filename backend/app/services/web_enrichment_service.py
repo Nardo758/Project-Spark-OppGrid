@@ -14,6 +14,13 @@ Sources:
 import os
 import logging
 import httpx
+
+# Allow nested event loops (required when called from FastAPI async context)
+try:
+    import nest_asyncio
+    nest_asyncio.apply()
+except ImportError:
+    pass  # nest_asyncio not installed, will fail if called from async context
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
