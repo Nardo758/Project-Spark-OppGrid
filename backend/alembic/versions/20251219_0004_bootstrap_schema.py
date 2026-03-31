@@ -22,6 +22,17 @@ branch_labels = None
 depends_on = None
 
 
+POSTGIS_SYSTEM_TABLES = {
+    "spatial_ref_sys",
+    "geometry_columns",
+    "geography_columns",
+    "raster_columns",
+    "raster_overviews",
+    "layer",
+    "topology",
+}
+
+
 def upgrade() -> None:
     # Ensure models are registered on Base.metadata.
     import app.models  # noqa: F401
@@ -31,7 +42,10 @@ def upgrade() -> None:
     inspector = inspect(bind)
     existing = set(inspector.get_table_names())
 
-    missing_tables = [t for name, t in Base.metadata.tables.items() if name not in existing]
+    missing_tables = [
+        t for name, t in Base.metadata.tables.items()
+        if name not in existing and name not in POSTGIS_SYSTEM_TABLES
+    ]
     if missing_tables:
         Base.metadata.create_all(bind=bind, tables=missing_tables)
 
