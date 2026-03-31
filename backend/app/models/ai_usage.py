@@ -8,7 +8,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from enum import Enum
 
-from app.database import Base
+from app.db.database import Base
 
 
 class AIUsageEventType(str, Enum):

@@ -16,9 +16,9 @@ from pydantic import BaseModel
 import os
 import logging
 
-from app.database import get_db
+from app.db.database import get_db
 from app.models.opportunity import Opportunity
-from app.models.google_scraping import GoogleScrapingJob, GoogleMapsBusiness
+from app.models.google_scraping import GoogleScrapeJob, GoogleMapsBusiness
 from app.models.census_demographics import MarketGrowthTrajectory, CensusPopulationEstimate
 from app.models.detected_trend import DetectedTrend
 
@@ -146,15 +146,15 @@ async def get_platform_status(
     ).scalar() or 0
     
     # Scraping job stats
-    pending_jobs = db.query(func.count(GoogleScrapingJob.id)).filter(
-        GoogleScrapingJob.status == 'pending'
+    pending_jobs = db.query(func.count(GoogleScrapeJob.id)).filter(
+        GoogleScrapeJob.status == 'pending'
     ).scalar() or 0
-    running_jobs = db.query(func.count(GoogleScrapingJob.id)).filter(
-        GoogleScrapingJob.status == 'running'
+    running_jobs = db.query(func.count(GoogleScrapeJob.id)).filter(
+        GoogleScrapeJob.status == 'running'
     ).scalar() or 0
-    completed_today = db.query(func.count(GoogleScrapingJob.id)).filter(
-        GoogleScrapingJob.status == 'completed',
-        GoogleScrapingJob.completed_at >= today
+    completed_today = db.query(func.count(GoogleScrapeJob.id)).filter(
+        GoogleScrapeJob.status == 'completed',
+        GoogleScrapeJob.completed_at >= today
     ).scalar() or 0
     
     # Coverage
@@ -210,9 +210,9 @@ async def get_coverage_stats(
     total_businesses = db.query(func.count(GoogleMapsBusiness.id)).scalar() or 0
     
     # Last scrape time
-    last_job = db.query(GoogleScrapingJob).filter(
-        GoogleScrapingJob.status == 'completed'
-    ).order_by(GoogleScrapingJob.completed_at.desc()).first()
+    last_job = db.query(GoogleScrapeJob).filter(
+        GoogleScrapeJob.status == 'completed'
+    ).order_by(GoogleScrapeJob.completed_at.desc()).first()
     
     last_scrape = last_job.completed_at.isoformat() if last_job and last_job.completed_at else None
     
@@ -399,11 +399,11 @@ async def execute_scraper_command(
     try:
         if command.action == "status":
             # Return scraper status
-            pending = db.query(func.count(GoogleScrapingJob.id)).filter(
-                GoogleScrapingJob.status == 'pending'
+            pending = db.query(func.count(GoogleScrapeJob.id)).filter(
+                GoogleScrapeJob.status == 'pending'
             ).scalar() or 0
-            running = db.query(func.count(GoogleScrapingJob.id)).filter(
-                GoogleScrapingJob.status == 'running'
+            running = db.query(func.count(GoogleScrapeJob.id)).filter(
+                GoogleScrapeJob.status == 'running'
             ).scalar() or 0
             
             return AgentCommandResponse(
@@ -453,7 +453,7 @@ async def execute_scraper_command(
                     state = ""
                 
                 for biz_type in business_types:
-                    job = GoogleScrapingJob(
+                    job = GoogleScrapeJob(
                         job_type="google_maps_search",
                         search_query=f"{biz_type} in {city}, {state}",
                         location=f"{city}, {state}",
@@ -477,8 +477,8 @@ async def execute_scraper_command(
         
         elif command.action == "pause":
             # Pause running jobs
-            updated = db.query(GoogleScrapingJob).filter(
-                GoogleScrapingJob.status == 'running'
+            updated = db.query(GoogleScrapeJob).filter(
+                GoogleScrapeJob.status == 'running'
             ).update({"status": "paused"})
             db.commit()
             
@@ -489,8 +489,8 @@ async def execute_scraper_command(
         
         elif command.action == "resume":
             # Resume paused jobs
-            updated = db.query(GoogleScrapingJob).filter(
-                GoogleScrapingJob.status == 'paused'
+            updated = db.query(GoogleScrapeJob).filter(
+                GoogleScrapeJob.status == 'paused'
             ).update({"status": "pending"})
             db.commit()
             
@@ -525,26 +525,26 @@ async def get_all_scraper_status(
     scrapers = []
     
     # Google Maps scraper
-    gm_pending = db.query(func.count(GoogleScrapingJob.id)).filter(
-        GoogleScrapingJob.status == 'pending',
-        GoogleScrapingJob.job_type == 'google_maps_search'
+    gm_pending = db.query(func.count(GoogleScrapeJob.id)).filter(
+        GoogleScrapeJob.status == 'pending',
+        GoogleScrapeJob.job_type == 'google_maps_search'
     ).scalar() or 0
     
-    gm_running = db.query(func.count(GoogleScrapingJob.id)).filter(
-        GoogleScrapingJob.status == 'running',
-        GoogleScrapingJob.job_type == 'google_maps_search'
+    gm_running = db.query(func.count(GoogleScrapeJob.id)).filter(
+        GoogleScrapeJob.status == 'running',
+        GoogleScrapeJob.job_type == 'google_maps_search'
     ).scalar() or 0
     
-    gm_completed_today = db.query(func.count(GoogleScrapingJob.id)).filter(
-        GoogleScrapingJob.status == 'completed',
-        GoogleScrapingJob.job_type == 'google_maps_search',
-        GoogleScrapingJob.completed_at >= today
+    gm_completed_today = db.query(func.count(GoogleScrapeJob.id)).filter(
+        GoogleScrapeJob.status == 'completed',
+        GoogleScrapeJob.job_type == 'google_maps_search',
+        GoogleScrapeJob.completed_at >= today
     ).scalar() or 0
     
-    gm_last = db.query(GoogleScrapingJob).filter(
-        GoogleScrapingJob.status == 'completed',
-        GoogleScrapingJob.job_type == 'google_maps_search'
-    ).order_by(GoogleScrapingJob.completed_at.desc()).first()
+    gm_last = db.query(GoogleScrapeJob).filter(
+        GoogleScrapeJob.status == 'completed',
+        GoogleScrapeJob.job_type == 'google_maps_search'
+    ).order_by(GoogleScrapeJob.completed_at.desc()).first()
     
     scrapers.append(ScraperStatus(
         scraper_type="google_maps",
