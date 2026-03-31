@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from typing import Optional
@@ -670,6 +671,155 @@ async def send_report_email(
         return {"success": True, "message": "Report sent successfully", "email_id": result.get("id")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
+
+
+@router.get("/{report_id}/export/pdf")
+def export_report_pdf(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export a generated report as a branded PDF file."""
+    from app.services.report_export_service import generate_pdf
+
+    report = db.query(GeneratedReport).filter(
+        GeneratedReport.id == report_id,
+        GeneratedReport.user_id == current_user.id,
+        GeneratedReport.status == ReportStatus.COMPLETED,
+    ).first()
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if not report.content:
+        raise HTTPException(status_code=400, detail="Report has no content to export")
+
+    report_type_labels = {
+        ReportType.LAYER_1_OVERVIEW: "Problem Overview",
+        ReportType.LAYER_2_DEEP_DIVE: "Deep Dive Analysis",
+        ReportType.LAYER_3_EXECUTION: "Execution Package",
+    }
+    type_label = report_type_labels.get(report.report_type, "Report")
+    generated_at = report.created_at.strftime("%B %d, %Y") if report.created_at else None
+    title = report.title or "OppGrid Report"
+
+    pdf_bytes = generate_pdf(
+        html_content=report.content,
+        title=title,
+        report_type=type_label,
+        generated_at=generated_at,
+    )
+
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)[:60]
+    filename = f"OppGrid - {safe_title}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{report_id}/export/docx")
+def export_report_docx(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export a generated report as a branded DOCX (Word) file."""
+    from app.services.report_export_service import generate_docx
+
+    report = db.query(GeneratedReport).filter(
+        GeneratedReport.id == report_id,
+        GeneratedReport.user_id == current_user.id,
+        GeneratedReport.status == ReportStatus.COMPLETED,
+    ).first()
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if not report.content:
+        raise HTTPException(status_code=400, detail="Report has no content to export")
+
+    report_type_labels = {
+        ReportType.LAYER_1_OVERVIEW: "Problem Overview",
+        ReportType.LAYER_2_DEEP_DIVE: "Deep Dive Analysis",
+        ReportType.LAYER_3_EXECUTION: "Execution Package",
+    }
+    type_label = report_type_labels.get(report.report_type, "Report")
+    generated_at = report.created_at.strftime("%B %d, %Y") if report.created_at else None
+    title = report.title or "OppGrid Report"
+
+    docx_bytes = generate_docx(
+        html_content=report.content,
+        title=title,
+        report_type=type_label,
+        generated_at=generated_at,
+    )
+
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)[:60]
+    filename = f"OppGrid - {safe_title}.docx"
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+class InlineExportRequest(BaseModel):
+    """For exporting content that isn't yet saved as a GeneratedReport (e.g. Consultant Studio)."""
+    content: str
+    title: str = "OppGrid Report"
+    report_type: str = "Report"
+
+
+@router.post("/export/pdf")
+def export_inline_pdf(
+    payload: InlineExportRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a branded PDF from raw HTML content (no saved report required)."""
+    from app.services.report_export_service import generate_pdf
+
+    pdf_bytes = generate_pdf(
+        html_content=payload.content,
+        title=payload.title,
+        report_type=payload.report_type,
+    )
+
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in payload.title)[:60]
+    filename = f"OppGrid - {safe_title}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/export/docx")
+def export_inline_docx(
+    payload: InlineExportRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a branded DOCX from raw HTML content (no saved report required)."""
+    from app.services.report_export_service import generate_docx
+
+    docx_bytes = generate_docx(
+        html_content=payload.content,
+        title=payload.title,
+        report_type=payload.report_type,
+    )
+
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in payload.title)[:60]
+    filename = f"OppGrid - {safe_title}.docx"
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/admin/cleanup-stuck")
