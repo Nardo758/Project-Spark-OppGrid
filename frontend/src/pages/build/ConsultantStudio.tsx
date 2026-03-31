@@ -205,6 +205,15 @@ export default function ConsultantStudio() {
         console.warn('API returned success=false:', data.error)
       }
       setValidateResult(data)
+      
+      // NEW: Auto-generate report when analysis completes
+      if (data.success && token) {
+        saveReportMutation.mutate({
+          reportType: 'feasibility_study',
+          title: `Business Idea: ${ideaDescription.slice(0, 50)}...`,
+          content: JSON.stringify(data, null, 2),
+        })
+      }
     },
     onError: (err: Error) => {
       console.error('Validate mutation error:', err)
@@ -363,7 +372,7 @@ export default function ConsultantStudio() {
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Describe Your Business Idea</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Our AI will analyze your idea and recommend whether it's best suited for online, physical, or hybrid operation.
+          Our AI will analyze your idea and generate a comprehensive report. Describe your business concept below.
         </p>
         <textarea
           value={ideaDescription}
@@ -372,25 +381,30 @@ export default function ConsultantStudio() {
           rows={5}
           className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
         />
-        <div className="mt-4 flex justify-between items-center">
-          <span className="text-sm text-gray-500">{ideaDescription.length}/2000</span>
-          <button
+        <div className="mt-6 space-y-4">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500">{ideaDescription.length}/2000 characters</span>
+            <button
             onClick={() => validateMutation.mutate()}
             disabled={!ideaDescription.trim() || validateMutation.isPending}
-            className="px-6 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-8 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2 transition-all"
           >
             {validateMutation.isPending ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Analyzing...
+                Analyzing & Generating Report...
               </>
             ) : (
               <>
                 <Sparkles className="w-5 h-5" />
-                Validate Idea
+                Analyze & Generate Report
               </>
             )}
           </button>
+          </div>
+          <div className="text-xs text-gray-400">
+            💡 <strong>Pro Tip:</strong> Your report generates automatically with the analysis. Takes ~30 seconds for full analysis.
+          </div>
         </div>
       </div>
 
@@ -449,42 +463,48 @@ export default function ConsultantStudio() {
           )}
 
           {reportError && (
-            <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
               <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
               <span className="text-sm text-red-800">{reportError}</span>
-              <button onClick={() => setReportError(null)} className="ml-auto text-red-400 hover:text-red-600 text-sm">Dismiss</button>
+              <button onClick={() => setReportError(null)} className="ml-auto text-red-400 hover:text-red-600 text-sm font-medium">Dismiss</button>
             </div>
           )}
           {reportSuccess && (
-            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
               <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
-              <span className="text-sm text-green-800">Report saved successfully!</span>
+              <span className="text-sm text-green-800">✅ Report saved to your account!</span>
             </div>
           )}
-          <div className="flex gap-3">
-            <button
-              onClick={() =>
-                saveReportMutation.mutate({
-                  reportType: 'feasibility_study',
-                  title: `Idea Validation: ${ideaDescription.slice(0, 50)}...`,
-                  content: JSON.stringify(validateResult, null, 2),
-                })
-              }
-              disabled={saveReportMutation.isPending || !token}
-              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium ${
-                token
-                  ? 'bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50'
-                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              }`}
-              title={!token ? 'Sign in to save reports' : ''}
-            >
-              <FileText className="w-4 h-4" />
-              {!token ? 'Sign in to Save' : saveReportMutation.isPending ? 'Saving...' : 'Save to Account'}
-            </button>
-            <button className="flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium">
-              <Download className="w-4 h-4" />
-              Download PDF
-            </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            {token ? (
+              <>
+                <button
+                  disabled={saveReportMutation.isPending}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <FileText className="w-5 h-5" />
+                  {saveReportMutation.isPending ? 'Saving Report...' : 'Report Saved ✓'}
+                </button>
+                <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border-2 border-blue-500 text-blue-600 rounded-lg hover:bg-blue-50 font-semibold transition-all">
+                  <Download className="w-5 h-5" />
+                  Download PDF
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold transition-all">
+                  <Download className="w-5 h-5" />
+                  Download as PDF
+                </button>
+                <button 
+                  onClick={() => window.location.href = '/signin'}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border-2 border-amber-500 text-amber-600 rounded-lg hover:bg-amber-50 font-semibold transition-all"
+                >
+                  <FileText className="w-5 h-5" />
+                  Sign in to Save
+                </button>
+              </>
+            )}
           </div>
 
           <div className="mt-4 text-xs text-gray-400">
