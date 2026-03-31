@@ -12,28 +12,36 @@ from app.services.serpapi_service import SerpAPIService
 
 AI_INTEGRATIONS_ANTHROPIC_API_KEY = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
 AI_INTEGRATIONS_ANTHROPIC_BASE_URL = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 serpapi_service = SerpAPIService()
 
 def get_anthropic_client(user_api_key: str = None) -> tuple[Anthropic, str]:
     """
     Get an Anthropic client, preferring user's BYOK key if provided.
+    Falls back to direct ANTHROPIC_API_KEY, then Replit AI Integrations.
     
     Returns:
-        tuple: (Anthropic client, key_source: "byok" | "platform")
+        tuple: (Anthropic client, key_source: "byok" | "direct" | "platform")
     """
     if user_api_key:
         return Anthropic(api_key=user_api_key), "byok"
+    
+    if ANTHROPIC_API_KEY:
+        return Anthropic(api_key=ANTHROPIC_API_KEY), "direct"
     
     return Anthropic(
         api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
         base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
     ), "platform"
 
-client = Anthropic(
-    api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-    base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-)
+if ANTHROPIC_API_KEY:
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+else:
+    client = Anthropic(
+        api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+        base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
+    )
 
 STAGE_PROMPTS = {
     "researching": """You are an AI Co-Founder helping a user in the RESEARCH stage of their business opportunity.
@@ -286,7 +294,7 @@ Remember: Be helpful, specific, and actionable. Guide them step by step toward s
     messages.append({"role": "user", "content": message})
     
     response = client.messages.create(
-        model="claude-sonnet-4-5",
+        model="claude-opus-4-5",
         max_tokens=2048,
         system=full_system,
         messages=messages
@@ -523,7 +531,7 @@ Remember: Be helpful, specific, and actionable. Guide them step by step toward s
     ai_client, key_source = get_anthropic_client(user_api_key)
     
     response = ai_client.messages.create(
-        model="claude-sonnet-4-5",
+        model="claude-opus-4-5",
         max_tokens=2048,
         system=full_system,
         messages=messages

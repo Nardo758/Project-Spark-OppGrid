@@ -71,7 +71,7 @@ class LLMAIEngineService:
     """
     
     def __init__(self):
-        self.model = "claude-sonnet-4-5"
+        self.model = "claude-opus-4-5"
         self.fast_model = "claude-haiku-4-5"
     
     def _get_success_patterns_context(self, db: Session, opportunity_type: str = None, limit: int = 5) -> str:
