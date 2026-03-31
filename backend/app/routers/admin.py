@@ -2470,7 +2470,7 @@ async def get_report_usage_stats(
 
 @router.get("/ai-pricing/config")
 def get_ai_pricing_config(
-    current_admin: User = Depends(require_admin)
+    current_admin: User = Depends(get_current_admin_user)
 ):
     """Get current AI pricing configuration."""
     from app.services.ai_metering_service import MODEL_COSTS, TIER_TOKEN_LIMITS, DEFAULT_MARKUP
@@ -2486,7 +2486,7 @@ def get_ai_pricing_config(
 @router.patch("/ai-pricing/model-costs")
 def update_model_costs(
     updates: Dict[str, Dict[str, float]],
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(get_current_admin_user),
 ):
     """
     Update model pricing.
@@ -2509,7 +2509,7 @@ def update_model_costs(
 @router.patch("/ai-pricing/tier-limits")
 def update_tier_limits(
     updates: Dict[str, int],
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(get_current_admin_user),
 ):
     """
     Update tier token limits.
@@ -2531,7 +2531,7 @@ def update_tier_limits(
 @router.patch("/ai-pricing/markup")
 def update_markup(
     markup: float,
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(get_current_admin_user),
 ):
     """
     Update default markup multiplier.
@@ -2553,7 +2553,7 @@ def update_markup(
 @router.get("/ai-pricing/usage-stats")
 def get_ai_usage_stats(
     days: int = Query(30, ge=1, le=365),
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Get AI usage statistics across all users."""
@@ -2655,7 +2655,7 @@ def get_ai_usage_stats(
 def get_user_ai_usage(
     user_id: int,
     days: int = Query(30, ge=1, le=365),
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Get AI usage for a specific user."""
@@ -2713,7 +2713,7 @@ def get_user_ai_usage(
 def set_user_token_limit(
     user_id: int,
     monthly_limit: int,
-    current_admin: User = Depends(require_admin),
+    current_admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Set a custom token limit for a specific user (overrides tier limit)."""
