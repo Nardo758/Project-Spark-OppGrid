@@ -8,33 +8,47 @@ This framework defines the data sources that power each report type in OppGrid's
 
 ## Data Source Registry
 
-### Internal Sources (OppGrid Database)
+### 🔵 OppGrid-Generated Intelligence (Primary)
 
-| Source | Table | Key Fields | Refresh Rate |
-|--------|-------|------------|--------------|
-| **Opportunity Signals** | `opportunities` | ai_opportunity_score, ai_pain_intensity, ai_competition_level, ai_urgency_level, ai_market_size_estimate | Real-time |
-| **Market Growth** | `market_growth_trajectories` | growth_score, growth_category, population_growth_rate, job_growth_rate, business_formation_rate | Weekly |
-| **Census Demographics** | `census_population_estimates` | population, median_income, median_age, yoy_growth_rate | Annual |
-| **Migration Flows** | `census_migration_flows` | flow_count, origin/destination, income_differential | Annual |
-| **Traffic Data** | `traffic_roads` | aadt, k_factor, d_factor | Annual |
-| **Competitors** | `google_maps_businesses` | rating, user_ratings_total, price_level, types | Weekly |
-| **Detected Trends** | `detected_trends` | trend_strength, growth_rate, confidence_score | Daily |
-| **Success Patterns** | `success_patterns` | revenue_generated, capital_spent, success_factors, failure_points | On event |
-| **Service Areas** | `service_area_boundaries` | total_population, median_income, addressable_market_value, signal_density | Computed |
-| **Location Cache** | `location_analysis_cache` | demographic_data, market_metrics, site_recommendations | 7 days |
+These are signals OppGrid creates through its own AI analysis, user behavior, and data processing.
 
-### External Sources (JediRE API)
+| Source | Table | Key Fields | What It Represents |
+|--------|-------|------------|-------------------|
+| **AI Opportunity Analysis** | `opportunities` | `ai_opportunity_score` (0-100), `ai_pain_intensity` (1-10), `ai_competition_level`, `ai_urgency_level`, `ai_market_size_estimate`, `ai_target_audience` | OppGrid's AI assessment of each opportunity |
+| **AI Business Intelligence** | `opportunities` | `ai_business_model_suggestions`, `ai_competitive_advantages`, `ai_key_risks`, `ai_next_steps`, `ai_problem_statement` | Strategic recommendations |
+| **Opportunity Demographics** | `opportunities` | `demographics` (JSONB), `search_trends` (JSONB), `feasibility_score` | Per-opportunity market data |
+| **Detected Trends** | `detected_trends` | `trend_name`, `trend_strength`, `growth_rate`, `confidence_score`, `opportunities_count`, `keywords` | Emerging market trends |
+| **Market Growth Trajectories** | `market_growth_trajectories` | `growth_score` (0-100), `growth_category`, `population_growth_rate`, `job_growth_rate`, `income_growth_rate`, `business_formation_rate`, `net_migration_rate` | OppGrid's market heat assessment |
+| **Signal Density** | `market_growth_trajectories` | `opportunity_signal_count`, `avg_opportunity_score`, `signal_density_percentile`, `housing_growth_rate`, `commercial_growth_rate` | Demand concentration metrics |
+| **Service Areas** | `service_area_boundaries` | `total_population`, `total_households`, `median_income`, `signal_count`, `signal_density`, `market_penetration_estimate`, `addressable_market_value` | Computed trade areas + TAM |
+| **Success Patterns** | `success_patterns` | `revenue_generated`, `capital_spent`, `success_factors` (JSON), `failure_points` (JSON), `timeline` | Learnings from outcomes |
+| **Idea Validations** | `idea_validations` | `opportunity_score`, `competition_level`, `urgency_level`, `market_size_estimate`, `validation_confidence` | User idea assessments |
+| **Location Analysis** | `location_analysis_cache` | `demographic_data` (JSONB), `market_metrics` (JSONB), `site_recommendations` (JSONB), `claude_summary` | AI location intelligence |
+
+### 🟢 OppGrid-Collected Data (Scraped/Imported)
+
+Data OppGrid actively collects from external sources.
+
+| Source | Table | Key Fields | Collection Method |
+|--------|-------|------------|-------------------|
+| **Competitor Intel** | `google_maps_businesses` | `name`, `rating`, `user_ratings_total`, `price_level`, `types`, `website`, `phone_number` | Google Maps scraping |
+| **Traffic Data** | `traffic_roads` | `aadt`, `k_factor`, `d_factor`, `t_factor`, `road_name`, `geometry` | State DOT imports |
+| **Census Demographics** | `census_population_estimates` | `population`, `births`, `deaths`, `natural_increase`, `net_domestic_migration`, `net_international_migration`, `yoy_growth_rate`, `five_year_growth_rate`, `median_age`, `median_income` | Census API |
+| **Migration Flows** | `census_migration_flows` | `flow_count`, `origin_median_income`, `destination_median_income`, `income_differential`, `migration_type` | Census ACS |
+| **Scraped Sources** | `scraped_sources` | Opportunity data from Reddit, Twitter, etc. | Platform scraping |
+
+### 🟡 External API Sources (JediRE + Others)
 
 | Source | Endpoint | Key Fields | Use Case |
 |--------|----------|------------|----------|
-| **Demand Signals** | `/oppgrid/demand-signals` | amenity_type, demand_pct, trend | What residents want |
-| **Market Economics** | `/oppgrid/market-economics` | median_rent, spending_power_index, vacancy_rate | Pricing power |
-| **Rent Comps** | `/jedi/rent-comps` | rent, sqft, amenities, concessions | Competitive pricing |
-| **Market Data** | `/jedi/market-data` | supply, pricing, demand, forecast | Full market picture |
-| **Absorption Rate** | `/jedi/absorption-rate` | avg_days_to_lease, monthly_rate | Market velocity |
-| **Supply Pipeline** | `/jedi/supply-pipeline` | upcoming properties, delivery dates | Competition timing |
-| **Search Trends** | `/jedi/search-trends` | price_range_distribution, unmet_demand | Digital demand |
-| **User Preferences** | `/jedi/user-preferences-aggregate` | top_amenities, deal_breakers, budget | Consumer insights |
+| **Demand Signals** | JediRE `/oppgrid/demand-signals` | amenity_type, demand_pct, trend | What residents want |
+| **Market Economics** | JediRE `/oppgrid/market-economics` | median_rent, spending_power_index, vacancy_rate | Pricing power |
+| **Rent Comps** | JediRE `/jedi/rent-comps` | rent, sqft, amenities, concessions | Competitive pricing |
+| **Market Data** | JediRE `/jedi/market-data` | supply, pricing, demand, forecast | Full market picture |
+| **Absorption Rate** | JediRE `/jedi/absorption-rate` | avg_days_to_lease, monthly_rate | Market velocity |
+| **Supply Pipeline** | JediRE `/jedi/supply-pipeline` | upcoming properties, delivery dates | Competition timing |
+| **Search Trends** | JediRE `/jedi/search-trends` | price_range_distribution, unmet_demand | Digital demand |
+| **User Preferences** | JediRE `/jedi/user-preferences-aggregate` | top_amenities, deal_breakers, budget | Consumer insights |
 
 ---
 
@@ -43,65 +57,90 @@ This framework defines the data sources that power each report type in OppGrid's
 ### PRODUCT (Demand Validation)
 *"Is there demand for this?"*
 
-| Data Point | Primary Source | Fallback Source | Report Sections |
-|------------|----------------|-----------------|-----------------|
-| Opportunity Score | `opportunities.ai_opportunity_score` | Computed from signals | Executive Summary, Feasibility |
-| Pain Intensity | `opportunities.ai_pain_intensity` | Survey data | Problem Analysis |
-| Demand Signals | JediRE `/oppgrid/demand-signals` | `detected_trends` | Market Insights |
-| Amenity Preferences | JediRE `/jedi/user-preferences-aggregate` | Google trends | Consumer Analysis |
-| Unmet Demand | JediRE `/jedi/search-trends.unmet_demand` | Opportunity gaps | Market Gaps |
-| Trend Strength | `detected_trends.trend_strength` | Growth rate calc | Market Forecast |
-| Signal Density | `service_area_boundaries.signal_density` | Opportunity count | TAM/SAM/SOM |
+| Data Point | 🔵 OppGrid Source | 🟡 External Enrichment | Report Sections |
+|------------|-------------------|------------------------|-----------------|
+| **Opportunity Score** | `opportunities.ai_opportunity_score` | — | Executive Summary, Feasibility |
+| **Pain Intensity** | `opportunities.ai_pain_intensity` | — | Problem Analysis |
+| **Urgency Level** | `opportunities.ai_urgency_level` | — | Priority Assessment |
+| **Target Audience** | `opportunities.ai_target_audience` | — | Consumer Analysis |
+| **Problem Statement** | `opportunities.ai_problem_statement` | — | Problem Analysis |
+| **Trend Strength** | `detected_trends.trend_strength` | — | Market Forecast |
+| **Trend Growth Rate** | `detected_trends.growth_rate` | — | Momentum Analysis |
+| **Trend Confidence** | `detected_trends.confidence_score` | — | Validation |
+| **Opportunity Count** | `detected_trends.opportunities_count` | — | Signal Density |
+| **Signal Density** | `service_area_boundaries.signal_density` | — | TAM/SAM/SOM |
+| **Market Penetration** | `service_area_boundaries.market_penetration_estimate` | — | Feasibility |
+| **Validation Score** | `idea_validations.opportunity_score` | — | Idea Assessment |
+| **Validation Confidence** | `idea_validations.validation_confidence` | — | Confidence Level |
+| Amenity Demand | — | JediRE `/oppgrid/demand-signals` | Consumer Analysis |
+| Unmet Demand | — | JediRE `/jedi/search-trends` | Market Gaps |
 
 ### PRICE (Economics)
 *"What can the market bear?"*
 
-| Data Point | Primary Source | Fallback Source | Report Sections |
-|------------|----------------|-----------------|-----------------|
-| Median Rent | JediRE `/oppgrid/market-economics.median_rent` | Census ACS | Demographics, Pricing |
-| Rent by Bedroom | JediRE `/oppgrid/market-economics.avg_rent_*` | Rent comps avg | Pricing Analysis |
-| Spending Power Index | JediRE `/oppgrid/market-economics.spending_power_index` | Income/rent ratio | Consumer Analysis |
-| Median Income | `census_population_estimates.median_income` | ACS API | Demographics |
-| Income Differential | `census_migration_flows.income_differential` | Origin vs dest | Migration Analysis |
-| Market Size | `opportunities.ai_market_size_estimate` | TAM calculation | TAM/SAM/SOM |
-| Addressable Market | `service_area_boundaries.addressable_market_value` | Population × avg spend | Financial Projections |
-| Concession Rate | JediRE `/jedi/market-data.pricing.concession_rate` | Rent comp analysis | Competitive Pricing |
-| Revenue Benchmarks | `success_patterns.revenue_generated` | Industry averages | Financial Projections |
-| Capital Requirements | `success_patterns.capital_spent` | Category averages | Feasibility Study |
+| Data Point | 🔵 OppGrid Source | 🟡 External Enrichment | Report Sections |
+|------------|-------------------|------------------------|-----------------|
+| **Market Size Estimate** | `opportunities.ai_market_size_estimate` | — | TAM/SAM/SOM |
+| **Addressable Market** | `service_area_boundaries.addressable_market_value` | — | Financial Projections |
+| **Revenue Benchmarks** | `success_patterns.revenue_generated` | — | Financial Projections |
+| **Capital Requirements** | `success_patterns.capital_spent` | — | Feasibility Study |
+| **Median Income** | `census_population_estimates.median_income` | — | Demographics |
+| **Income Growth** | `market_growth_trajectories.income_growth_rate` | — | Economic Analysis |
+| **Income Differential** | `census_migration_flows.income_differential` | — | Migration Analysis |
+| **Service Area Income** | `service_area_boundaries.median_income` | — | Trade Area |
+| **Total Households** | `service_area_boundaries.total_households` | — | Market Sizing |
+| Median Rent | — | JediRE `/oppgrid/market-economics` | Pricing Analysis |
+| Spending Power Index | — | JediRE (computed) | Consumer Analysis |
+| Concession Rate | — | JediRE `/jedi/market-data` | Competitive Pricing |
 
 ### PLACE (Location Intelligence)
 *"Where should I locate?"*
 
-| Data Point | Primary Source | Fallback Source | Report Sections |
-|------------|----------------|-----------------|-----------------|
-| AADT (Traffic) | `traffic_roads.aadt` | DOT API | Site Selection |
-| Walk-in Estimate | Computed from AADT | Traffic × conversion | Foot Traffic Analysis |
-| Population | `census_population_estimates.population` | ACS API | Demographics |
-| Population Growth | `market_growth_trajectories.population_growth_rate` | Census YoY | Growth Forecast |
-| Job Growth | `market_growth_trajectories.job_growth_rate` | BLS QCEW | Economic Analysis |
-| Net Migration | `market_growth_trajectories.net_migration_rate` | IRS SOI | Population Dynamics |
-| Business Formation | `market_growth_trajectories.business_formation_rate` | Census BFS | Economic Health |
-| Growth Category | `market_growth_trajectories.growth_category` | Score thresholds | Market Assessment |
-| Vacancy Rate | JediRE `/oppgrid/market-economics.vacancy_rate` | CoStar | Supply/Demand |
-| Absorption Rate | JediRE `/jedi/absorption-rate` | Lease velocity calc | Market Velocity |
-| Supply Pipeline | JediRE `/jedi/supply-pipeline` | Permit data | Competition Timing |
-| Service Area | `service_area_boundaries.geojson_polygon` | Radius calculation | Trade Area Analysis |
-| Total Households | `service_area_boundaries.total_households` | Census ACS | Market Sizing |
+| Data Point | 🔵 OppGrid Source | 🟡 External Enrichment | Report Sections |
+|------------|-------------------|------------------------|-----------------|
+| **Growth Score** | `market_growth_trajectories.growth_score` | — | Market Assessment |
+| **Growth Category** | `market_growth_trajectories.growth_category` | — | Executive Summary |
+| **Population Growth** | `market_growth_trajectories.population_growth_rate` | — | Growth Forecast |
+| **Job Growth** | `market_growth_trajectories.job_growth_rate` | — | Economic Analysis |
+| **Business Formation** | `market_growth_trajectories.business_formation_rate` | — | Economic Health |
+| **Net Migration** | `market_growth_trajectories.net_migration_rate` | — | Population Dynamics |
+| **Housing Growth** | `market_growth_trajectories.housing_growth_rate` | — | Development Activity |
+| **Commercial Growth** | `market_growth_trajectories.commercial_growth_rate` | — | Commercial Activity |
+| **Avg Opportunity Score** | `market_growth_trajectories.avg_opportunity_score` | — | Market Quality |
+| **Signal Density %ile** | `market_growth_trajectories.signal_density_percentile` | — | Demand Concentration |
+| **AADT (Traffic)** | `traffic_roads.aadt` | — | Site Selection |
+| **Traffic K-Factor** | `traffic_roads.k_factor` | — | Peak Hour Analysis |
+| **Population** | `census_population_estimates.population` | — | Demographics |
+| **5-Year Growth** | `census_population_estimates.five_year_growth_rate` | — | Long-term Trend |
+| **Median Age** | `census_population_estimates.median_age` | — | Demographics |
+| **Net Domestic Migration** | `census_population_estimates.net_domestic_migration` | — | Population Flow |
+| **Service Area Pop** | `service_area_boundaries.total_population` | — | Trade Area |
+| **Service Area Polygon** | `service_area_boundaries.geojson_polygon` | — | Map Visualization |
+| **Site Recommendations** | `location_analysis_cache.site_recommendations` | — | Site Selection |
+| **Claude Summary** | `location_analysis_cache.claude_summary` | — | Location Narrative |
+| Vacancy Rate | — | JediRE `/oppgrid/market-economics` | Supply/Demand |
+| Absorption Rate | — | JediRE `/jedi/absorption-rate` | Market Velocity |
+| Supply Pipeline | — | JediRE `/jedi/supply-pipeline` | Competition Timing |
 
 ### PROMOTION (Competition & Reach)
 *"How will customers find me?"*
 
-| Data Point | Primary Source | Fallback Source | Report Sections |
-|------------|----------------|-----------------|-----------------|
-| Competitor Count | `google_maps_businesses` count | Google Places API | Competitive Landscape |
-| Avg Competitor Rating | `google_maps_businesses.rating` avg | Scraped data | Competitive Analysis |
-| Review Volume | `google_maps_businesses.user_ratings_total` | Google Places | Market Maturity |
-| Price Level | `google_maps_businesses.price_level` | Menu analysis | Pricing Strategy |
-| Competition Level | `opportunities.ai_competition_level` | Competitor density | Executive Summary |
-| Search Trends | JediRE `/jedi/search-trends` | Google Trends | Digital Demand |
-| Success Factors | `success_patterns.success_factors` | Case studies | Strategic Recommendations |
-| Failure Points | `success_patterns.failure_points` | Post-mortems | Risk Analysis |
-| Site Recommendations | `location_analysis_cache.site_recommendations` | AI analysis | Site Selection |
+| Data Point | 🔵 OppGrid Source | 🟡 External Enrichment | Report Sections |
+|------------|-------------------|------------------------|-----------------|
+| **Competition Level** | `opportunities.ai_competition_level` | — | Executive Summary |
+| **Competitive Advantages** | `opportunities.ai_competitive_advantages` | — | Strategy |
+| **Key Risks** | `opportunities.ai_key_risks` | — | Risk Analysis |
+| **Business Model Ideas** | `opportunities.ai_business_model_suggestions` | — | Business Plan |
+| **Next Steps** | `opportunities.ai_next_steps` | — | Action Plan |
+| **Competitor Count** | `google_maps_businesses` (count) | — | Competitive Landscape |
+| **Avg Rating** | `google_maps_businesses.rating` (avg) | — | Competitive Analysis |
+| **Review Volume** | `google_maps_businesses.user_ratings_total` | — | Market Maturity |
+| **Price Levels** | `google_maps_businesses.price_level` | — | Pricing Strategy |
+| **Competitor Types** | `google_maps_businesses.types` | — | Category Analysis |
+| **Success Factors** | `success_patterns.success_factors` | — | Best Practices |
+| **Failure Points** | `success_patterns.failure_points` | — | Risk Avoidance |
+| Search Trends | — | JediRE `/jedi/search-trends` | Digital Demand |
+| User Preferences | — | JediRE `/jedi/user-preferences-aggregate` | Consumer Insights |
 
 ---
 
