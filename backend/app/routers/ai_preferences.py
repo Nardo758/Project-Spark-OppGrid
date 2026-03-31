@@ -34,7 +34,7 @@ class AIPreferencesResponse(BaseModel):
 
 
 class AIPreferencesUpdate(BaseModel):
-    provider: Optional[str] = Field(None, description="AI provider: 'claude' or 'openai'")
+    provider: Optional[str] = Field(None, description="AI provider: 'anthropic', 'openai', 'google', 'deepseek', 'xai', or legacy 'claude'")
     mode: Optional[str] = Field(None, description="Mode: 'replit' or 'byok'")
     model: Optional[str] = Field(None, description="Specific model to use")
 
@@ -101,10 +101,11 @@ async def update_ai_preferences(
         db.add(prefs)
     
     if update.provider is not None:
-        if update.provider not in ["claude", "openai"]:
+        valid_providers = ["claude", "anthropic", "openai", "google", "deepseek", "xai"]
+        if update.provider not in valid_providers:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid provider. Must be 'claude' or 'openai'"
+                detail=f"Invalid provider. Must be one of: {', '.join(valid_providers)}"
             )
         prefs.provider = update.provider
     
