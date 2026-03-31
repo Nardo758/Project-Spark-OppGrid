@@ -51,13 +51,27 @@ type TwoFactorSetup = {
 }
 
 type AIPreferences = {
-  provider: 'claude' | 'openai'
+  provider: string
   mode: 'replit' | 'byok'
   model: string
   has_openai_key: boolean
   has_claude_key: boolean
   openai_key_validated_at: string | null
   claude_key_validated_at: string | null
+}
+
+type AvailableModel = {
+  model_id: string
+  display_name: string
+  provider: string
+  description: string | null
+  is_default: boolean
+}
+
+type AvailableModelsResponse = {
+  models: AvailableModel[]
+  user_tier: string
+  default_model: string | null
 }
 
 type ModelUsage = {
@@ -167,6 +181,8 @@ export default function Settings() {
   const [aiPreferences, setAIPreferences] = useState<AIPreferences | null>(null)
   const [loadingAI, setLoadingAI] = useState(false)
   const [savingAI, setSavingAI] = useState(false)
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
   const [openaiKey, setOpenaiKey] = useState('')
   const [claudeKey, setClaudeKey] = useState('')
   const [showApiKey, setShowApiKey] = useState(false)
@@ -184,6 +200,7 @@ export default function Settings() {
     }
     if (activeTab === 'ai' && token) {
       fetchAIPreferences()
+      fetchAvailableModels()
     }
   }, [activeTab, token])
 
@@ -423,6 +440,24 @@ export default function Settings() {
       console.error('Failed to fetch AI preferences:', err)
     } finally {
       setLoadingAI(false)
+    }
+  }
+
+  async function fetchAvailableModels() {
+    if (!token) return
+    setLoadingModels(true)
+    try {
+      const res = await fetch('/api/v1/ai-chat/models', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data: AvailableModelsResponse = await res.json()
+        setAvailableModels(data.models || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch available models:', err)
+    } finally {
+      setLoadingModels(false)
     }
   }
 
