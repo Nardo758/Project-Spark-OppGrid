@@ -339,8 +339,10 @@ export default function ReportLibrary({
           }),
         })
         if (!res.ok) {
-          const error = await res.json()
-          throw new Error(error.detail || 'Failed to generate report')
+          const text = await res.text()
+          let detail = 'Failed to generate report'
+          try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+          throw new Error(detail)
         }
         return res.json()
       } else {
@@ -355,8 +357,10 @@ export default function ReportLibrary({
           }),
         })
         if (!res.ok) {
-          const error = await res.json()
-          throw new Error(error.detail || 'Failed to generate report')
+          const text = await res.text()
+          let detail = 'Failed to generate report'
+          try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+          throw new Error(detail)
         }
         return res.json() as Promise<GeneratedReport>
       }

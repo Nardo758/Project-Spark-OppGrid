@@ -1414,9 +1414,9 @@ async def generate_free_report(
             title_suffix = opportunity.title
 
     report_type_map = {
-        "feasibility_study": ReportType.FEASIBILITY,
+        "feasibility_study": ReportType.FEASIBILITY_STUDY,
         "market_analysis": ReportType.MARKET_ANALYSIS,
-        "strategic_assessment": ReportType.STRATEGIC,
+        "strategic_assessment": ReportType.STRATEGIC_ASSESSMENT,
         "pestle_analysis": ReportType.PESTLE_ANALYSIS,
         "business_plan": ReportType.BUSINESS_PLAN,
         "financial_model": ReportType.FINANCIAL_MODEL,
