@@ -23,6 +23,8 @@ logger = logging.getLogger(__name__)
 
 AI_INTEGRATIONS_ANTHROPIC_API_KEY = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_API_KEY")
 AI_INTEGRATIONS_ANTHROPIC_BASE_URL = os.environ.get("AI_INTEGRATIONS_ANTHROPIC_BASE_URL")
+# Direct Anthropic API key (preferred if available)
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY")
 
 
 def is_rate_limit_error(exception: BaseException) -> bool:
@@ -38,23 +40,30 @@ def is_rate_limit_error(exception: BaseException) -> bool:
 
 
 def get_anthropic_client():
-    """Get configured Anthropic client using Replit AI Integrations."""
+    """Get configured Anthropic client. Prefers direct API key, falls back to Replit AI Integrations."""
     from anthropic import Anthropic
     
-    if not AI_INTEGRATIONS_ANTHROPIC_API_KEY or not AI_INTEGRATIONS_ANTHROPIC_BASE_URL:
-        logger.warning("Anthropic AI integration not configured")
-        return None
+    # Prefer direct Anthropic API key
+    if ANTHROPIC_API_KEY:
+        logger.info("Using direct Anthropic API key")
+        return Anthropic(api_key=ANTHROPIC_API_KEY)
     
-    return Anthropic(
-        api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-        base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
-    )
+    # Fallback to Replit AI Integrations
+    if AI_INTEGRATIONS_ANTHROPIC_API_KEY and AI_INTEGRATIONS_ANTHROPIC_BASE_URL:
+        logger.info("Using Replit AI Integrations")
+        return Anthropic(
+            api_key=AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+            base_url=AI_INTEGRATIONS_ANTHROPIC_BASE_URL
+        )
+    
+    logger.warning("Anthropic AI integration not configured")
+    return None
 
 
 class AIReportGenerator:
     """Generates AI-powered report content using Claude."""
     
-    MODEL = "claude-sonnet-4-5"
+    MODEL = "claude-opus-4-5"
     MAX_TOKENS = 8192
     
     # Institutional document formatting
