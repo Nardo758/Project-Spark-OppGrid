@@ -2742,3 +2742,113 @@ def set_user_token_limit(
     except Exception as e:
         return {"error": str(e)}
 
+
+
+# =============================================================================
+# STRIPE TOKEN BILLING ADMIN
+# =============================================================================
+
+@router.get("/stripe-token-billing/meters")
+def list_stripe_meters(
+    current_admin: User = Depends(require_admin),
+):
+    """List all Stripe billing meters."""
+    from app.services.stripe_token_billing import get_token_billing
+    
+    billing = get_token_billing()
+    meters = billing.list_meters()
+    
+    return {
+        "enabled": billing.enabled,
+        "meters": meters,
+        "count": len(meters)
+    }
+
+
+@router.post("/stripe-token-billing/setup-meters")
+def setup_stripe_meters(
+    current_admin: User = Depends(require_admin),
+):
+    """Create default billing meters in Stripe (run once)."""
+    from app.services.stripe_token_billing import get_token_billing
+    
+    billing = get_token_billing()
+    
+    if not billing.enabled:
+        return {"error": "Stripe token billing not enabled"}
+    
+    result = billing.setup_default_meters()
+    return result
+
+
+@router.get("/stripe-token-billing/customer/{customer_id}/usage")
+def get_customer_token_usage(
+    customer_id: str,
+    current_admin: User = Depends(require_admin),
+):
+    """Get token usage for a Stripe customer."""
+    from app.services.stripe_token_billing import get_token_billing
+    
+    billing = get_token_billing()
+    return billing.get_customer_usage(customer_id)
+
+
+@router.get("/stripe-token-billing/user/{user_id}/usage")
+def get_user_token_usage(
+    user_id: int,
+    current_admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Get token usage for a user (by internal user_id)."""
+    from app.services.stripe_token_billing import get_token_billing
+    from app.models.subscription import Subscription
+    
+    subscription = db.query(Subscription).filter(
+        Subscription.user_id == user_id
+    ).first()
+    
+    if not subscription or not subscription.stripe_customer_id:
+        return {"error": "User has no Stripe customer ID"}
+    
+    billing = get_token_billing()
+    return billing.get_customer_usage(subscription.stripe_customer_id)
+
+
+@router.post("/stripe-token-billing/create-meter")
+def create_stripe_meter(
+    display_name: str,
+    event_name: str,
+    current_admin: User = Depends(require_admin),
+):
+    """Create a custom billing meter."""
+    from app.services.stripe_token_billing import get_token_billing
+    
+    billing = get_token_billing()
+    
+    if not billing.enabled:
+        return {"error": "Stripe token billing not enabled"}
+    
+    result = billing.create_meter(display_name, event_name)
+    
+    if result:
+        return {"status": "created", **result}
+    else:
+        return {"error": "Failed to create meter"}
+
+
+@router.get("/stripe-token-billing/config")
+def get_token_billing_config(
+    current_admin: User = Depends(require_admin),
+):
+    """Get token billing configuration."""
+    from app.services.stripe_token_billing import (
+        get_token_billing, METER_EVENTS, MODEL_TO_METER
+    )
+    
+    billing = get_token_billing()
+    
+    return {
+        "enabled": billing.enabled,
+        "meter_events": METER_EVENTS,
+        "model_to_meter_mapping": MODEL_TO_METER
+    }
