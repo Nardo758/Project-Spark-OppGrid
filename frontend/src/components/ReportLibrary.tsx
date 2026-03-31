@@ -23,6 +23,13 @@ import {
   Globe,
   Store,
   Building2,
+  Briefcase,
+  PieChart,
+  LineChart,
+  Presentation,
+  FileSpreadsheet,
+  Shield,
+  Package,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
@@ -56,6 +63,23 @@ type GeneratedReport = {
 
 type InputMode = 'validate' | 'search' | 'location' | 'clone'
 
+type ConsultantStudioReport = {
+  id: string
+  name: string
+  description: string
+  price: number
+  included_in_tier: string | null
+}
+
+type Bundle = {
+  id: string
+  name: string
+  description: string
+  price: number
+  reports: string[]
+  savings: number
+}
+
 const INPUT_MODES = [
   {
     id: 'validate' as InputMode,
@@ -82,6 +106,17 @@ const INPUT_MODES = [
     description: 'Analyze a successful business and find similar markets where you could replicate it.',
   },
 ]
+
+// Icons for Consultant Studio reports
+const studioReportIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  feasibility_study: Target,
+  pitch_deck: Presentation,
+  strategic_assessment: Briefcase,
+  market_analysis: PieChart,
+  pestle_analysis: Shield,
+  financial_model: LineChart,
+  business_plan: FileSpreadsheet,
+}
 
 const categoryIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   popular: Sparkles,
@@ -127,7 +162,7 @@ export default function ReportLibrary({
   const [cloneTargetCity, setCloneTargetCity] = useState('')
   
   // Report generation state
-  const [selectedTemplate, setSelectedTemplate] = useState<ReportTemplate | null>(null)
+  const [selectedReport, setSelectedReport] = useState<{ type: 'studio' | 'template'; slug: string; name: string } | null>(null)
   const [generatingSlug, setGeneratingSlug] = useState<string | null>(null)
   const [generatedReport, setGeneratedReport] = useState<GeneratedReport | null>(null)
   
@@ -140,6 +175,9 @@ export default function ReportLibrary({
   const [purchaseLoading, setPurchaseLoading] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
 
+  // Report section toggle
+  const [showBundles, setShowBundles] = useState(false)
+
   const isGuest = !isAuthenticated
 
   const headers = (): Record<string, string> => {
@@ -148,6 +186,17 @@ export default function ReportLibrary({
     return h
   }
 
+  // Fetch Consultant Studio reports (original 7)
+  const { data: studioReports } = useQuery<{ reports: ConsultantStudioReport[]; bundles: Bundle[] }>({
+    queryKey: ['studio-reports'],
+    queryFn: async () => {
+      const res = await fetch('/api/v1/report-pricing/public')
+      if (!res.ok) throw new Error('Failed to fetch studio reports')
+      return res.json()
+    },
+  })
+
+  // Fetch Template reports (20+)
   const { data: categories, isLoading } = useQuery<CategoryWithTemplates[]>({
     queryKey: ['report-templates', isGuest],
     queryFn: async () => {
@@ -161,25 +210,43 @@ export default function ReportLibrary({
   })
 
   const generateMutation = useMutation({
-    mutationFn: async ({ templateSlug, context }: { templateSlug: string; context: string }) => {
-      setGeneratingSlug(templateSlug)
-      const res = await fetch('/api/v1/reports/generate', {
-        method: 'POST',
-        headers: headers(),
-        body: JSON.stringify({
-          template_slug: templateSlug,
-          opportunity_id: opportunityId,
-          workspace_id: workspaceId,
-          custom_context: context,
-        }),
-      })
+    mutationFn: async ({ reportType, context, isStudio }: { reportType: string; context: string; isStudio: boolean }) => {
+      setGeneratingSlug(reportType)
       
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.detail || 'Failed to generate report')
+      if (isStudio) {
+        // Use studio report generation endpoint
+        const res = await fetch('/api/v1/report-pricing/generate-free-report', {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({
+            report_type: reportType,
+            idea_description: context,
+            opportunity_id: opportunityId,
+          }),
+        })
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.detail || 'Failed to generate report')
+        }
+        return res.json()
+      } else {
+        // Use template generation endpoint
+        const res = await fetch('/api/v1/reports/generate', {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({
+            template_slug: reportType,
+            opportunity_id: opportunityId,
+            workspace_id: workspaceId,
+            custom_context: context,
+          }),
+        })
+        if (!res.ok) {
+          const error = await res.json()
+          throw new Error(error.detail || 'Failed to generate report')
+        }
+        return res.json() as Promise<GeneratedReport>
       }
-      
-      return res.json() as Promise<GeneratedReport>
     },
     onSuccess: (report) => {
       setGeneratingSlug(null)
@@ -241,21 +308,22 @@ export default function ReportLibrary({
     }
   }
 
-  const getTierBadge = (tier: string) => {
+  const formatPrice = (cents: number) => {
+    return `$${(cents / 100).toFixed(0)}`
+  }
+
+  const getTierBadge = (tier: string | null) => {
+    if (!tier) return { text: 'PAY', className: 'bg-amber-100 text-amber-700' }
     const badges: Record<string, { text: string; className: string }> = {
       free: { text: 'FREE', className: 'bg-green-100 text-green-700' },
       pro: { text: 'PRO', className: 'bg-purple-100 text-purple-700' },
-      business: { text: 'BUSINESS', className: 'bg-amber-100 text-amber-700' },
-      enterprise: { text: 'ENTERPRISE', className: 'bg-gray-100 text-gray-700' },
+      business: { text: 'BIZ', className: 'bg-blue-100 text-blue-700' },
+      enterprise: { text: 'ENT', className: 'bg-gray-100 text-gray-700' },
     }
     return badges[tier] || { text: tier.toUpperCase(), className: 'bg-gray-100 text-gray-600' }
   }
 
   const allTemplates = categories?.flatMap(cat => cat.templates) || []
-  const groupedTemplates = categories?.reduce((acc, cat) => {
-    acc[cat.display_name] = cat.templates
-    return acc
-  }, {} as Record<string, ReportTemplate[]>) || {}
 
   const getContextForReport = () => {
     switch (inputMode) {
@@ -290,12 +358,16 @@ export default function ReportLibrary({
     }
   }
 
-  const canGenerateReport = selectedTemplate && (consultantResult || canAnalyze())
+  const canGenerateReport = selectedReport && (consultantResult || canAnalyze())
 
   const handleGenerateReport = () => {
-    if (!selectedTemplate) return
+    if (!selectedReport) return
     const context = getContextForReport()
-    generateMutation.mutate({ templateSlug: selectedTemplate.slug, context })
+    generateMutation.mutate({ 
+      reportType: selectedReport.slug, 
+      context,
+      isStudio: selectedReport.type === 'studio'
+    })
   }
 
   if (isLoading) {
@@ -356,7 +428,7 @@ export default function ReportLibrary({
               <textarea
                 value={ideaDescription}
                 onChange={(e) => setIdeaDescription(e.target.value)}
-                placeholder="Describe your business idea in detail... e.g., A subscription service that delivers locally-roasted coffee beans to offices..."
+                placeholder="Describe your business idea in detail..."
                 className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none text-sm"
                 rows={4}
               />
@@ -368,20 +440,19 @@ export default function ReportLibrary({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Keyword (e.g., coffee, fitness, delivery...)"
+                  placeholder="Keyword (e.g., coffee, fitness...)"
                   className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
                 />
                 <select
                   value={searchCategory}
                   onChange={(e) => setSearchCategory(e.target.value)}
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-sm"
+                  className="w-full p-3 border border-gray-200 rounded-lg bg-white text-sm"
                 >
                   <option value="">All Categories</option>
                   <option value="work_productivity">💼 Work & Productivity</option>
                   <option value="money_finance">💰 Money & Finance</option>
                   <option value="health_wellness">🏥 Health & Wellness</option>
                   <option value="technology">💻 Technology</option>
-                  <option value="transportation">🚗 Transportation</option>
                 </select>
               </div>
             )}
@@ -393,14 +464,14 @@ export default function ReportLibrary({
                   value={locationCity}
                   onChange={(e) => setLocationCity(e.target.value)}
                   placeholder="City (e.g., Miami, Florida)"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
                 />
                 <input
                   type="text"
                   value={locationBusiness}
                   onChange={(e) => setLocationBusiness(e.target.value)}
-                  placeholder="Business type (e.g., Coffee shop, Fitness studio...)"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                  placeholder="Business type (e.g., Coffee shop)"
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
                 />
               </div>
             )}
@@ -411,22 +482,22 @@ export default function ReportLibrary({
                   type="text"
                   value={cloneBusinessName}
                   onChange={(e) => setCloneBusinessName(e.target.value)}
-                  placeholder="Business name (e.g., Sweetgreen, Blue Bottle...)"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                  placeholder="Business name (e.g., Sweetgreen)"
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
                 />
                 <input
                   type="text"
                   value={cloneBusinessAddress}
                   onChange={(e) => setCloneBusinessAddress(e.target.value)}
-                  placeholder="Business address (e.g., 123 Main St, San Francisco, CA)"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                  placeholder="Business address"
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
                 />
                 <input
                   type="text"
                   value={cloneTargetCity}
                   onChange={(e) => setCloneTargetCity(e.target.value)}
-                  placeholder="Target city to find matches (optional)"
-                  className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 text-sm"
+                  placeholder="Target city (optional)"
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
                 />
               </div>
             )}
@@ -445,7 +516,7 @@ export default function ReportLibrary({
               ) : (
                 <>
                   <Sparkles className="w-4 h-4" />
-                  Analyze {INPUT_MODES.find(m => m.id === inputMode)?.label}
+                  Analyze
                 </>
               )}
             </button>
@@ -456,19 +527,41 @@ export default function ReportLibrary({
             <label className="block text-sm font-medium text-gray-700 mb-3">
               Select Report Type
             </label>
+            
             <select
-              value={selectedTemplate?.slug || ''}
+              value={selectedReport ? `${selectedReport.type}:${selectedReport.slug}` : ''}
               onChange={(e) => {
-                const template = allTemplates.find(t => t.slug === e.target.value)
-                setSelectedTemplate(template || null)
+                if (!e.target.value) {
+                  setSelectedReport(null)
+                  return
+                }
+                const [type, slug] = e.target.value.split(':')
+                if (type === 'studio') {
+                  const report = studioReports?.reports.find(r => r.id === slug)
+                  setSelectedReport({ type: 'studio', slug, name: report?.name || slug })
+                } else {
+                  const template = allTemplates.find(t => t.slug === slug)
+                  setSelectedReport({ type: 'template', slug, name: template?.name || slug })
+                }
               }}
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white text-sm"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-sm"
             >
               <option value="">Choose a report...</option>
-              {Object.entries(groupedTemplates).map(([categoryName, templates]) => (
-                <optgroup key={categoryName} label={categoryName}>
-                  {templates.map(template => (
-                    <option key={template.slug} value={template.slug}>
+              
+              {/* Consultant Studio Reports (Original 7) */}
+              <optgroup label="📊 Consultant Studio Reports">
+                {studioReports?.reports.map(report => (
+                  <option key={report.id} value={`studio:${report.id}`}>
+                    {report.name} — {formatPrice(report.price)}
+                  </option>
+                ))}
+              </optgroup>
+              
+              {/* Template Reports */}
+              {categories?.map(cat => (
+                <optgroup key={cat.category} label={`📝 ${cat.display_name}`}>
+                  {cat.templates.map(template => (
+                    <option key={template.slug} value={`template:${template.slug}`}>
                       {template.name}
                     </option>
                   ))}
@@ -476,19 +569,76 @@ export default function ReportLibrary({
               ))}
             </select>
 
-            {selectedTemplate && (
+            {/* Selected Report Info */}
+            {selectedReport && (
               <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-900">{selectedTemplate.name}</span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(selectedTemplate.min_tier).className}`}>
-                    {getTierBadge(selectedTemplate.min_tier).text}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">{selectedTemplate.description}</p>
+                {selectedReport.type === 'studio' ? (
+                  <>
+                    {(() => {
+                      const report = studioReports?.reports.find(r => r.id === selectedReport.slug)
+                      const Icon = studioReportIcons[selectedReport.slug] || FileText
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Icon className="w-5 h-5 text-purple-600" />
+                            <span className="font-medium text-gray-900">{report?.name}</span>
+                            <span className={`ml-auto px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(report?.included_in_tier || null).className}`}>
+                              {report?.included_in_tier ? getTierBadge(report.included_in_tier).text : formatPrice(report?.price || 0)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500">{report?.description}</p>
+                        </>
+                      )
+                    })()}
+                  </>
+                ) : (
+                  <>
+                    {(() => {
+                      const template = allTemplates.find(t => t.slug === selectedReport.slug)
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-gray-900">{template?.name}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(template?.min_tier || null).className}`}>
+                              {getTierBadge(template?.min_tier || null).text}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500">{template?.description}</p>
+                        </>
+                      )
+                    })()}
+                  </>
+                )}
               </div>
             )}
 
-            {isGuest && selectedTemplate && (
+            {/* Bundles Toggle */}
+            {studioReports?.bundles && studioReports.bundles.length > 0 && (
+              <button
+                onClick={() => setShowBundles(!showBundles)}
+                className="mt-3 text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
+              >
+                <Package className="w-3 h-3" />
+                {showBundles ? 'Hide bundles' : 'View bundle deals (save up to 45%)'}
+              </button>
+            )}
+
+            {showBundles && studioReports?.bundles && (
+              <div className="mt-2 space-y-2">
+                {studioReports.bundles.map(bundle => (
+                  <div key={bundle.id} className="p-2 bg-purple-50 rounded-lg border border-purple-100">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-purple-900 text-sm">{bundle.name}</span>
+                      <span className="text-purple-700 font-bold text-sm">{formatPrice(bundle.price)}</span>
+                    </div>
+                    <p className="text-xs text-purple-600">{bundle.description}</p>
+                    <p className="text-xs text-green-600 mt-1">Save {formatPrice(bundle.savings)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isGuest && selectedReport && (
               <div className="mt-3">
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   <Mail className="w-3 h-3 inline mr-1" />
@@ -544,15 +694,11 @@ export default function ReportLibrary({
             <h3 className="font-semibold text-gray-900">
               {INPUT_MODES.find(m => m.id === inputMode)?.label} Results
             </h3>
-            <button
-              onClick={() => setConsultantResult(null)}
-              className="text-gray-400 hover:text-gray-600 text-sm"
-            >
-              ✕ Clear
+            <button onClick={() => setConsultantResult(null)} className="text-gray-400 hover:text-gray-600 text-sm">
+              ✕
             </button>
           </div>
 
-          {/* Validate Idea Results */}
           {inputMode === 'validate' && consultantResult.success && (
             <div className="space-y-4">
               <div className="flex items-center gap-3">
@@ -581,64 +727,46 @@ export default function ReportLibrary({
             </div>
           )}
 
-          {/* Search Results */}
           {inputMode === 'search' && consultantResult.success && (
             <div className="space-y-3">
               <div className="text-sm text-gray-600">Found {consultantResult.total_count || 0} opportunities</div>
               {consultantResult.opportunities?.slice(0, 5).map((opp: any) => (
                 <div key={opp.id} className="p-3 bg-gray-50 rounded-lg">
                   <div className="font-medium text-gray-900">{opp.title}</div>
-                  {opp.description && <div className="text-xs text-gray-500 mt-1 line-clamp-2">{opp.description}</div>}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Location Results */}
           {inputMode === 'location' && consultantResult.success && (
-            <div className="space-y-3">
-              <div className="text-sm text-gray-600">
-                {consultantResult.business_description} in {consultantResult.city}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-xs text-gray-500">Competition</div>
+                <div className="text-lg font-bold">{consultantResult.geo_analysis?.competitors?.length || 0}</div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-500">Competition</div>
-                  <div className="text-lg font-bold text-gray-900">
-                    {consultantResult.geo_analysis?.competitors?.length || 0}
-                  </div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-500">Market Density</div>
-                  <div className="text-lg font-bold text-gray-900 capitalize">
-                    {consultantResult.geo_analysis?.market_density || 'N/A'}
-                  </div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-500">Category</div>
-                  <div className="text-lg font-bold text-gray-900">
-                    {consultantResult.inferred_category || 'N/A'}
-                  </div>
-                </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-xs text-gray-500">Density</div>
+                <div className="text-lg font-bold capitalize">{consultantResult.geo_analysis?.market_density || 'N/A'}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-center">
+                <div className="text-xs text-gray-500">Category</div>
+                <div className="text-lg font-bold">{consultantResult.inferred_category || 'N/A'}</div>
               </div>
             </div>
           )}
 
-          {/* Clone Results */}
           {inputMode === 'clone' && consultantResult.success && (
             <div className="space-y-3">
               <div className="text-sm text-gray-600">
                 Found {consultantResult.matching_locations?.length || 0} matching locations
               </div>
               {consultantResult.matching_locations?.slice(0, 3).map((loc: any, idx: number) => (
-                <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center">
+                <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between">
                   <div>
-                    <div className="font-medium text-gray-900">{loc.name}</div>
+                    <div className="font-medium">{loc.name}</div>
                     <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-amber-600">{loc.similarity_score}%</div>
-                    <div className="text-xs text-gray-500">match</div>
-                  </div>
+                  <div className="text-lg font-bold text-amber-600">{loc.similarity_score}%</div>
                 </div>
               ))}
             </div>
@@ -657,7 +785,7 @@ export default function ReportLibrary({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-5 h-5" />
-                <span className="font-medium">{generatedReport.title}</span>
+                <span className="font-medium">{generatedReport.title || 'Report Generated'}</span>
               </div>
               <div className="flex items-center gap-2">
                 <button className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm flex items-center gap-1">
@@ -682,12 +810,6 @@ export default function ReportLibrary({
                 <div className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed">
                   {generatedReport.content}
                 </div>
-              </div>
-            )}
-            {generatedReport.confidence_score && (
-              <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
-                <span>Confidence:</span>
-                <span className="font-semibold text-purple-600">{generatedReport.confidence_score}%</span>
               </div>
             )}
           </div>
