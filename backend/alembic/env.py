@@ -3,7 +3,7 @@ import sys
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import pool, event
 
 from alembic import context
 
@@ -51,6 +51,28 @@ def include_object(obj, name, type_, reflected, compare_to):
     return True
 
 
+def _postgis_ddl_filter(conn, cursor, statement, parameters, context, executemany):
+    """
+    Global cursor-level hook: replace any statement that references a
+    PostGIS-owned system table with a harmless no-op.
+
+    PostGIS extension setup (and some GeoAlchemy2 paths) can emit:
+        ALTER TABLE "spatial_ref_sys" ADD PRIMARY KEY ("srid")
+    which fails on hosted PostgreSQL because the app user is not the owner.
+    Intercepting at the cursor level means the statement is never sent to the
+    server, so the migration succeeds and the transaction stays clean.
+    """
+    for table in POSTGIS_SYSTEM_TABLES:
+        if table in statement:
+            return "SELECT 1", ()
+    return statement, parameters
+
+
+def _attach_postgis_filter(connection):
+    """Attach the PostGIS DDL filter to a live connection."""
+    event.listen(connection, "before_cursor_execute", _postgis_ddl_filter, retval=True)
+
+
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
     url = config.get_main_option("sqlalchemy.url")
@@ -75,6 +97,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        _attach_postgis_filter(connection)
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
