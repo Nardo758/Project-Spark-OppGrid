@@ -64,12 +64,13 @@ class AIModelRegistry:
             return self._get_fallback_models()
         
         try:
+            from sqlalchemy import text
             query = "SELECT * FROM ai_models"
             if not include_disabled:
                 query += " WHERE is_enabled = true"
             query += " ORDER BY priority DESC, display_name"
             
-            result = self.db.execute(query)
+            result = self.db.execute(text(query))
             rows = result.fetchall()
             
             models = []

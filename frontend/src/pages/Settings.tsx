@@ -447,7 +447,7 @@ export default function Settings() {
     if (!token) return
     setLoadingModels(true)
     try {
-      const res = await fetch('/api/v1/ai-chat/models', {
+      const res = await fetch('/api/v1/ai/models', {
         headers: { Authorization: `Bearer ${token}` }
       })
       if (res.ok) {
