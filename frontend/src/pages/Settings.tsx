@@ -1353,20 +1353,6 @@ export default function Settings() {
                     </div>
 
 
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-sm text-blue-800">
-                        <strong>Current configuration:</strong>{' '}
-                        {availableModels.find(m => m.model_id === aiPreferences?.model)?.display_name
-                          || aiPreferences?.model
-                          || (aiPreferences?.provider === 'claude' || aiPreferences?.provider === 'anthropic' ? 'Claude' : aiPreferences?.provider === 'openai' ? 'OpenAI' : 'Default')
-                        }{' '}
-                        {((aiPreferences?.provider === 'anthropic' || aiPreferences?.provider === 'claude') && aiPreferences?.has_claude_key) ||
-                         (aiPreferences?.provider === 'openai' && aiPreferences?.has_openai_key)
-                          ? '(your API key)'
-                          : '(OppGrid credits)'
-                        }
-                      </p>
-                    </div>
                   </div>
                 )}
               </div>
