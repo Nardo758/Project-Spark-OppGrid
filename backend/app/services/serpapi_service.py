@@ -1,6 +1,18 @@
 import os
 from typing import Optional, List, Dict, Any
-from serpapi import GoogleSearch
+
+try:
+    from serpapi import GoogleSearch
+except ImportError:
+    # serpapi v1.x+ uses a different API; provide a compatibility wrapper
+    import serpapi as _serpapi
+
+    class GoogleSearch:
+        def __init__(self, params: dict):
+            self._params = params
+
+        def get_dict(self) -> dict:
+            return _serpapi.search(**self._params)
 
 
 class SerpAPIService:

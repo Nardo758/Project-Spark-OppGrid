@@ -262,6 +262,108 @@ async def analyze_batch(request: BatchAnalysisRequest, db: Session = Depends(get
         results=results
     )
 
+class CoordinateRequest(BaseModel):
+    limit: Optional[int] = 20
+    skip_market_analysis: Optional[bool] = False
+
+
+@router.post("/coordinate")
+async def coordinate_with_deepseek(request: CoordinateRequest, db: Session = Depends(get_db)):
+    """
+    Run DeepSeek data coordination on unprocessed scraped sources.
+
+    This is Stage 1 of the dual-AI pipeline:
+      - DeepSeek: signal extraction, clustering, market analysis
+      - Claude (via /analyze-batch): creative narratives and validation
+
+    The coordinator enriches raw scraped data with structured intelligence
+    that Claude then uses to write professional opportunity descriptions.
+    """
+    from app.services.deepseek_coordinator import get_deepseek_coordinator
+    from app.models.scraped_source import ScrapedSource
+
+    coordinator = get_deepseek_coordinator()
+
+    if not coordinator.is_configured:
+        return {
+            "status": "skipped",
+            "reason": "DEEPSEEK_API_KEY not configured",
+            "valid_signals": 0,
+            "clusters_formed": 0,
+        }
+
+    # Load unprocessed scraped sources
+    sources = (
+        db.query(ScrapedSource)
+        .filter(ScrapedSource.processed == 0)
+        .order_by(ScrapedSource.received_at.desc())
+        .limit(request.limit)
+        .all()
+    )
+
+    if not sources:
+        return {
+            "status": "no_data",
+            "reason": "No unprocessed scraped sources found",
+            "valid_signals": 0,
+            "clusters_formed": 0,
+        }
+
+    # Convert DB models to dicts for the coordinator
+    raw_items = []
+    for src in sources:
+        item = src.raw_data or {}
+        item["source_platform"] = src.source_type
+        item["external_id"] = src.external_id
+        raw_items.append(item)
+
+    # Run the DeepSeek coordination pipeline
+    result = await coordinator.process_raw_data(
+        raw_items, skip_market_analysis=request.skip_market_analysis
+    )
+
+    stats = result.get("stats", {})
+    claude_tasks = result.get("claude_tasks", [])
+
+    # Store DeepSeek's structured analysis as metadata on the scraped sources
+    # so Claude can reference it during the creative pass
+    clusters = result.get("clusters", [])
+    for cluster in clusters:
+        for signal in cluster.get("signals", []):
+            raw_data = signal.get("raw_data", {})
+            ext_id = raw_data.get("external_id")
+            if ext_id:
+                source = (
+                    db.query(ScrapedSource)
+                    .filter(ScrapedSource.external_id == ext_id)
+                    .first()
+                )
+                if source:
+                    # Enrich the raw_data with DeepSeek's analysis
+                    enriched = source.raw_data or {}
+                    enriched["deepseek_analysis"] = {
+                        "signal_strength": signal.get("signal_strength"),
+                        "category": signal.get("category"),
+                        "problem_statement": signal.get("problem_statement"),
+                        "cluster_theme": cluster.get("theme"),
+                        "market_context": cluster.get("market_context", {}),
+                    }
+                    source.raw_data = enriched
+                    db.add(source)
+
+    db.commit()
+
+    return {
+        "status": "completed",
+        "total_raw_items": stats.get("total_raw_items", 0),
+        "valid_signals": stats.get("valid_signals", 0),
+        "clusters_formed": stats.get("clusters_formed", 0),
+        "claude_tasks_prepared": len(claude_tasks),
+        "pipeline_started_at": stats.get("pipeline_started_at"),
+        "pipeline_completed_at": stats.get("pipeline_completed_at"),
+    }
+
+
 @router.get("/top-opportunities")
 async def get_top_opportunities(limit: int = 5, db: Session = Depends(get_db)):
     return _build_top_opportunities(db, limit)

@@ -144,32 +144,60 @@ async def run_ai_analysis(batch_size: int = 10):
         print(f"[{datetime.now()}] AI analysis complete: {result.get('processed', 0)} analyzed, {result.get('failed', 0)} failed")
         return result
 
+async def run_deepseek_coordinator(batch_size: int = 20):
+    """Run DeepSeek coordinator on unprocessed scraped data (Stage 0 of dual-AI pipeline)"""
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        print(f"[{datetime.now()}] Running DeepSeek data coordination...")
+        response = await client.post(
+            f"{BACKEND_URL}/api/v1/ai-analysis/coordinate",
+            json={"limit": batch_size}
+        )
+
+        if response.status_code != 200:
+            print(f"WARNING: DeepSeek coordination returned {response.status_code} - {response.text}")
+            print("Falling back to direct Claude analysis...")
+            return None
+
+        result = response.json()
+        print(
+            f"[{datetime.now()}] DeepSeek coordination complete: "
+            f"{result.get('valid_signals', 0)} signals, "
+            f"{result.get('clusters_formed', 0)} clusters"
+        )
+        return result
+
+
 async def daily_sync(skip_scraper: bool = False, ai_batch_size: int = 20):
     """
-    Full daily sync process:
+    Full daily sync process (Dual-AI Pipeline):
     1. Trigger Apify scraper (optional)
     2. Wait for completion
     3. Fetch and import new data
-    4. Run AI analysis on new opportunities
+    4. [DeepSeek] Signal extraction, clustering, market analysis
+    5. [Claude] Creative narrative generation & validation
     """
     print(f"\n{'='*60}")
-    print(f"KATALYST DAILY SYNC - {datetime.now()}")
+    print(f"OPPGRID DAILY SYNC (Dual-AI) - {datetime.now()}")
     print(f"{'='*60}\n")
-    
+
     if not skip_scraper:
         run_id = await trigger_apify_scraper()
         if run_id:
             dataset_id = await wait_for_run_completion(run_id)
             if not dataset_id:
                 print("WARNING: Scraper did not complete successfully, fetching latest available data...")
-    
+
     import_result = await fetch_and_import_data()
-    
+
     if import_result and import_result.get("created", 0) > 0:
+        # Stage 1: DeepSeek data coordination (signal extraction + clustering + market analysis)
+        coordinator_result = await run_deepseek_coordinator(batch_size=ai_batch_size)
+
+        # Stage 2: Claude creative analysis (narratives + validation)
         await run_ai_analysis(batch_size=ai_batch_size)
     else:
         print("No new opportunities to analyze")
-    
+
     print(f"\n{'='*60}")
     print(f"DAILY SYNC COMPLETE - {datetime.now()}")
     print(f"{'='*60}\n")
