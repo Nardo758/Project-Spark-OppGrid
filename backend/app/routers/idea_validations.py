@@ -179,7 +179,7 @@ async def run_validation(
 
     # Reuse the existing idea_engine validation logic/prompt
     from app.routers.idea_engine import VALIDATION_PROMPT
-    from app.services.llm_ai_engine import get_anthropic_client
+    from app.services.unified_ai_service import get_ai_service
 
     user_prompt = f"""Validate this business opportunity:
 
@@ -192,18 +192,16 @@ IDEA DESCRIPTION:
 Provide a comprehensive, actionable validation analysis."""
 
     try:
-        anthropic_client = get_anthropic_client()
-        if not anthropic_client:
-            raise RuntimeError("AI service not available")
+        # Use unified AI service for billing/tier tracking
+        ai = get_ai_service(db, user=current_user)
         
-        response = anthropic_client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=2048,
-            system=VALIDATION_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
+        result_data = await ai.complete(
+            prompt=user_prompt,
+            system_prompt=VALIDATION_PROMPT,
+            task_type="opportunity_analysis",
+            max_tokens=2048
         )
-
-        response_text = response.content[0].text
+        response_text = result_data["content"]
         start_idx = response_text.find("{")
         end_idx = response_text.rfind("}") + 1
         if start_idx == -1 or end_idx <= start_idx:

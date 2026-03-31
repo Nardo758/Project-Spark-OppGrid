@@ -260,7 +260,9 @@ async def chat_with_cofounder(
     stage: str,
     opportunity: dict,
     workspace: dict,
-    chat_history: list[dict] = None
+    chat_history: list[dict] = None,
+    db=None,
+    user=None
 ) -> str:
     """
     Chat with the AI Co-Founder.
@@ -271,6 +273,8 @@ async def chat_with_cofounder(
         opportunity: Opportunity data dict
         workspace: Workspace data dict
         chat_history: List of previous messages [{"role": "user"|"assistant", "content": "..."}]
+        db: Database session (for unified AI service billing)
+        user: User object (for tier-based access)
     
     Returns:
         AI Co-Founder's response
@@ -287,10 +291,31 @@ CURRENT CONTEXT:
 
 Remember: Be helpful, specific, and actionable. Guide them step by step toward success."""
 
+    # Build conversation context for prompt
+    conversation = ""
+    if chat_history:
+        for msg in chat_history[-10:]:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            conversation += f"\n{role}: {msg['content']}"
+    
+    user_prompt = f"{conversation}\nUser: {message}" if conversation else message
+    
+    # Use unified AI service if db provided (for billing/tier)
+    if db:
+        from app.services.unified_ai_service import get_ai_service
+        ai = get_ai_service(db, user=user)
+        result = await ai.complete(
+            prompt=user_prompt,
+            system_prompt=full_system,
+            task_type="user_conversation",
+            max_tokens=2048
+        )
+        return result["content"]
+    
+    # Fallback to direct client (no billing)
     messages = []
     if chat_history:
         messages.extend(chat_history[-20:])
-    
     messages.append({"role": "user", "content": message})
     
     response = client.messages.create(
@@ -439,7 +464,9 @@ async def chat_with_cofounder_enhanced(
     chat_history: list[dict] = None,
     enable_web_search: bool = True,
     user_api_key: str = None,
-    db_tools: list[dict] = None
+    db_tools: list[dict] = None,
+    db=None,
+    user=None
 ) -> dict:
     """
     Enhanced chat with web search capability, BYOK support, and inline card detection.
@@ -528,6 +555,37 @@ Remember: Be helpful, specific, and actionable. Guide them step by step toward s
     
     messages.append({"role": "user", "content": message})
     
+    # Build conversation context for unified service
+    conversation = ""
+    if chat_history:
+        for msg in chat_history[-10:]:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            conversation += f"\n{role}: {msg['content']}"
+    
+    user_prompt = f"{conversation}\nUser: {message}" if conversation else message
+    
+    # Use unified AI service if db provided (for billing/tier)
+    if db:
+        from app.services.unified_ai_service import get_ai_service
+        ai = get_ai_service(db, user=user, byok_key=user_api_key, byok_provider="anthropic" if user_api_key else None)
+        result = await ai.complete(
+            prompt=user_prompt,
+            system_prompt=full_system,
+            task_type="user_conversation",
+            max_tokens=2048
+        )
+        key_source = "byok" if user_api_key else "platform"
+        return {
+            "response": result["content"],
+            "key_source": key_source,
+            "web_search_performed": web_results is not None,
+            "web_search_query": web_results.get("query") if web_results else None,
+            "inline_cards": inline_cards if inline_cards else None,
+            "tokens_used": result["tokens"]["input"] + result["tokens"]["output"],
+            "model_used": result.get("model_id")
+        }
+    
+    # Fallback to direct client (no billing tracking)
     ai_client, key_source = get_anthropic_client(user_api_key)
     
     response = ai_client.messages.create(
