@@ -148,7 +148,8 @@ interface SavedReport {
 }
 
 export default function ConsultantStudio() {
-  const { token, isAuthenticated } = useAuthStore()
+  // Optional: Allow guest access (no authentication required)
+  const { token } = useAuthStore()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<TabId>('validate')
 
@@ -193,10 +194,30 @@ export default function ConsultantStudio() {
           business_context: {},
         }),
       })
-      if (!res.ok) throw new Error('Failed to validate idea')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error (${res.status})`)
+      }
       return res.json() as Promise<ValidateIdeaResult>
     },
-    onSuccess: (data) => setValidateResult(data),
+    onSuccess: (data) => {
+      if (!data.success) {
+        console.warn('API returned success=false:', data.error)
+      }
+      setValidateResult(data)
+      
+      // NEW: Auto-generate report when analysis completes
+      if (data.success && token) {
+        saveReportMutation.mutate({
+          reportType: 'feasibility_study',
+          title: `Business Idea: ${ideaDescription.slice(0, 50)}...`,
+          content: JSON.stringify(data, null, 2),
+        })
+      }
+    },
+    onError: (err: Error) => {
+      console.error('Validate mutation error:', err)
+    }
   })
 
   // Search Ideas mutation
@@ -210,10 +231,21 @@ export default function ConsultantStudio() {
           category: searchCategory || undefined,
         }),
       })
-      if (!res.ok) throw new Error('Failed to search ideas')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error (${res.status})`)
+      }
       return res.json() as Promise<SearchIdeasResult>
     },
-    onSuccess: (data) => setSearchResult(data),
+    onSuccess: (data) => {
+      if (!data.success) {
+        console.warn('Search returned success=false:', data.error)
+      }
+      setSearchResult(data)
+    },
+    onError: (err: Error) => {
+      console.error('Search mutation error:', err)
+    }
   })
 
   // Identify Location mutation
@@ -227,10 +259,21 @@ export default function ConsultantStudio() {
           business_description: locationBusiness,
         }),
       })
-      if (!res.ok) throw new Error('Failed to analyze location')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error (${res.status})`)
+      }
       return res.json() as Promise<IdentifyLocationResult>
     },
-    onSuccess: (data) => setLocationResult(data),
+    onSuccess: (data) => {
+      if (!data.success) {
+        console.warn('Location analysis returned success=false:', data.error)
+      }
+      setLocationResult(data)
+    },
+    onError: (err: Error) => {
+      console.error('Location mutation error:', err)
+    }
   })
 
   // Clone Success mutation
@@ -247,15 +290,25 @@ export default function ConsultantStudio() {
           radius_miles: 3,
         }),
       })
-      if (!res.ok) throw new Error('Failed to analyze business')
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Server error (${res.status})`)
+      }
       return res.json() as Promise<CloneSuccessResult>
     },
-    onSuccess: (data) => setCloneResult(data),
+    onSuccess: (data) => {
+      if (!data.success) {
+        console.warn('Clone analysis returned success=false:', data.error)
+      }
+      setCloneResult(data)
+    },
+    onError: (err: Error) => {
+      console.error('Clone mutation error:', err)
+    }
   })
 
   const [reportError, setReportError] = useState<string | null>(null)
   const [reportSuccess, setReportSuccess] = useState(false)
-  const [exportingPdf, setExportingPdf] = useState(false)
 
   const saveReportMutation = useMutation({
     mutationFn: async ({
@@ -314,61 +367,12 @@ export default function ConsultantStudio() {
     )
   }
 
-  const handleExportPdf = async (data: Record<string, any>, title: string, reportType: string) => {
-    setExportingPdf(true)
-    try {
-      // Convert JSON data to readable HTML for the PDF
-      const htmlContent = jsonToHtml(data)
-      const res = await fetch('/api/v1/reports/export/pdf', {
-        method: 'POST',
-        headers: headers(),
-        body: JSON.stringify({ content: htmlContent, title, report_type: reportType }),
-      })
-      if (!res.ok) throw new Error('Export failed')
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `OppGrid - ${title.slice(0, 60)}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    } catch {
-      setReportError('Failed to export PDF. Please try again.')
-    } finally {
-      setExportingPdf(false)
-    }
-  }
-
-  const jsonToHtml = (data: Record<string, any>): string => {
-    const sections: string[] = []
-    for (const [key, value] of Object.entries(data)) {
-      if (value === null || value === undefined) continue
-      const label = key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-        sections.push(`<p><strong>${label}:</strong> ${String(value)}</p>`)
-      } else if (Array.isArray(value)) {
-        const items = value.map((v) =>
-          typeof v === 'object' ? `<li>${Object.entries(v).map(([k, val]) => `<strong>${k}:</strong> ${val}`).join(' | ')}</li>` : `<li>${v}</li>`
-        ).join('')
-        sections.push(`<h3>${label}</h3><ul>${items}</ul>`)
-      } else if (typeof value === 'object') {
-        const rows = Object.entries(value).map(([k, v]) =>
-          `<tr><td><strong>${k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</strong></td><td>${typeof v === 'object' ? JSON.stringify(v) : v}</td></tr>`
-        ).join('')
-        sections.push(`<h3>${label}</h3><table><tbody>${rows}</tbody></table>`)
-      }
-    }
-    return sections.join('\n')
-  }
-
   const renderValidateTab = () => (
     <div className="space-y-6">
       <div className="bg-white rounded-xl border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Describe Your Business Idea</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Our AI will analyze your idea and recommend whether it's best suited for online, physical, or hybrid operation.
+          Our AI will analyze your idea and generate a comprehensive report. Describe your business concept below.
         </p>
         <textarea
           value={ideaDescription}
@@ -377,25 +381,30 @@ export default function ConsultantStudio() {
           rows={5}
           className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
         />
-        <div className="mt-4 flex justify-between items-center">
-          <span className="text-sm text-gray-500">{ideaDescription.length}/2000</span>
-          <button
+        <div className="mt-6 space-y-4">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-gray-500">{ideaDescription.length}/2000 characters</span>
+            <button
             onClick={() => validateMutation.mutate()}
             disabled={!ideaDescription.trim() || validateMutation.isPending}
-            className="px-6 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-8 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2 transition-all"
           >
             {validateMutation.isPending ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Analyzing...
+                Analyzing & Generating Report...
               </>
             ) : (
               <>
                 <Sparkles className="w-5 h-5" />
-                Validate Idea
+                Analyze & Generate Report
               </>
             )}
           </button>
+          </div>
+          <div className="text-xs text-gray-400">
+            💡 <strong>Pro Tip:</strong> Your report generates automatically with the analysis. Takes ~30 seconds for full analysis.
+          </div>
         </div>
       </div>
 
@@ -454,41 +463,48 @@ export default function ConsultantStudio() {
           )}
 
           {reportError && (
-            <div className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
               <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
               <span className="text-sm text-red-800">{reportError}</span>
-              <button onClick={() => setReportError(null)} className="ml-auto text-red-400 hover:text-red-600 text-sm">Dismiss</button>
+              <button onClick={() => setReportError(null)} className="ml-auto text-red-400 hover:text-red-600 text-sm font-medium">Dismiss</button>
             </div>
           )}
           {reportSuccess && (
-            <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
               <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
-              <span className="text-sm text-green-800">Report saved successfully!</span>
+              <span className="text-sm text-green-800">✅ Report saved to your account!</span>
             </div>
           )}
-          <div className="flex gap-3">
-            <button
-              onClick={() =>
-                saveReportMutation.mutate({
-                  reportType: 'feasibility_study',
-                  title: `Idea Validation: ${ideaDescription.slice(0, 50)}...`,
-                  content: JSON.stringify(validateResult, null, 2),
-                })
-              }
-              disabled={saveReportMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
-            >
-              <FileText className="w-4 h-4" />
-              {saveReportMutation.isPending ? 'Generating...' : 'Save as Report'}
-            </button>
-            <button
-              onClick={() => handleExportPdf(validateResult!, `Idea Validation: ${ideaDescription.slice(0, 50)}`, 'Feasibility Study')}
-              disabled={exportingPdf}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 font-medium disabled:opacity-50"
-            >
-              {exportingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {exportingPdf ? 'Exporting...' : 'Export PDF'}
-            </button>
+          <div className="flex flex-col sm:flex-row gap-3">
+            {token ? (
+              <>
+                <button
+                  disabled={saveReportMutation.isPending}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  <FileText className="w-5 h-5" />
+                  {saveReportMutation.isPending ? 'Saving Report...' : 'Report Saved ✓'}
+                </button>
+                <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border-2 border-blue-500 text-blue-600 rounded-lg hover:bg-blue-50 font-semibold transition-all">
+                  <Download className="w-5 h-5" />
+                  Download PDF
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold transition-all">
+                  <Download className="w-5 h-5" />
+                  Download as PDF
+                </button>
+                <button 
+                  onClick={() => window.location.href = '/signin'}
+                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border-2 border-amber-500 text-amber-600 rounded-lg hover:bg-amber-50 font-semibold transition-all"
+                >
+                  <FileText className="w-5 h-5" />
+                  Sign in to Save
+                </button>
+              </>
+            )}
           </div>
 
           <div className="mt-4 text-xs text-gray-400">
@@ -980,29 +996,7 @@ export default function ConsultantStudio() {
     </div>
   )
 
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-stone-50 py-12">
-        <div className="max-w-2xl mx-auto px-4 text-center">
-          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <BarChart3 className="w-8 h-8 text-amber-600" />
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Consultant Studio</h1>
-          <p className="text-lg text-gray-600 mb-8">
-            AI-powered business validation, market analysis, and location intelligence.
-          </p>
-          <Link
-            to="/login?next=/build/consultant-studio"
-            className="inline-flex items-center gap-2 px-8 py-4 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600"
-          >
-            Sign in to Access
-            <ChevronRight className="w-5 h-5" />
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
+  // No authentication required - guest access allowed
   return (
     <div className="min-h-screen bg-stone-50 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">

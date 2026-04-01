@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { 
   FileText, 
@@ -275,12 +276,9 @@ export default function ReportLibrary({
 
   // Fetch Template reports (20+)
   const { data: categories, isLoading } = useQuery<CategoryWithTemplates[]>({
-    queryKey: ['report-templates', isGuest],
+    queryKey: ['report-templates'],
     queryFn: async () => {
-      const hdrs: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) hdrs['Authorization'] = `Bearer ${token}`
-      const endpoint = isGuest ? '/api/v1/reports/templates/public' : '/api/v1/reports/templates'
-      const res = await fetch(endpoint, { headers: hdrs })
+      const res = await fetch('/api/v1/reports/templates/public')
       if (!res.ok) throw new Error('Failed to fetch templates')
       return res.json()
     },
@@ -339,8 +337,10 @@ export default function ReportLibrary({
           }),
         })
         if (!res.ok) {
-          const error = await res.json()
-          throw new Error(error.detail || 'Failed to generate report')
+          const text = await res.text()
+          let detail = 'Failed to generate report'
+          try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+          throw new Error(detail)
         }
         return res.json()
       } else {
@@ -355,8 +355,10 @@ export default function ReportLibrary({
           }),
         })
         if (!res.ok) {
-          const error = await res.json()
-          throw new Error(error.detail || 'Failed to generate report')
+          const text = await res.text()
+          let detail = 'Failed to generate report'
+          try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+          throw new Error(detail)
         }
         return res.json() as Promise<GeneratedReport>
       }
@@ -369,7 +371,7 @@ export default function ReportLibrary({
     },
     onError: (err: Error) => {
       setGeneratingSlug(null)
-      setPurchaseError(err.message || 'Report generation failed. Please try again.')
+      setGenerateError(err.message || 'Failed to generate report. Please try again.')
     },
   })
 
@@ -525,10 +527,18 @@ export default function ReportLibrary({
     }
   }
 
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
   const handleGenerateReport = () => {
     console.log('[ReportLibrary] handleGenerateReport called', { selectedReport })
+    setGenerateError(null)
     if (!selectedReport) {
       console.warn('[ReportLibrary] No selectedReport, returning')
+      return
+    }
+
+    if (!isAuthenticated || !token) {
+      setGenerateError('Please sign in to generate reports.')
       return
     }
     
@@ -1004,6 +1014,20 @@ export default function ReportLibrary({
             {purchaseError && (
               <div className="mt-2 p-2 bg-red-50 text-red-700 text-xs rounded-lg">
                 {purchaseError}
+              </div>
+            )}
+
+            {generateError && (
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">{generateError}</p>
+                {!isAuthenticated && (
+                  <Link
+                    to="/login"
+                    className="inline-block mt-2 px-4 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600"
+                  >
+                    Sign In
+                  </Link>
+                )}
               </div>
             )}
 

@@ -181,12 +181,15 @@ class ConsultantStudioService:
             
             if isinstance(similar_opportunities, Exception):
                 logger.warning(f"Similar opportunities search failed: {similar_opportunities}")
+                logger.error(f"Similar opportunities error details: {type(similar_opportunities).__name__}: {str(similar_opportunities)}")
                 similar_opportunities = []
             if isinstance(viability_report, Exception):
                 logger.warning(f"Claude viability report failed: {viability_report}")
+                logger.error(f"Claude error details: {type(viability_report).__name__}: {str(viability_report)}")
                 viability_report = {}
             if isinstance(pattern_analysis, Exception):
                 logger.warning(f"DeepSeek pattern analysis failed: {pattern_analysis}")
+                logger.error(f"DeepSeek error details: {type(pattern_analysis).__name__}: {str(pattern_analysis)}")
                 pattern_analysis = {}
             
             online_score, physical_score = self._calculate_business_type_scores(
