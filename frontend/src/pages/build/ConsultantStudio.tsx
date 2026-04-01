@@ -96,6 +96,25 @@ function ResultMetricCard({ label, value, color }: { label: string; value: strin
   )
 }
 
+function OppRow({ title, category, score, to }: { title: string; category?: string; score?: number | string; to?: string }) {
+  const content = (
+    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors">
+      <div>
+        <div className="text-sm font-medium text-gray-900">{title}</div>
+        {category && <div className="text-xs text-gray-500">{category}</div>}
+      </div>
+      {score != null && (
+        <div className="text-right">
+          <div className="text-sm font-medium text-amber-500">{score}</div>
+          <div className="text-[10px] text-gray-400">score</div>
+        </div>
+      )}
+    </div>
+  )
+  if (to) return <Link to={to}>{content}</Link>
+  return content
+}
+
 type TabId = 'validate' | 'search' | 'location' | 'clone'
 
 interface Tab {
@@ -133,29 +152,49 @@ const TABS: Tab[] = [
 ]
 
 // Types for API responses
+interface ViabilityReport {
+  summary?: string
+  market_size?: string | Record<string, unknown>
+  tam?: string
+  growth?: string
+  competition?: string
+  demand_signal?: string
+  advantages?: string[]
+  strengths?: string[]
+  risks?: string[]
+  weaknesses?: string[]
+  [key: string]: unknown
+}
+
 interface ValidateIdeaResult {
   success: boolean
   idea_description?: string
   recommendation?: 'online' | 'physical' | 'hybrid'
   online_score?: number
   physical_score?: number
-  pattern_analysis?: Record<string, any>
-  viability_report?: Record<string, any>
+  pattern_analysis?: Record<string, unknown>
+  viability_report?: ViabilityReport
   similar_opportunities?: Array<{ id: number; title: string; score: number }>
   processing_time_ms?: number
   error?: string
 }
 
+interface SearchOpportunity {
+  id: number
+  title: string
+  description?: string
+  category?: string
+  score?: number
+  product_score?: number
+  price_score?: number
+  place_score?: number
+  promotion_score?: number
+  created_at?: string
+}
+
 interface SearchIdeasResult {
   success: boolean
-  opportunities?: Array<{
-    id: number
-    title: string
-    description?: string
-    category?: string
-    score?: number
-    created_at?: string
-  }>
+  opportunities?: SearchOpportunity[]
   trends?: Array<{
     id: number
     name: string
@@ -164,10 +203,37 @@ interface SearchIdeasResult {
     growth_rate?: number
     opportunities_count?: number
   }>
-  synthesis?: Record<string, any>
+  synthesis?: Record<string, unknown> | string
   total_count?: number
   processing_time_ms?: number
   error?: string
+}
+
+interface GeoAnalysis {
+  market_score?: number
+  overall_score?: number
+  median_income?: number
+  population?: number
+  median_age?: number
+  market_density?: string
+  competitors?: Array<{ name?: string; rating?: number; reviews?: number } | string>
+  product_score?: number
+  price_score?: number
+  place_score?: number
+  promotion_score?: number
+  product_detail?: string
+  price_detail?: string
+  place_detail?: string
+  promotion_detail?: string
+  [key: string]: unknown
+}
+
+interface SiteRecommendation {
+  name?: string
+  area?: string
+  reason?: string
+  priority?: string
+  score?: number
 }
 
 interface IdentifyLocationResult {
@@ -175,13 +241,13 @@ interface IdentifyLocationResult {
   city?: string
   business_description?: string
   inferred_category?: string
-  geo_analysis?: Record<string, any>
-  market_report?: Record<string, any>
-  site_recommendations?: Array<Record<string, any>>
+  geo_analysis?: GeoAnalysis
+  market_report?: Record<string, unknown> | string
+  site_recommendations?: SiteRecommendation[]
   map_data?: {
     city: string
     center: { lat: number; lng: number }
-    layers: Record<string, any>
+    layers: Record<string, unknown>
     totalFeatures: number
   }
   from_cache?: boolean
@@ -189,9 +255,22 @@ interface IdentifyLocationResult {
   error?: string
 }
 
+interface SourceBusiness {
+  name?: string
+  category?: string
+  success_factors?: string[]
+  demographics?: {
+    population?: number
+    median_income?: number
+    competition_count?: number
+    median_age?: number
+  }
+  [key: string]: unknown
+}
+
 interface CloneSuccessResult {
   success: boolean
-  source_business?: Record<string, any>
+  source_business?: SourceBusiness
   matching_locations?: Array<{
     name: string
     city: string
@@ -497,7 +576,7 @@ export default function ConsultantStudio() {
             </button>
           </div>
           <div className="text-xs text-gray-400">
-            Pro Tip: Your report generates automatically with the analysis. Takes ~30 seconds for full analysis.
+            💡 <strong>Pro Tip:</strong> Your report generates automatically with the analysis. Takes ~30 seconds for full analysis.
           </div>
         </div>
       </div>
@@ -543,8 +622,28 @@ export default function ConsultantStudio() {
           {validateResult.viability_report && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-medium text-gray-900">Market intelligence</span>
+                <span className="text-sm font-medium text-gray-900">4P's market intelligence</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">Free preview</span>
+              </div>
+              <div className="grid grid-cols-4 gap-3 mb-4">
+                <ResultMetricCard
+                  label="TAM"
+                  value={validateResult.viability_report.tam || (typeof validateResult.viability_report.market_size === 'string' ? validateResult.viability_report.market_size : 'N/A')}
+                />
+                <ResultMetricCard
+                  label="Growth"
+                  value={validateResult.viability_report.growth || 'N/A'}
+                />
+                <ResultMetricCard
+                  label="Competition"
+                  value={validateResult.viability_report.competition || 'N/A'}
+                  color="text-amber-600"
+                />
+                <ResultMetricCard
+                  label="Demand signal"
+                  value={validateResult.viability_report.demand_signal || 'N/A'}
+                  color="text-green-600"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -597,19 +696,7 @@ export default function ConsultantStudio() {
               <p className="text-sm font-medium text-gray-900 mb-3">Related opportunities</p>
               <div className="space-y-2">
                 {validateResult.similar_opportunities.map((opp) => (
-                  <Link
-                    key={opp.id}
-                    to={`/opportunity/${opp.id}`}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{opp.title}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-medium text-amber-500">{opp.score}</div>
-                      <div className="text-[10px] text-gray-400">score</div>
-                    </div>
-                  </Link>
+                  <OppRow key={opp.id} title={opp.title} score={opp.score} to={`/opportunity/${opp.id}`} />
                 ))}
               </div>
             </div>
@@ -790,12 +877,12 @@ export default function ConsultantStudio() {
                       <div className="text-xs text-gray-500">{opp.category}</div>
                     </div>
                     <div className="flex items-center gap-4">
-                      {(opp as any).product_score != null && (
+                      {opp.product_score != null && (
                         <FourPsBar
-                          product={(opp as any).product_score || 50}
-                          price={(opp as any).price_score || 50}
-                          place={(opp as any).place_score || 50}
-                          promotion={(opp as any).promotion_score || 50}
+                          product={opp.product_score || 50}
+                          price={opp.price_score || 50}
+                          place={opp.place_score || 50}
+                          promotion={opp.promotion_score || 50}
                         />
                       )}
                       <div className="text-right min-w-[40px]">
@@ -1023,13 +1110,36 @@ export default function ConsultantStudio() {
             </div>
           )}
 
+          {locationResult.geo_analysis && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <p className="text-sm font-medium text-gray-900 mb-3">4P's intelligence</p>
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { icon: '📦', label: 'Product', score: locationResult.geo_analysis.product_score, detail: locationResult.geo_analysis.product_detail },
+                  { icon: '💲', label: 'Price', score: locationResult.geo_analysis.price_score, detail: locationResult.geo_analysis.price_detail },
+                  { icon: '📍', label: 'Place', score: locationResult.geo_analysis.place_score, detail: locationResult.geo_analysis.place_detail },
+                  { icon: '📢', label: 'Promotion', score: locationResult.geo_analysis.promotion_score, detail: locationResult.geo_analysis.promotion_detail },
+                ].map(p => (
+                  <div key={p.label} className="rounded-lg p-3 bg-gray-50">
+                    <div className="flex items-center gap-1 mb-1">
+                      <span className="text-sm">{p.icon}</span>
+                      <span className="text-xs font-medium text-gray-900">{p.label}</span>
+                    </div>
+                    <div className="text-lg font-medium text-gray-900 mb-1">{p.score ?? 'N/A'}</div>
+                    {p.detail && <div className="text-[10px] text-gray-500 leading-relaxed">{p.detail}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {locationResult.market_report && (
             <div className="bg-white rounded-xl border border-gray-200 p-5 border-l-[3px] border-l-amber-500">
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Market intelligence</p>
               <p className="text-sm text-gray-700 leading-relaxed">
                 {typeof locationResult.market_report === 'string'
                   ? locationResult.market_report
-                  : locationResult.market_report.summary || JSON.stringify(locationResult.market_report)}
+                  : (locationResult.market_report as Record<string, unknown>).summary as string || JSON.stringify(locationResult.market_report)}
               </p>
             </div>
           )}
@@ -1069,9 +1179,9 @@ export default function ConsultantStudio() {
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <p className="text-sm font-medium text-gray-900 mb-3">Competitor profiles ({locationResult.geo_analysis?.competitors?.length || 0})</p>
               <div className="space-y-2">
-                {(locationResult.geo_analysis?.competitors || []).slice(0, 3).map((c: any, i: number) => (
+                {(locationResult.geo_analysis?.competitors || []).slice(0, 3).map((c, i) => (
                   <div key={i} className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700">
-                    {typeof c === 'string' ? c : c.name || `Competitor ${i + 1}`}
+                    {typeof c === 'string' ? c : (c as { name?: string }).name || `Competitor ${i + 1}`}
                   </div>
                 ))}
                 {(!locationResult.geo_analysis?.competitors || locationResult.geo_analysis.competitors.length === 0) && (
@@ -1227,7 +1337,7 @@ export default function ConsultantStudio() {
                 <div className="mt-4">
                   <div className="text-xs font-medium text-gray-700 mb-2">Success factors</div>
                   <div className="flex flex-wrap gap-1.5">
-                    {cloneResult.source_business.success_factors.map((factor: string, idx: number) => (
+                    {cloneResult.source_business.success_factors.map((factor, idx) => (
                       <span key={idx} className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] rounded font-medium">
                         {factor}
                       </span>
@@ -1243,6 +1353,50 @@ export default function ConsultantStudio() {
                   <ResultMetricCard label="Competition" value={`${cloneResult.source_business.demographics.competition_count || 0} nearby`} />
                 </div>
               )}
+            </div>
+          )}
+
+          {cloneResult.source_business?.demographics && cloneResult.matching_locations && cloneResult.matching_locations.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <p className="text-sm font-medium text-gray-900 mb-3">Source vs Target comparison</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left py-2 pr-4 text-gray-500 font-medium">Metric</th>
+                      <th className="text-right py-2 px-4 text-gray-500 font-medium">Source</th>
+                      <th className="text-right py-2 pl-4 text-gray-500 font-medium">Top target</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    <tr>
+                      <td className="py-2 pr-4 text-gray-700">Population</td>
+                      <td className="py-2 px-4 text-right font-medium text-gray-900">{(cloneResult.source_business.demographics.population || 0).toLocaleString()}</td>
+                      <td className="py-2 pl-4 text-right font-medium text-gray-900">{(cloneResult.matching_locations[0]?.population || 0).toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4 text-gray-700">Median income</td>
+                      <td className="py-2 px-4 text-right font-medium text-gray-900">${(cloneResult.source_business.demographics.median_income || 0).toLocaleString()}</td>
+                      <td className="py-2 pl-4 text-right font-medium text-gray-900">${(cloneResult.matching_locations[0]?.median_income || 0).toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4 text-gray-700">Competition</td>
+                      <td className="py-2 px-4 text-right font-medium text-gray-900">{cloneResult.source_business.demographics.competition_count || 0} nearby</td>
+                      <td className="py-2 pl-4 text-right font-medium text-gray-900">{cloneResult.matching_locations[0]?.competition_match || 0}% match</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4 text-gray-700">Demographics match</td>
+                      <td className="py-2 px-4 text-right font-medium text-green-600">baseline</td>
+                      <td className="py-2 pl-4 text-right font-medium text-green-600">{cloneResult.matching_locations[0]?.demographics_match || 0}%</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-4 text-gray-700">Overall similarity</td>
+                      <td className="py-2 px-4 text-right font-medium text-amber-500">100%</td>
+                      <td className="py-2 pl-4 text-right font-medium text-amber-500">{cloneResult.matching_locations[0]?.similarity_score || 0}%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
