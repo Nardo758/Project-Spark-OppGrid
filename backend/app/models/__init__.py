@@ -70,6 +70,10 @@ from .team import (
 )
 from .monthly_report_usage import MonthlyReportUsage
 from .ai_usage import UserAIUsage, UserAIUsageSummary, AIUsageQuota, AIUsageEventType
+from .data_hub import (
+    HubOpportunityEnriched, HubMarketByGeography, HubIndustryInsight,
+    HubMarketSignal, HubValidationInsight, HubUserCohort, HubFinancialSnapshot
+)
 
 __all__ = [
     "User",
@@ -208,4 +212,11 @@ __all__ = [
     "UserAIUsageSummary",
     "AIUsageQuota",
     "AIUsageEventType",
+    "HubOpportunityEnriched",
+    "HubMarketByGeography",
+    "HubIndustryInsight",
+    "HubMarketSignal",
+    "HubValidationInsight",
+    "HubUserCohort",
+    "HubFinancialSnapshot",
 ]

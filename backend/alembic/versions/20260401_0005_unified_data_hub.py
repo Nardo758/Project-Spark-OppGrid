@@ -15,8 +15,8 @@ Tables:
 7. hub_financial_snapshot - Platform financial metrics
 8. hub_report_sections - Pre-written report sections
 
-Revision ID: 20260401_0004
-Revises: 20260401_0003
+Revision ID: 20260401_0005
+Revises: 20260401_0004
 Create Date: 2026-04-01 12:45:00.000000
 """
 from alembic import op
@@ -24,8 +24,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic
-revision = '20260401_0004'
-down_revision = '20260401_0003'
+revision = '20260401_0005'
+down_revision = '20260401_0004'
 branch_labels = None
 depends_on = None
 
