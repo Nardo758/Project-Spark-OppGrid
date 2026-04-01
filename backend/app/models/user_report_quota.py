@@ -73,18 +73,25 @@ class UserReportQuota(Base):
 
 
 class ReportPurchaseLog(Base):
-    """Track individual report purchases for auditing and analytics."""
+    """
+    Track individual report purchases for auditing and analytics.
+    
+    Supports both registered users and guest checkouts:
+    - user_id: If registered user (non-null)
+    - guest_email: If guest checkout (will convert to account later)
+    """
     __tablename__ = "report_purchase_logs"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=True, index=True)  # Null for guest
+    guest_email = Column(String(255), nullable=True, index=True)  # For guest checkouts
     opportunity_id = Column(Integer, nullable=True)
     
     # "layer_1", "layer_2", "layer_3"
     report_tier = Column(String(20), nullable=False)
     
     # How it was paid: "quota" (free, from allocation), "stripe" (paid), "free" (promo)
-    payment_type = Column(String(20), default="quota")
+    payment_type = Column(String(20), default="stripe")
     
     # Amount charged in cents (0 if quota)
     amount_cents = Column(Integer, default=0)
@@ -95,6 +102,9 @@ class ReportPurchaseLog(Base):
     # Report generation ID
     report_id = Column(Integer, nullable=True)
     
+    # Track if guest later created account
+    guest_converted_to_user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])

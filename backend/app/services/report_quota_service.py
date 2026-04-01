@@ -164,17 +164,25 @@ class ReportQuotaService:
     
     def log_purchase(
         self,
-        user: User,
         report_tier: str,
-        payment_type: str = "quota",
+        payment_type: str = "stripe",
         amount_cents: int = 0,
         stripe_charge_id: Optional[str] = None,
         report_id: Optional[int] = None,
         opportunity_id: Optional[int] = None,
+        user: Optional[User] = None,
+        guest_email: Optional[str] = None,
     ) -> ReportPurchaseLog:
-        """Log a report purchase for auditing."""
+        """
+        Log a report purchase for auditing.
+        
+        Supports both registered users and guest checkouts:
+        - Pass `user` for registered user purchases
+        - Pass `guest_email` for guest checkout purchases
+        """
         log = ReportPurchaseLog(
-            user_id=user.id,
+            user_id=user.id if user else None,
+            guest_email=guest_email,
             report_tier=report_tier,
             payment_type=payment_type,
             amount_cents=amount_cents,
@@ -186,7 +194,10 @@ class ReportQuotaService:
         self.db.commit()
         self.db.refresh(log)
         
-        logger.info(f"Logged purchase: user={user.id} tier={report_tier} type={payment_type} amount={amount_cents}¢")
+        if user:
+            logger.info(f"Logged purchase: user={user.id} tier={report_tier} type={payment_type} amount={amount_cents}¢")
+        else:
+            logger.info(f"Logged guest purchase: email={guest_email} tier={report_tier} type={payment_type} amount={amount_cents}¢")
         return log
     
     def get_usage_summary(self, user: User) -> Dict[str, Dict[str, int]]:
@@ -212,22 +223,39 @@ class ReportQuotaService:
         Check if user can generate report and what they'll be charged.
         
         Returns: (can_generate, message, price_cents)
+        
+        NON-MEMBERS (guest): Always charged full price
+        - Can generate → Yes (pay per report)
+        - Message: "Generate report for $15"
+        - Price: Full price ($15/$25/$35)
+        
+        FREE MEMBERS: Always charged (no allocation)
+        - Can generate → Yes (pay per report)
+        - Message: "Generate report for $15"
+        - Price: Full price
+        
+        PAID MEMBERS (Pro/Business): Quota + overage
+        - Can generate → Yes
+        - Message: "Generate free (4/5 remaining)" or "Generate for $10 (quota exhausted)"
+        - Price: 0 if quota available, else overage price
         """
+        # Guest/non-member users can always generate (they'll pay)
         if not user or not user.id:
-            return False, "Must sign up to generate reports", 0
+            price = self.BASE_PRICES.get(report_tier, 0)
+            return True, f"Generate report for ${price/100:.2f}", price
         
         tier = self.get_user_tier(user)
         
-        # Check if free tier
+        # Free members: Always pay full price
         if tier == "free":
             price = self.BASE_PRICES.get(report_tier, 0)
             return True, f"Generate report for ${price/100:.2f}", price
         
-        # Check quota
+        # Paid members: Check quota
         if self.can_generate_free(user, report_tier):
             remaining = self.get_remaining_quota(user, report_tier)
             return True, f"Generate free ({remaining} remaining this month)", 0
         
-        # Overage
+        # Paid members with exhausted quota: Overage pricing
         price = self.OVERAGE_PRICES.get(tier, {}).get(report_tier, self.BASE_PRICES.get(report_tier, 0))
         return True, f"Generate report for ${price/100:.2f} (quota exhausted)", price

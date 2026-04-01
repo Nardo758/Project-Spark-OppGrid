@@ -37,11 +37,16 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  NON-MEMBERS (Not Signed Up)                                │
+│  GUESTS (Not Signed Up)                                     │
 ├─────────────────────────────────────────────────────────────┤
-│  ❌ CANNOT purchase reports                                  │
-│  ❌ CANNOT access analyst features                           │
-│  📌 Must sign up FIRST before any purchases allowed         │
+│  ✓ CAN purchase reports via guest checkout                  │
+│  💰 Pay-per-report model (no account required upfront)      │
+│  ├─ Layer 1: $15/report                                     │
+│  ├─ Layer 2: $25/report                                     │
+│  └─ Layer 3: $35/report                                     │
+│  📌 Account auto-created at checkout                        │
+│  ✓ Report delivered immediately to email                    │
+│  ✓ Account ready to use with login after payment            │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐

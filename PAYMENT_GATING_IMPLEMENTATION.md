@@ -12,9 +12,15 @@
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ NON-MEMBERS (Not Signed Up)                                  │
-│ ❌ CANNOT generate reports                                   │
-│ 📌 "Must sign up to generate reports" message               │
+│ GUESTS (Not Signed Up)                                       │
+│ ✓ CAN generate reports via guest checkout                    │
+│ 💰 Pay-per-report (full price, no allocation)                │
+│ • Layer 1: $15 per report                                   │
+│ • Layer 2: $25 per report                                   │
+│ • Layer 3: $35 per report                                   │
+│ 📌 Account created automatically at checkout                 │
+│ • Report delivered to email immediately                     │
+│ • Account ready to use after payment                        │
 └──────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────┐
