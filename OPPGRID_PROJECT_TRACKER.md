@@ -16,6 +16,7 @@
 | **Database** | ✅ Ready | 100% | None |
 | **Authentication** | ✅ Complete | 100% | None |
 | **Consultant Studio** | 🟡 Partial | 65% | Data + Workflow (Design DONE) |
+| **Payment Gating** | 🔴 Needs Rework | 20% | Update to Alloc + Per-Report Model |
 | **Stripe Integration** | ⚠️ Partial | 60% | Checkout UI + Gating Logic |
 | **Google Scraper** | ⚠️ Stub | 40% | SERPAPI_KEY + Job Scheduling |
 | **Reddit Scraper** | ❌ Missing | 0% | Not Implemented |
@@ -23,6 +24,155 @@
 | **Production Readiness** | ⚠️ Dev Only | 30% | Optimization + Security |
 
 **Overall Progress: 70% Complete (April 1, 2026 - Studio Design Phase 1 2/3 DONE)**
+
+---
+
+## 💳 PAYMENT GATING & REPORT ALLOCATION MODEL (April 1, 2026 - NEW)
+
+**Status:** 🔴 **NEEDS IMPLEMENTATION** (Specification finalized)  
+**Owner:** Leon D  
+**Priority:** 🔴 HIGH  
+
+### User Types & Access Model
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  NON-MEMBERS (Not Signed Up)                                │
+├─────────────────────────────────────────────────────────────┤
+│  ❌ CANNOT purchase reports                                  │
+│  ❌ CANNOT access analyst features                           │
+│  📌 Must sign up FIRST before any purchases allowed         │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  FREE MEMBERS (Signed Up, No Subscription)                  │
+├─────────────────────────────────────────────────────────────┤
+│  💰 Pay-per-report model (charged per generate)             │
+│  ├─ Layer 1 Overview: $15/report                            │
+│  ├─ Layer 2 Deep Dive: $25/report                           │
+│  └─ Layer 3 Execution: $35/report                           │
+│  📊 No allocation/quota system                              │
+│  ✓ Can access Consultant Studio (Validate Idea, etc.)      │
+│  ✓ Can generate analyses (if they pay per report)           │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  PRO MEMBERS (Paid Subscription - $99/mo)                   │
+├─────────────────────────────────────────────────────────────┤
+│  📌 Allocated quota per month:                              │
+│  ├─ Layer 1 Overview: 5 free reports/month                  │
+│  ├─ Layer 2 Deep Dive: 2 free reports/month                 │
+│  └─ Layer 3 Execution: 0 (must purchase)                    │
+│  💰 Can purchase additional reports at discounted rate      │
+│  ├─ Layer 1: $10/report (vs $15 for free members)           │
+│  ├─ Layer 2: $18/report (vs $25 for free members)           │
+│  └─ Layer 3: $25/report (vs $35 for free members)           │
+│  ✓ Full access to Consultant Studio features                │
+│  ✓ Quota resets monthly on billing date                     │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│  BUSINESS MEMBERS (Paid Subscription - $299/mo)             │
+├─────────────────────────────────────────────────────────────┤
+│  📌 Allocated quota per month:                              │
+│  ├─ Layer 1 Overview: 15 free reports/month                 │
+│  ├─ Layer 2 Deep Dive: 8 free reports/month                 │
+│  └─ Layer 3 Execution: 3 free reports/month                 │
+│  💰 Can purchase additional reports at best rate            │
+│  ├─ Layer 1: $8/report (vs $15 for free)                    │
+│  ├─ Layer 2: $15/report (vs $25 for free)                   │
+│  └─ Layer 3: $20/report (vs $35 for free)                   │
+│  ✓ Full access to Consultant Studio features                │
+│  ✓ Quota resets monthly on billing date                     │
+│  ✓ Priority support + custom report requests                │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Key Rules
+
+1. **Authentication Required First**
+   - Non-members cannot purchase at all
+   - "Sign up to generate reports" message displayed
+   - Checkout must be preceded by account creation
+
+2. **Quota-Based for Members**
+   - Free Members: No quota (pay-per-report only)
+   - Pro/Business: Monthly allocation + overage pricing
+   - Quota resets on billing date each month
+   - Overage charges applied automatically
+
+3. **Payment Gating Logic**
+   ```
+   IF user is NOT logged in:
+       → Show "Sign up to generate reports" message
+   ELSE IF user is Free Member:
+       → Show "Generate Report for $15" button
+       → Charge immediately upon generation
+   ELSE IF user is Pro Member:
+       → Check if quota remaining for this tier
+       → IF quota > 0: Generate free (decrement quota)
+       → IF quota = 0: Show "Generate Report for $10" button
+   ELSE IF user is Business Member:
+       → Check if quota remaining for this tier
+       → IF quota > 0: Generate free (decrement quota)
+       → IF quota = 0: Show "Generate Report for $8" button
+   ```
+
+### Implementation Checklist
+
+#### Phase 1: Gating Logic (Backend) - 🔴 TODO
+- [ ] Add `user_id` requirement to all report endpoints (block non-members)
+- [ ] Create `UserReportQuota` model:
+  ```python
+  class UserReportQuota(Base):
+      user_id: int (FK)
+      tier: str (layer_1, layer_2, layer_3)
+      allocated: int
+      used: int
+      reset_date: datetime
+      updated_at: datetime
+  ```
+- [ ] Create quota tracking service:
+  ```python
+  class ReportQuotaService:
+      def get_remaining_quota(user, tier) → int
+      def check_quota_available(user, tier) → bool
+      def decrement_quota(user, tier) → bool
+      def get_effective_price(user, tier) → float (or 0 if free)
+  ```
+- [ ] Update `generate_layer1_report()`, `generate_layer2_report()`, `generate_layer3_report()`:
+  - Check: Is user logged in? (auth guard)
+  - Check: Quota available or charge price?
+  - Decrement quota if tier allows
+  - Charge Stripe if overage
+  - Generate report
+
+#### Phase 2: Stripe Integration - 🔴 TODO
+- [ ] Add one-time charge endpoint for overages
+- [ ] Update subscription webhook to reset quotas
+- [ ] Handle failed payments gracefully
+
+#### Phase 3: Frontend Display - 🔴 TODO
+- [ ] Update report generation buttons to show:
+  - For non-members: "Sign up to generate"
+  - For free members: "Generate for $15"
+  - For pro members: "Generate free (4/5 remaining)" or "Generate for $10"
+  - For business members: "Generate free (12/15 remaining)" or "Generate for $8"
+- [ ] Add quota display in user dashboard
+
+### Files to Update
+
+**Backend:**
+- `app/models/user_report_quota.py` (new)
+- `app/services/report_quota_service.py` (new)
+- `app/routers/generated_reports.py` (update gating logic)
+- `app/routers/reports.py` (update gating logic)
+- `app/services/report_generator.py` (update tier check)
+
+**Frontend:**
+- `src/components/ReportGenerationButton.tsx` (new)
+- `src/pages/build/ConsultantStudio.tsx` (update button displays)
+- `src/pages/Dashboard.tsx` (add quota display)
 
 ---
 
