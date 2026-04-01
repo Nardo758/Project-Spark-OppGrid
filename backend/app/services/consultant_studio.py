@@ -1979,7 +1979,7 @@ class ConsultantStudioService:
         data = {
             "idea": idea,
             "context": context or {},
-            "request": "Generate a comprehensive SWOT viability analysis with strengths, weaknesses, opportunities, and threats for this business idea.",
+            "request": "Generate a comprehensive viability analysis using the 4 P's Framework (Product, Price, Place, Promotion) along with SWOT analysis.",
         }
 
         try:
@@ -1993,6 +1993,13 @@ class ConsultantStudioService:
             if isinstance(response, dict) and response:
                 return {
                     "executive_summary": response.get("summary", f"Viability analysis for: {idea[:100]}"),
+                    "four_ps_analysis": response.get("four_ps_analysis", {
+                        "product": "Analysis unavailable",
+                        "price": "Analysis unavailable",
+                        "place": "Analysis unavailable",
+                        "promotion": "Analysis unavailable"
+                    }),
+                    "four_ps_scores": response.get("four_ps_scores", {}),
                     "strengths": response.get("strengths", []),
                     "weaknesses": response.get("weaknesses", []),
                     "opportunities": response.get("opportunities", []),

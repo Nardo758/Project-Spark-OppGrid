@@ -258,15 +258,35 @@ Return a JSON object with these fields:
 Return ONLY valid JSON, no markdown formatting."""
 
         elif task_type == AITaskType.MARKET_RESEARCH:
-            return f"""You are a senior business consultant. Provide a comprehensive SWOT viability analysis.
+            return f"""You are a senior business consultant. Provide a comprehensive viability analysis using the 4 P's Framework.
 
 Business Idea: {idea}
 {f"Additional Context:{chr(10)}{context_str}" if context_str else ""}
 {f"Specific Request: {request}" if request else ""}
 
+Analyze this idea through the 4 P's Marketing Framework:
+1. PRODUCT: What is being offered? Unique value proposition? Product-market fit?
+2. PRICE: Pricing strategy? Customer willingness to pay? Revenue model viability?
+3. PLACE: Distribution channels? Geographic market? Location dependency?
+4. PROMOTION: Marketing approach? Customer acquisition? Brand positioning?
+
+Also provide traditional SWOT analysis (strengths, weaknesses, opportunities, threats).
+
 Return a JSON object with these fields:
 {{
-  "summary": "<2-3 sentence executive summary>",
+  "summary": "<2-3 sentence executive summary referencing 4 P's impact>",
+  "four_ps_analysis": {{
+    "product": "<analysis of product viability, differentiation, fit>",
+    "price": "<analysis of pricing strategy, revenue potential, margins>",
+    "place": "<analysis of distribution, geographic feasibility, location strategy>",
+    "promotion": "<analysis of go-to-market, customer acquisition, brand positioning>"
+  }},
+  "four_ps_scores": {{
+    "product_score": <0-100>,
+    "price_score": <0-100>,
+    "place_score": <0-100>,
+    "promotion_score": <0-100>
+  }},
   "strengths": ["strength1", "strength2", "strength3", "strength4"],
   "weaknesses": ["weakness1", "weakness2", "weakness3"],
   "opportunities": ["opportunity1", "opportunity2", "opportunity3"],
@@ -277,7 +297,7 @@ Return a JSON object with these fields:
   "key_actions": ["action1", "action2", "action3"]
 }}
 
-Be specific to the actual business idea. Avoid generic statements.
+Be specific to the actual business idea. Frame analysis around the 4 P's.
 Return ONLY valid JSON, no markdown formatting."""
 
         elif task_type == AITaskType.BUSINESS_PLAN_GENERATION:

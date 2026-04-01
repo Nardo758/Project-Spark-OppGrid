@@ -77,6 +77,18 @@ interface ViabilityReport {
   risks?: string[]
   weaknesses?: string[]
   key_actions?: string[]
+  four_ps_analysis?: {
+    product?: string
+    price?: string
+    place?: string
+    promotion?: string
+  }
+  four_ps_scores?: {
+    product_score?: number
+    price_score?: number
+    place_score?: number
+    promotion_score?: number
+  }
   [key: string]: any
 }
 
@@ -612,6 +624,81 @@ export default function ConsultantStudio() {
                 place={validateResult.four_ps_scores.place || 0}
                 promotion={validateResult.four_ps_scores.promotion || 0}
               />
+            </div>
+          )}
+
+          {/* 4P's Detailed Analysis (from AI) */}
+          {validateResult.viability_report?.four_ps_analysis && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm font-medium text-gray-900">4P's Framework Analysis</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#F3E8FF', color: '#6B21A8' }}>AI-Powered</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Product */}
+                <div className="border-l-4 border-blue-500 pl-4">
+                  <h4 className="text-xs font-bold text-blue-700 mb-2">📦 PRODUCT</h4>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {validateResult.viability_report.four_ps_analysis.product || 'Product analysis in progress...'}
+                  </p>
+                  {validateResult.viability_report.four_ps_scores?.product_score && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-700">Score</span>
+                        <span className="text-xs font-bold text-blue-700">{validateResult.viability_report.four_ps_scores.product_score}/100</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Price */}
+                <div className="border-l-4 border-green-500 pl-4">
+                  <h4 className="text-xs font-bold text-green-700 mb-2">💰 PRICE</h4>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {validateResult.viability_report.four_ps_analysis.price || 'Pricing analysis in progress...'}
+                  </p>
+                  {validateResult.viability_report.four_ps_scores?.price_score && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-700">Score</span>
+                        <span className="text-xs font-bold text-green-700">{validateResult.viability_report.four_ps_scores.price_score}/100</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Place */}
+                <div className="border-l-4 border-orange-500 pl-4">
+                  <h4 className="text-xs font-bold text-orange-700 mb-2">📍 PLACE</h4>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {validateResult.viability_report.four_ps_analysis.place || 'Location analysis in progress...'}
+                  </p>
+                  {validateResult.viability_report.four_ps_scores?.place_score && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-700">Score</span>
+                        <span className="text-xs font-bold text-orange-700">{validateResult.viability_report.four_ps_scores.place_score}/100</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Promotion */}
+                <div className="border-l-4 border-red-500 pl-4">
+                  <h4 className="text-xs font-bold text-red-700 mb-2">📢 PROMOTION</h4>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {validateResult.viability_report.four_ps_analysis.promotion || 'Marketing analysis in progress...'}
+                  </p>
+                  {validateResult.viability_report.four_ps_scores?.promotion_score && (
+                    <div className="mt-2 pt-2 border-t border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-gray-700">Score</span>
+                        <span className="text-xs font-bold text-red-700">{validateResult.viability_report.four_ps_scores.promotion_score}/100</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
