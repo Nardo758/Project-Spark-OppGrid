@@ -40,6 +40,18 @@ OppGrid utilizes a modern hybrid architecture with a React 18 frontend (Vite, Ta
 *   **Mapbox:** Used for map visualizations.
 *   **SBA (Small Business Administration):** Provides curated loan program data and financing course information.
 
+## Consultant Studio Results UI
+The Consultant Studio (`frontend/src/pages/build/ConsultantStudio.tsx`) features an enhanced results UI with:
+- **BlurGate paywall overlays** on premium content (feasibility studies, competitor deep dives, deep clone analysis) with Stripe checkout integration via `/api/v1/report-pricing/template-checkout`
+- **ScoreCard components** showing online/physical viability scores and overall confidence with progress bars
+- **FourPsBar mini-bar charts** (Product/Price/Place/Promotion) displayed inline on search opportunity rows
+- **AI synthesis narratives** with left-border accent styling for search results and market intelligence
+- **Trending-now gradient cards** for detected trends with strength/growth metrics
+- **Market score gauges** and demographic panels for location analysis results
+- **Site recommendation priority badges** (High/Medium) for location site recommendations
+- **Stripe trust signals** (Secure payment, Money-back guarantee, Powered by Stripe) on all action bars
+- **ResultMetricCard** reusable component for labeled metric display in result sections
+
 ## Recent Fixes
 *   **Web Enrichment Async Fix:** `enrich_with_web_data_sync` in `web_enrichment_service.py` was crashing with "this event loop is already running" when called from FastAPI's async context. Fixed by creating a fresh `WebEnrichmentService` instance in a separate thread via `ThreadPoolExecutor` + `asyncio.run()`, avoiding shared `AsyncClient` across event loops.
 *   **Consultant Studio Report Save UX:** Replaced auth-prompt logic (unnecessary since page requires login) with proper error/success feedback banners. The "Save as Report" button now shows "Generating..." while pending and displays clear error messages or a success confirmation.
