@@ -102,11 +102,11 @@ def serialize_report_data_for_prompt(report_data: Any) -> str:
     if not report_data:
         return ""
 
-    lines = ["\n--- OppGrid Market Intelligence Data ---"]
+    lines = ["\n📊 COMPREHENSIVE 4 P's MARKET DATA:"]
 
     if report_data.product:
         p = report_data.product
-        lines.append("\nPRODUCT (Demand Validation):")
+        lines.append("\n**PRODUCT (Demand Validation):**")
         if p.opportunity_score is not None:
             lines.append(f"- Opportunity Score: {p.opportunity_score:.0f}/100")
         if p.pain_intensity is not None:
@@ -128,7 +128,7 @@ def serialize_report_data_for_prompt(report_data: Any) -> str:
 
     if report_data.price:
         pr = report_data.price
-        lines.append("\nPRICE (Economics):")
+        lines.append("\n**PRICE (Economics):**")
         if pr.market_size_estimate:
             lines.append(f"- Market Size: {pr.market_size_estimate}")
         if pr.addressable_market_value:
@@ -148,7 +148,7 @@ def serialize_report_data_for_prompt(report_data: Any) -> str:
 
     if report_data.place:
         pl = report_data.place
-        lines.append("\nPLACE (Location Intelligence):")
+        lines.append("\n**PLACE (Location Intelligence):**")
         if pl.growth_score is not None:
             lines.append(f"- Market Growth Score: {pl.growth_score:.0f}/100")
         if pl.growth_category:
@@ -172,7 +172,7 @@ def serialize_report_data_for_prompt(report_data: Any) -> str:
 
     if report_data.promotion:
         pm = report_data.promotion
-        lines.append("\nPROMOTION (Competition):")
+        lines.append("\n**PROMOTION (Competition):**")
         if pm.competition_level:
             lines.append(f"- Competition Level: {pm.competition_level}")
         if pm.competitor_count:
