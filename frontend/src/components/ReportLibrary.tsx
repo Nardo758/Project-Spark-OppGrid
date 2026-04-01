@@ -44,7 +44,7 @@ import {
   LogIn,
 } from 'lucide-react'
 import DOMPurify from 'dompurify'
-import { FourPsHorizontalBar, ScoreRing, OppRow } from './ConsultantResults/ResultCards'
+import { FourPsHorizontalBar, ScoreRing, OppRow, BlurGate } from './ConsultantResults/ResultCards'
 import { useAuthStore } from '../stores/authStore'
 
 type InputMode = 'validate' | 'search' | 'location' | 'clone'
@@ -412,8 +412,59 @@ export default function ReportLibrary({
     }
   }
 
+  const sidebarCard = (
+    <div className="lg:sticky lg:top-8">
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-[#D97757]" />
+          <h3 className="text-sm font-bold text-gray-900">Report Pricing</h3>
+        </div>
+        <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-500">Traditional Consultant</span>
+            <span className="text-gray-400 line-through font-medium">$1,500 – $15,000</span>
+          </div>
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-700 font-semibold">OppGrid AI Reports</span>
+            <span className="text-[#0F6E56] font-bold">$49 – $169</span>
+          </div>
+          <div className="border-t border-gray-200 pt-2 flex items-center justify-center">
+            <span className="text-[10px] font-semibold text-[#0F6E56] bg-[#0F6E56]/10 px-2.5 py-1 rounded-full">Save 90%+ vs consultants</span>
+          </div>
+        </div>
+        <div className="space-y-2 text-[11px] text-gray-500">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56] shrink-0" />
+            <span>AI-powered analysis in minutes</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56] shrink-0" />
+            <span>Export to PDF, Word, or print</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56] shrink-0" />
+            <span>27 specialized report types</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56] shrink-0" />
+            <span>Free validation + feasibility included</span>
+          </div>
+        </div>
+        {isGuest && (
+          <Link
+            to="/login"
+            className="block w-full text-center py-2.5 bg-gray-900 text-white rounded-xl text-xs font-semibold hover:bg-gray-800 transition-all"
+          >
+            Sign in to get started
+          </Link>
+        )}
+      </div>
+    </div>
+  )
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start">
       <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
         <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-5">
           {INPUT_MODES.map((mode) => {
@@ -542,6 +593,8 @@ export default function ReportLibrary({
             </>
           )}
         </button>
+      </div>
+      {sidebarCard}
       </div>
 
       {consultantResult && consultantResult.success && (
@@ -761,57 +814,94 @@ export default function ReportLibrary({
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[
-                  { type: 'validate', title: 'Idea Validation', icon: Lightbulb, color: '#185FA5', desc: 'Business viability analysis with scoring' },
-                  { type: 'feasibility_study', title: 'Feasibility Study', icon: FileText, color: '#0F6E56', desc: 'Market opportunity and risk assessment' },
-                ].map((card) => {
-                  const isFeasibility = card.type === 'feasibility_study'
-                  const isGenerating = generatingFree === card.type
-                  const hasReport = isFeasibility ? !!freeReports.feasibility_study : !!consultantResult
+                <button
+                  onClick={() => {
+                    if (consultantResult) {
+                      setViewingReport({
+                        id: 0,
+                        report_type: 'idea_validation',
+                        status: 'completed',
+                        title: 'Idea Validation Report',
+                        content: JSON.stringify(consultantResult, null, 2),
+                        confidence_score: consultantResult.confidence_score,
+                        created_at: new Date().toISOString(),
+                      })
+                    }
+                  }}
+                  className="p-4 bg-white border-2 border-gray-100 rounded-xl hover:border-gray-300 hover:shadow-md transition-all text-left group"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#185FA5]/10">
+                      <Lightbulb className="w-4 h-4 text-[#185FA5]" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-semibold text-gray-900">Idea Validation</span>
+                      <span className="text-[9px] ml-2 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 font-medium">FREE</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-500">Business viability analysis with scoring</p>
+                  <div className="flex items-center gap-1 mt-2 text-[10px] font-medium text-[#185FA5] group-hover:text-gray-700 transition-colors">
+                    View Report <ChevronRight className="w-3 h-3" />
+                  </div>
+                </button>
 
-                  return (
-                    <button
-                      key={card.type}
-                      onClick={() => {
-                        if (isFeasibility && freeReports.feasibility_study) {
-                          setViewingReport(freeReports.feasibility_study)
-                        } else if (!isFeasibility && consultantResult) {
-                          setViewingReport({
-                            id: 0,
-                            report_type: 'idea_validation',
-                            status: 'completed',
-                            title: 'Idea Validation Report',
-                            content: JSON.stringify(consultantResult, null, 2),
-                            confidence_score: consultantResult.confidence_score,
-                            created_at: new Date().toISOString(),
-                          })
-                        }
-                      }}
-                      disabled={isGenerating}
-                      className="p-4 bg-white border-2 border-gray-100 rounded-xl hover:border-gray-300 hover:shadow-md transition-all text-left group disabled:opacity-60"
-                    >
+                {isGuest ? (
+                  <BlurGate
+                    title="Feasibility Study"
+                    subtitle="Sign in to unlock your free AI-generated feasibility study with detailed market analysis."
+                    priceLabel="Sign in to unlock"
+                    onPurchase={() => window.location.href = '/login'}
+                  >
+                    <div className="p-4 bg-white border-2 border-gray-100 rounded-xl text-left">
                       <div className="flex items-center gap-2 mb-2">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${card.color}12` }}>
-                          {isGenerating ? (
-                            <Loader2 className="w-4 h-4 animate-spin" style={{ color: card.color }} />
-                          ) : (
-                            <card.icon className="w-4 h-4" style={{ color: card.color }} />
-                          )}
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#0F6E56]/10">
+                          <FileText className="w-4 h-4 text-[#0F6E56]" />
                         </div>
                         <div>
-                          <span className="text-sm font-semibold text-gray-900">{card.title}</span>
+                          <span className="text-sm font-semibold text-gray-900">Feasibility Study</span>
                           <span className="text-[9px] ml-2 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 font-medium">FREE</span>
                         </div>
                       </div>
-                      <p className="text-[10px] text-gray-500">{card.desc}</p>
-                      <div className="flex items-center gap-1 mt-2 text-[10px] font-medium group-hover:text-gray-700 transition-colors" style={{ color: card.color }}>
-                        {isGenerating ? 'Generating...' : hasReport ? (
-                          <>View Report <ChevronRight className="w-3 h-3" /></>
-                        ) : 'Pending...'}
+                      <p className="text-[10px] text-gray-500">Market opportunity and risk assessment</p>
+                      <div className="space-y-1.5 mt-3">
+                        <div className="h-2.5 bg-gray-200 rounded w-full" />
+                        <div className="h-2.5 bg-gray-200 rounded w-3/4" />
+                        <div className="h-2.5 bg-gray-200 rounded w-5/6" />
+                        <div className="h-2.5 bg-gray-200 rounded w-2/3" />
                       </div>
-                    </button>
-                  )
-                })}
+                    </div>
+                  </BlurGate>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (freeReports.feasibility_study) {
+                        setViewingReport(freeReports.feasibility_study)
+                      }
+                    }}
+                    disabled={generatingFree === 'feasibility_study'}
+                    className="p-4 bg-white border-2 border-gray-100 rounded-xl hover:border-gray-300 hover:shadow-md transition-all text-left group disabled:opacity-60"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#0F6E56]/10">
+                        {generatingFree === 'feasibility_study' ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-[#0F6E56]" />
+                        ) : (
+                          <FileText className="w-4 h-4 text-[#0F6E56]" />
+                        )}
+                      </div>
+                      <div>
+                        <span className="text-sm font-semibold text-gray-900">Feasibility Study</span>
+                        <span className="text-[9px] ml-2 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 font-medium">FREE</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-500">Market opportunity and risk assessment</p>
+                    <div className="flex items-center gap-1 mt-2 text-[10px] font-medium text-[#0F6E56] group-hover:text-gray-700 transition-colors">
+                      {generatingFree === 'feasibility_study' ? 'Generating...' : freeReports.feasibility_study ? (
+                        <>View Report <ChevronRight className="w-3 h-3" /></>
+                      ) : 'Pending...'}
+                    </div>
+                  </button>
+                )}
               </div>
             </div>
           )}

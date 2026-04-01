@@ -21,7 +21,7 @@ export default function ReportStudio() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto mb-6 sm:mb-8">
+      <div className="max-w-5xl mx-auto mb-6 sm:mb-8">
         <div className="flex items-center gap-2.5 mb-1.5">
           <div className="w-2 h-7 rounded-full bg-gradient-to-b from-[#D97757] to-[#BA7517]" />
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Report Studio</h1>
