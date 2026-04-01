@@ -14,10 +14,10 @@ import {
   AlertCircle,
   Lock,
   Shield,
+  ChevronRight,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { Link } from 'react-router-dom'
-import { VerdictBanner, ScoreCards, MarketIntelligence, FeasibilityPreview, ActionBar } from '../../components/ConsultantResults'
 import ReportSelectionPanel from '../../components/ReportSelectionPanel'
 
 function FourPsBar({ product, price, place, promotion }: { product: number; price: number; place: number; promotion: number }) {
@@ -165,7 +165,8 @@ interface ViabilityReport {
   strengths?: string[]
   risks?: string[]
   weaknesses?: string[]
-  [key: string]: unknown
+  key_actions?: string[]
+  [key: string]: any
 }
 
 interface ValidateIdeaResult {
@@ -607,20 +608,24 @@ export default function ConsultantStudio() {
               {getRecommendationBadge(validateResult.recommendation)}
               <span className="text-xs text-gray-400">{((validateResult.processing_time_ms || 0) / 1000).toFixed(1)}s</span>
             </div>
-            {validateResult.viability_report && (
+            {(validateResult.viability_report || validateResult.verdict_summary) && (
               <>
                 <p className="text-sm font-medium text-gray-900 mb-1">
-                  {validateResult.viability_report.summary
-                    ? (typeof validateResult.viability_report.summary === 'string'
-                      ? validateResult.viability_report.summary.split('.').slice(0, 2).join('.') + '.'
-                      : 'Analysis complete.')
-                    : 'Analysis complete for your business idea.'}
+                  {validateResult.verdict_summary
+                    || (validateResult.viability_report?.summary
+                      ? (typeof validateResult.viability_report.summary === 'string'
+                        ? validateResult.viability_report.summary.split('.').slice(0, 2).join('.') + '.'
+                        : 'Analysis complete.')
+                      : 'Analysis complete for your business idea.')}
                 </p>
-                {validateResult.viability_report.market_size && (
+                {validateResult.verdict_detail && (
+                  <p className="text-xs text-gray-600 mb-1">{validateResult.verdict_detail}</p>
+                )}
+                {validateResult.viability_report?.market_size && (
                   <p className="text-xs text-gray-500">
-                    {typeof validateResult.viability_report.market_size === 'string'
-                      ? validateResult.viability_report.market_size
-                      : `Market size: ${JSON.stringify(validateResult.viability_report.market_size)}`}
+                    {typeof validateResult.viability_report?.market_size === 'string'
+                      ? validateResult.viability_report?.market_size
+                      : `Market size: ${JSON.stringify(validateResult.viability_report?.market_size)}`}
                   </p>
                 )}
               </>
@@ -632,11 +637,31 @@ export default function ConsultantStudio() {
             <ScoreCard label="Physical viability" value={validateResult.physical_score || 0} color="bg-green-500" />
             <ScoreCard
               label="Overall confidence"
-              value={Number((((validateResult.online_score || 0) + (validateResult.physical_score || 0)) / 20).toFixed(1))}
+              value={validateResult.confidence_score != null
+                ? validateResult.confidence_score
+                : Number((((validateResult.online_score || 0) + (validateResult.physical_score || 0)) / 20).toFixed(1))}
               color="bg-amber-500"
-              suffix="/10"
+              suffix={validateResult.confidence_score != null ? '%' : '/10'}
             />
           </div>
+
+          {/* 4P's Market Data (from ReportDataService) */}
+          {validateResult.four_ps_scores && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-gray-900">4P's Market Scores</span>
+                {validateResult.data_quality?.enriched && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Real market data</span>
+                )}
+              </div>
+              <FourPsBar
+                product={validateResult.four_ps_scores.product || 0}
+                price={validateResult.four_ps_scores.price || 0}
+                place={validateResult.four_ps_scores.place || 0}
+                promotion={validateResult.four_ps_scores.promotion || 0}
+              />
+            </div>
+          )}
 
           {/* Viability Analysis (from AI) */}
           {validateResult.viability_report && (
@@ -648,31 +673,48 @@ export default function ConsultantStudio() {
               <div className="grid grid-cols-4 gap-3 mb-4">
                 <ResultMetricCard
                   label="TAM"
-                  value={validateResult.viability_report.tam || (typeof validateResult.viability_report.market_size === 'string' ? validateResult.viability_report.market_size : 'N/A')}
+                  value={String(validateResult.viability_report.tam || (typeof validateResult.viability_report.market_size === 'string' ? validateResult.viability_report.market_size : 'N/A'))}
                 />
                 <ResultMetricCard
                   label="Growth"
-                  value={validateResult.viability_report.growth || 'N/A'}
+                  value={String(validateResult.market_intelligence?.growth_trend || validateResult.viability_report.growth || 'N/A')}
                 />
                 <ResultMetricCard
                   label="Competition"
-                  value={validateResult.viability_report.competition || 'N/A'}
+                  value={String(validateResult.market_intelligence?.competition_level || validateResult.viability_report.competition || 'N/A')}
                   color="text-amber-600"
                 />
                 <ResultMetricCard
                   label="Demand signal"
-                  value={validateResult.viability_report.demand_signal || 'N/A'}
+                  value={String(validateResult.market_intelligence?.demand_level || validateResult.viability_report.demand_signal || 'N/A')}
                   color="text-green-600"
                 />
               </div>
+              {/* Enriched market data from ReportDataService */}
+              {validateResult.market_intelligence && (
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  {validateResult.market_intelligence.population && (
+                    <ResultMetricCard label="Population" value={Number(validateResult.market_intelligence.population).toLocaleString()} />
+                  )}
+                  {validateResult.market_intelligence.median_income && (
+                    <ResultMetricCard label="Median Income" value={`$${Number(validateResult.market_intelligence.median_income).toLocaleString()}`} />
+                  )}
+                  {validateResult.market_intelligence.competitor_count != null && (
+                    <ResultMetricCard label="Competitors" value={`${validateResult.market_intelligence.competitor_count} nearby`} color="text-amber-600" />
+                  )}
+                  {validateResult.market_intelligence.google_trends_interest != null && (
+                    <ResultMetricCard label="Search Interest" value={`${validateResult.market_intelligence.google_trends_interest}/100`} color="text-blue-600" />
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs font-medium mb-2 text-green-600">Advantages</p>
                   <div className="text-xs text-gray-500 leading-relaxed space-y-1">
-                    {(validateResult.viability_report.advantages || validateResult.viability_report.strengths || []).slice(0, 3).map((item: string, i: number) => (
+                    {(validateResult.advantages || validateResult.viability_report?.advantages || validateResult.viability_report?.strengths || []).slice(0, 3).map((item: string, i: number) => (
                       <p key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</p>
                     ))}
-                    {!(validateResult.viability_report.advantages || validateResult.viability_report.strengths || []).length && (
+                    {!(validateResult.advantages || validateResult.viability_report?.advantages || validateResult.viability_report?.strengths || []).length && (
                       <p className="text-gray-400">Analysis data available in full report</p>
                     )}
                   </div>
@@ -680,23 +722,23 @@ export default function ConsultantStudio() {
                 <div>
                   <p className="text-xs font-medium mb-2 text-amber-600">Risks to evaluate</p>
                   <div className="text-xs text-gray-500 leading-relaxed space-y-1">
-                    {(validateResult.viability_report.risks || validateResult.viability_report.weaknesses || []).slice(0, 3).map((item: string, i: number) => (
+                    {(validateResult.risks || validateResult.viability_report?.risks || validateResult.viability_report?.weaknesses || []).slice(0, 3).map((item: string, i: number) => (
                       <p key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</p>
                     ))}
-                    {!(validateResult.viability_report.risks || validateResult.viability_report.weaknesses || []).length && (
+                    {!(validateResult.risks || validateResult.viability_report?.risks || validateResult.viability_report?.weaknesses || []).length && (
                       <p className="text-gray-400">Risk analysis available in full report</p>
                     )}
                   </div>
                 </div>
               </div>
-              {validateResult.viability_report.key_actions && (
+              {validateResult.viability_report?.key_actions && (
                 <div className="mt-3">
                   <h5 className="text-sm font-medium text-gray-700 mb-2">Key Actions</h5>
                   <ul className="space-y-1">
                     {(validateResult.viability_report.key_actions as string[]).map((action: string, i: number) => (
                       <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
                         <ChevronRight className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-                        {action}
+                        {String(action)}
                       </li>
                     ))}
                   </ul>
@@ -715,10 +757,10 @@ export default function ConsultantStudio() {
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <p className="text-sm font-medium text-gray-900 mb-3">Full feasibility breakdown</p>
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <ResultMetricCard label="Startup cost range" value="$150K - $350K" />
+                <ResultMetricCard label="Startup cost range" value={validateResult.feasibility_preview?.capital_required || '$150K - $350K'} />
                 <ResultMetricCard label="Break-even timeline" value="12-18 months" />
-                <ResultMetricCard label="Revenue model" value="Fee-for-service" />
-                <ResultMetricCard label="Top locations" value="Austin, Denver, Raleigh" />
+                <ResultMetricCard label="Market size estimate" value={validateResult.feasibility_preview?.market_size_estimate || 'Fee-for-service'} />
+                <ResultMetricCard label="Revenue benchmark" value={validateResult.feasibility_preview?.revenue_benchmark || 'Austin, Denver, Raleigh'} />
               </div>
               <p className="text-xs text-gray-500">Detailed competitive landscape with pricing benchmarks, staffing models, and 90-day launch timeline...</p>
             </div>
@@ -865,7 +907,7 @@ export default function ConsultantStudio() {
               <p className="text-sm text-gray-700 leading-relaxed">
                 {typeof searchResult.synthesis === 'string'
                   ? searchResult.synthesis
-                  : searchResult.synthesis.summary || searchResult.synthesis.narrative || JSON.stringify(searchResult.synthesis)}
+                  : String(searchResult.synthesis.summary || searchResult.synthesis.narrative || JSON.stringify(searchResult.synthesis))}
               </p>
             </div>
           )}
@@ -1144,15 +1186,20 @@ export default function ConsultantStudio() {
             </div>
           )}
 
-          {locationResult.geo_analysis && (
+          {(locationResult.geo_analysis || locationResult.four_ps_scores) && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm font-medium text-gray-900 mb-3">4P's intelligence</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-gray-900">4P's intelligence</p>
+                {locationResult.data_quality?.enriched && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Real market data</span>
+                )}
+              </div>
               <div className="grid grid-cols-4 gap-3">
                 {[
-                  { icon: '📦', label: 'Product', score: locationResult.geo_analysis.product_score, detail: locationResult.geo_analysis.product_detail },
-                  { icon: '💲', label: 'Price', score: locationResult.geo_analysis.price_score, detail: locationResult.geo_analysis.price_detail },
-                  { icon: '📍', label: 'Place', score: locationResult.geo_analysis.place_score, detail: locationResult.geo_analysis.place_detail },
-                  { icon: '📢', label: 'Promotion', score: locationResult.geo_analysis.promotion_score, detail: locationResult.geo_analysis.promotion_detail },
+                  { icon: '📦', label: 'Product', score: locationResult.four_ps_scores?.product ?? locationResult.geo_analysis?.product_score, detail: locationResult.four_ps_details?.product ?? locationResult.geo_analysis?.product_detail },
+                  { icon: '💲', label: 'Price', score: locationResult.four_ps_scores?.price ?? locationResult.geo_analysis?.price_score, detail: locationResult.four_ps_details?.price ?? locationResult.geo_analysis?.price_detail },
+                  { icon: '📍', label: 'Place', score: locationResult.four_ps_scores?.place ?? locationResult.geo_analysis?.place_score, detail: locationResult.four_ps_details?.place ?? locationResult.geo_analysis?.place_detail },
+                  { icon: '📢', label: 'Promotion', score: locationResult.four_ps_scores?.promotion ?? locationResult.geo_analysis?.promotion_score, detail: locationResult.four_ps_details?.promotion ?? locationResult.geo_analysis?.promotion_detail },
                 ].map(p => (
                   <div key={p.label} className="rounded-lg p-3 bg-gray-50">
                     <div className="flex items-center gap-1 mb-1">
@@ -1160,7 +1207,7 @@ export default function ConsultantStudio() {
                       <span className="text-xs font-medium text-gray-900">{p.label}</span>
                     </div>
                     <div className="text-lg font-medium text-gray-900 mb-1">{p.score ?? 'N/A'}</div>
-                    {p.detail && <div className="text-[10px] text-gray-500 leading-relaxed">{p.detail}</div>}
+                    {p.detail && <div className="text-[10px] text-gray-500 leading-relaxed">{typeof p.detail === 'string' ? p.detail : JSON.stringify(p.detail)}</div>}
                   </div>
                 ))}
               </div>
@@ -1387,6 +1434,24 @@ export default function ConsultantStudio() {
                   <ResultMetricCard label="Competition" value={`${cloneResult.source_business.demographics.competition_count || 0} nearby`} />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Target market 4P's scores from ReportDataService */}
+          {cloneResult.target_four_ps && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium text-gray-900">Target Market 4P's Scores</p>
+                {cloneResult.data_quality?.enriched && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Real market data</span>
+                )}
+              </div>
+              <FourPsBar
+                product={cloneResult.target_four_ps.product || 0}
+                price={cloneResult.target_four_ps.price || 0}
+                place={cloneResult.target_four_ps.place || 0}
+                promotion={cloneResult.target_four_ps.promotion || 0}
+              />
             </div>
           )}
 
