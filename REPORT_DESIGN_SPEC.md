@@ -34,6 +34,38 @@ All reports follow a consistent visual and structural template for **institution
 
 ---
 
+## AI Generation Workflow
+
+**Two-Step Content Generation Process:**
+
+### Step 1: DeepSeek Draft
+- **AI Model:** DeepSeek v3 (fast, analytical)
+- **Task:** Generate initial content for each section
+- **Focus:** Data analysis, market research, pattern matching
+- **Output:** Raw content with good structure, facts, and analysis
+- **Quality Target:** 70-80% quality (good enough for draft)
+
+### Step 2: Claude Opus Polish
+- **AI Model:** Claude 3 Opus (thoughtful, precise)
+- **Task:** Refine and polish all sections
+- **Focus:** Clarity, tone, precision, actionability
+- **Output:** Publication-ready content
+- **Quality Target:** 95%+ quality (professional, polished)
+
+**Workflow Timeline:**
+```
+User Input → DeepSeek Draft (8-15 sec) → Opus Polish (5-10 sec) 
+→ Total: 13-25 seconds → Final Report Ready
+```
+
+**Key Points:**
+- DeepSeek handles heavy lifting (data analysis, structure)
+- Opus adds the polish (tone, clarity, nuance)
+- Both use same data sources (report_data_service)
+- Quality is consistently high with this two-step approach
+
+---
+
 ## 1. REPORT HEADER TEMPLATE
 
 ### Visual Layout (Institutional Design)
@@ -1235,12 +1267,50 @@ Want to iterate? Save and share this report: /reports/view/001
 
 ## 8. IMPLEMENTATION CHECKLIST
 
-### Backend Implementation
+### Backend Implementation - AI Workflow
+
+#### Two-Step Generation Process:
+
+**Phase 1: DeepSeek Draft**
+- [ ] Create `deepseek_draft_service.py` for section-by-section drafting
+- [ ] Implement draft prompts for each section:
+  - [ ] `draft_executive_summary(data)` → verdict paragraph
+  - [ ] `draft_market_opportunity(data)` → market section
+  - [ ] `draft_business_model(data)` → model section
+  - [ ] `draft_financial_viability(data)` → financial section
+  - [ ] `draft_risk_assessment(data)` → risk section
+  - [ ] `draft_next_steps(data)` → roadmap section
+  - [ ] `draft_similar_opportunities(data)` → proof-of-concept section
+- [ ] Call DeepSeek API for each section in parallel
+- [ ] Timeout: 30 seconds per section max
+- [ ] Fallback: Use template content if DeepSeek fails
+
+**Phase 2: Claude Opus Polish**
+- [ ] Create `opus_polish_service.py` for refinement
+- [ ] Implement polish prompts:
+  - [ ] `polish_executive_summary(draft)` → refined verdict
+  - [ ] `polish_section(draft, section_type)` → refined content
+  - [ ] `polish_tone()` → institutional, professional tone
+  - [ ] `validate_readability()` → ensure clarity
+- [ ] Call Claude Opus API with aggregated draft sections
+- [ ] Timeout: 20 seconds total
+- [ ] Fallback: Use draft if polish fails
+
+**Integration:**
+- [ ] Update `consultant_studio.py` to use two-step workflow
+- [ ] Parallel DeepSeek calls for speed
+- [ ] Sequential polish (single Opus call with all sections)
+- [ ] Combine header + drafted sections + polished sections
+- [ ] Return complete report to frontend
+
+### Backend Implementation - Services
+
 - [ ] Create `ReportDesignFormatter` service to format data into sections
 - [ ] Implement `ValidateIdeaResponse` with all 6 sections filled
-- [ ] Add `report_design_service.py` to generate section-by-section content
+- [ ] Add `report_design_service.py` to orchestrate generation
 - [ ] Create PDF generation templates using ReportLab or weasyprint
 - [ ] Test with sample ideas (mental health clinic, SaaS, etc.)
+- [ ] Add section-level error handling (one section failing doesn't break report)
 
 ### Frontend Implementation
 - [ ] Create `ReportViewer.tsx` component with all 6 sections
@@ -1248,14 +1318,60 @@ Want to iterate? Save and share this report: /reports/view/001
 - [ ] Implement PDF export button
 - [ ] Create print-friendly CSS
 - [ ] Add section collapsing/expanding UI
+- [ ] Show "Generating..." spinner with step indicator:
+  - [ ] "Drafting with DeepSeek..."
+  - [ ] "Polishing with Claude..."
+  - [ ] "Generating PDF..."
 - [ ] Test responsive layout on mobile
 
-### Content Implementation
-- [ ] Update `consultant_studio.py` to generate all 6 sections
-- [ ] Create AI prompts for each section
-- [ ] Add data fetching from `report_data_service.py`
-- [ ] Implement similar opportunities lookup
-- [ ] Add validation checks (all required fields present)
+### Content & Prompting Implementation
+
+**DeepSeek Draft Prompts:**
+```markdown
+You are an AI analyst drafting report sections. 
+Be analytical, data-driven, and structured.
+Include specific numbers and percentages.
+Keep tone professional but not overly formal.
+
+CONTEXT:
+[report_data_service output]
+
+TASK: Draft the Executive Summary section.
+- Verdict: Is this business viable? (yes/cautiously/no)
+- Confidence: 0-100%
+- Key reasons: 2-3 main points
+- Recommendation: proceed/proceed_with_caution/do_not_proceed
+
+Keep to 2-3 paragraphs. Be clear and actionable.
+```
+
+**Claude Opus Polish Prompts:**
+```markdown
+You are an institutional report editor. Your job is to polish
+draft sections into publication-ready quality.
+
+INSTRUCTIONS:
+1. Maintain all facts and figures from the draft
+2. Improve clarity and readability
+3. Use professional, institutional tone
+4. Ensure logical flow between sentences
+5. Fix any awkward phrasing or jargon
+6. Add transitions where needed
+7. Ensure consistent terminology throughout
+
+DRAFT SECTIONS:
+[All DeepSeek drafts combined]
+
+TASK: Polish all sections to 95%+ quality.
+Maintain original structure, improve prose.
+```
+
+### Deployment Notes
+- [ ] Monitor DeepSeek API response times
+- [ ] Monitor Opus API response times
+- [ ] Set up alerts if generation > 30 seconds
+- [ ] Track generation success rate by report type
+- [ ] Log which sections need fallback (performance tracking)
 
 ---
 
@@ -1270,6 +1386,68 @@ Want to iterate? Save and share this report: /reports/view/001
 
 ---
 
+## 10. AI GENERATION QUALITY STANDARDS
+
+### DeepSeek Draft Quality
+- ✅ Factually accurate (based on report_data_service)
+- ✅ Well-structured (follows section schema)
+- ✅ Data-driven (includes numbers, percentages)
+- ✅ Professional tone (no excessive jargon)
+- ✅ Timing: 8-15 seconds per section (parallel)
+
+### Claude Opus Polish Quality
+- ✅ Institutional tone (professional, serious)
+- ✅ Crystal clear (simple language, no jargon)
+- ✅ Actionable (specific next steps, clear recommendations)
+- ✅ Error-free (grammar, spelling, consistency)
+- ✅ Publication-ready (can send to investors/advisors)
+- ✅ Timing: 5-10 seconds total (sequential)
+
+### Quality Assurance
+- [ ] Manual review of first 10 reports
+- [ ] Check for factual accuracy
+- [ ] Verify all sections present
+- [ ] Ensure header is correct
+- [ ] Test PDF export looks institutional
+- [ ] Get feedback from early users
+
+---
+
+## 11. WORKFLOW EXAMPLE
+
+**User Input:**
+```
+"Mental health clinic combining online therapy and in-person sessions"
+```
+
+**Backend Workflow:**
+1. Extract idea from user input
+2. Fetch market data from `report_data_service`
+3. **DeepSeek (Parallel, 15 sec):**
+   - Draft executive summary
+   - Draft market opportunity
+   - Draft business model
+   - Draft financial viability
+   - Draft risk assessment
+   - Draft next steps
+   - Draft similar opportunities
+4. **Claude Opus (Sequential, 8 sec):**
+   - Polish all 7 sections together
+   - Ensure consistency across report
+   - Fix tone and clarity issues
+5. **Generate PDF (2 sec)**
+6. **Return to frontend** (Total: ~25 seconds)
+
+**Frontend:**
+- Shows "Drafting with DeepSeek..." (0-15s)
+- Shows "Polishing with Claude..." (15-23s)
+- Shows "Generating PDF..." (23-25s)
+- Displays finished report with download button
+
+---
+
 **Document Status:** ✅ READY FOR IMPLEMENTATION
+
+**AI Workflow:** ✅ DeepSeek Draft → Claude Opus Polish
 
 **Questions?** Open an issue in GitHub or contact the team.
