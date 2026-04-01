@@ -56,6 +56,7 @@ from app.routers import (
     sba,
     scraper,
     social,
+    stripe_checkout,
     stripe_webhook,
     subscriptions,
     teams,
@@ -142,6 +143,7 @@ app.include_router(profiles.router, prefix=f"{settings.API_V1_PREFIX}/profiles",
 app.include_router(experts.router, prefix=f"{settings.API_V1_PREFIX}/experts", tags=["Experts"])
 app.include_router(ai_engine.router, prefix=f"{settings.API_V1_PREFIX}/ai-engine", tags=["AI Engine"])
 app.include_router(payments.router, prefix=f"{settings.API_V1_PREFIX}/payments", tags=["Payments"])
+app.include_router(stripe_checkout.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Stripe Checkout"])
 app.include_router(stripe_webhook.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Stripe Webhooks"])
 app.include_router(agreements.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Agreements"])
 app.include_router(milestones.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Milestones"])
