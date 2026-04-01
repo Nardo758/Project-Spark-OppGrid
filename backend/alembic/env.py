@@ -40,12 +40,10 @@ POSTGIS_SYSTEM_TABLES = {
     "raster_overviews",
 }
 
+_POSTGIS_TABLE_NAMES = "|".join(re.escape(t) for t in POSTGIS_SYSTEM_TABLES)
 _POSTGIS_DDL_RE = re.compile(
-    r"""(?ix)
-    \b(ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\b
-    .*?
-    (?:"|')?(""" + "|".join(re.escape(t) for t in POSTGIS_SYSTEM_TABLES) + r""")(?:"|')?
-    """
+    r'(?i)\b(ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?'
+    r'(?:")?(' + _POSTGIS_TABLE_NAMES + r')(?:")?'
 )
 
 
@@ -60,11 +58,8 @@ def _postgis_ddl_filter(conn, cursor, statement, parameters, context, executeman
     """
     Global cursor-level hook: replace DDL targeting PostGIS-owned system
     tables with a harmless no-op.
-
-    Only intercepts ALTER TABLE / CREATE TABLE / DROP TABLE statements
-    that reference known PostGIS catalog tables by exact name.
     """
-    if _POSTGIS_DDL_RE.search(statement):
+    if isinstance(statement, str) and _POSTGIS_DDL_RE.search(statement):
         return "SELECT 1", ()
     return statement, parameters
 
