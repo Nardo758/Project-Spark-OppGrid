@@ -1501,31 +1501,45 @@ class ConsultantStudioService:
         """
         DeepSeek pattern analysis that runs in parallel (no dependency on similar_opps).
         Analyzes the idea description directly for online/physical patterns.
+        Falls back through ai_orchestrator (DeepSeek -> Claude).
         """
         import asyncio
         from .ai_orchestrator import ai_orchestrator, AITaskType
-        
+
         data = {
             "idea": idea,
-            "similar_opportunities": [],
             "context": context or {},
             "request": "Analyze this business idea for online vs physical business model patterns.",
         }
-        
+
         try:
             result = await asyncio.wait_for(
                 ai_orchestrator.process_request(AITaskType.OPPORTUNITY_VALIDATION, data),
-                timeout=30.0
+                timeout=50.0
             )
-            
+
+            ai_result = result.get("result", {}) if result.get("processed") else {}
+            response = ai_result.get("response", ai_result) if isinstance(ai_result, dict) else {}
+
+            if isinstance(response, dict):
+                return {
+                    "patterns_found": 1 if response else 0,
+                    "market_signals": response.get("market_signals", {}),
+                    "category_distribution": response.get("category_distribution", {}),
+                    "average_score": response.get("online_score", 0),
+                    "ai_online_score": response.get("online_score"),
+                    "ai_physical_score": response.get("physical_score"),
+                    "ai_recommendation": response.get("recommendation"),
+                }
+
             return {
                 "patterns_found": 0,
-                "market_signals": result.get("result", {}) if result.get("processed") else {},
+                "market_signals": {},
                 "category_distribution": {},
                 "average_score": 0,
             }
         except asyncio.TimeoutError:
-            logger.warning("DeepSeek pattern analysis timed out after 30s")
+            logger.warning("Pattern analysis timed out after 50s")
             return {
                 "patterns_found": 0,
                 "market_signals": {},
@@ -1533,7 +1547,7 @@ class ConsultantStudioService:
                 "average_score": 0,
             }
         except Exception as e:
-            logger.warning(f"DeepSeek pattern analysis failed: {e}")
+            logger.warning(f"Pattern analysis failed: {e}")
             return {
                 "patterns_found": 0,
                 "market_signals": {},
@@ -1544,12 +1558,23 @@ class ConsultantStudioService:
     def _calculate_business_type_scores(
         self, pattern_analysis: Dict[str, Any], context: Optional[Dict[str, Any]]
     ) -> tuple:
-        """Calculate online vs physical business type scores"""
+        """Calculate online vs physical business type scores.
+        Uses AI-provided scores when available, falls back to heuristics."""
+        # Use AI scores directly if the orchestrator returned them
+        ai_online = pattern_analysis.get("ai_online_score")
+        ai_physical = pattern_analysis.get("ai_physical_score")
+        if ai_online is not None and ai_physical is not None:
+            try:
+                return min(100, max(0, int(ai_online))), min(100, max(0, int(ai_physical)))
+            except (ValueError, TypeError):
+                pass
+
+        # Heuristic fallback
         online_score = 50
         physical_score = 50
-        
+
         context = context or {}
-        
+
         if context.get("digital_product"):
             online_score += 20
         if context.get("requires_physical_delivery"):
@@ -1562,7 +1587,7 @@ class ConsultantStudioService:
             online_score += 25
         if context.get("physical_inventory"):
             physical_score += 20
-        
+
         categories = pattern_analysis.get("category_distribution", {})
         try:
             tech_score = float(categories.get("Technology", 0) or 0)
@@ -1576,10 +1601,10 @@ class ConsultantStudioService:
             online_score += 10
         if local_score > 0.3:
             physical_score += 10
-        
+
         online_score = min(100, max(0, online_score))
         physical_score = min(100, max(0, physical_score))
-        
+
         return online_score, physical_score
 
     def _determine_recommendation(self, online_score: int, physical_score: int) -> str:
@@ -1684,7 +1709,7 @@ class ConsultantStudioService:
         """Claude generates comprehensive viability report with timeout protection"""
         import asyncio
         from .ai_orchestrator import ai_orchestrator, AITaskType
-        
+
         data = {
             "idea": idea,
             "pattern_analysis": pattern_analysis,
@@ -1693,28 +1718,40 @@ class ConsultantStudioService:
             "context": context or {},
             "request": "Generate a comprehensive viability analysis with strengths, weaknesses, opportunities, and threats.",
         }
-        
+
         try:
             result = await asyncio.wait_for(
                 ai_orchestrator.process_request(AITaskType.MARKET_RESEARCH, data),
-                timeout=15.0
+                timeout=50.0
             )
-            ai_insights = result.get("result", {}) if result.get("processed") else {}
+            ai_result = result.get("result", {}) if result.get("processed") else {}
+            response = ai_result.get("response", ai_result) if isinstance(ai_result, dict) else {}
+
+            if isinstance(response, dict) and response:
+                return {
+                    "executive_summary": response.get("summary", f"Viability analysis for: {idea[:100]}"),
+                    "strengths": response.get("strengths", []),
+                    "weaknesses": response.get("weaknesses", []),
+                    "opportunities": response.get("opportunities", []),
+                    "threats": response.get("threats", []),
+                    "recommendation": response.get("recommendation"),
+                    "key_actions": response.get("key_actions", []),
+                    "ai_insights": response,
+                    "confidence_score": response.get("confidence", 75),
+                }
         except asyncio.TimeoutError:
-            logger.warning("Claude viability report timed out after 15s")
-            ai_insights = {"status": "Analysis in progress"}
+            logger.warning("Claude viability report timed out after 50s")
         except Exception as e:
             logger.warning(f"Claude viability report failed: {e}")
-            ai_insights = {}
-        
+
         return {
-            "executive_summary": "Viability analysis based on market patterns and business context.",
-            "strengths": ["Market demand validated", "Clear target audience"],
-            "weaknesses": ["Competition level unknown", "Requires further market research"],
-            "opportunities": ["Growing market segment", "Technology enablers available"],
-            "threats": ["Market saturation risk", "Regulatory considerations"],
-            "ai_insights": ai_insights,
-            "confidence_score": 75,
+            "executive_summary": f"AI analysis temporarily unavailable for: {idea[:100]}. Please try again.",
+            "strengths": ["Market demand to be validated"],
+            "weaknesses": ["Requires AI analysis for accurate assessment"],
+            "opportunities": ["Full analysis available on retry"],
+            "threats": ["Incomplete data without AI analysis"],
+            "confidence_score": 30,
+            "ai_unavailable": True,
         }
 
     async def _claude_viability_report_parallel(
@@ -1725,45 +1762,63 @@ class ConsultantStudioService:
         """
         Claude generates viability report in parallel with DeepSeek.
         Does not require pattern_analysis or scores - runs concurrently.
+        Falls back to generic SWOT only if AI is completely unavailable.
         """
         import asyncio
         from .ai_orchestrator import ai_orchestrator, AITaskType
-        
+
         data = {
             "idea": idea,
             "context": context or {},
             "request": "Generate a comprehensive SWOT viability analysis with strengths, weaknesses, opportunities, and threats for this business idea.",
         }
-        
+
         try:
             result = await asyncio.wait_for(
                 ai_orchestrator.process_request(AITaskType.MARKET_RESEARCH, data),
-                timeout=30.0
+                timeout=50.0
             )
-            ai_insights = result.get("result", {}) if result.get("processed") else {}
-            
-            if ai_insights:
+            ai_result = result.get("result", {}) if result.get("processed") else {}
+            response = ai_result.get("response", ai_result) if isinstance(ai_result, dict) else {}
+
+            if isinstance(response, dict) and response:
                 return {
-                    "executive_summary": ai_insights.get("summary", "Viability analysis based on market patterns."),
-                    "strengths": ai_insights.get("strengths", ["Market demand validated", "Clear target audience"]),
-                    "weaknesses": ai_insights.get("weaknesses", ["Competition level unknown", "Requires further research"]),
-                    "opportunities": ai_insights.get("opportunities", ["Growing market segment", "Technology enablers available"]),
-                    "threats": ai_insights.get("threats", ["Market saturation risk", "Regulatory considerations"]),
-                    "ai_insights": ai_insights,
-                    "confidence_score": ai_insights.get("confidence", 75),
+                    "executive_summary": response.get("summary", f"Viability analysis for: {idea[:100]}"),
+                    "strengths": response.get("strengths", []),
+                    "weaknesses": response.get("weaknesses", []),
+                    "opportunities": response.get("opportunities", []),
+                    "threats": response.get("threats", []),
+                    "market_size_estimate": response.get("market_size_estimate"),
+                    "recommendation": response.get("recommendation"),
+                    "key_actions": response.get("key_actions", []),
+                    "ai_insights": response,
+                    "confidence_score": response.get("confidence", 75),
+                }
+            elif isinstance(response, str) and len(response) > 50:
+                # AI returned a text response, use it as the summary
+                return {
+                    "executive_summary": response[:500],
+                    "strengths": [],
+                    "weaknesses": [],
+                    "opportunities": [],
+                    "threats": [],
+                    "ai_insights": {"raw_analysis": response},
+                    "confidence_score": 70,
                 }
         except asyncio.TimeoutError:
-            logger.warning("Claude parallel viability report timed out after 30s")
+            logger.warning("Claude parallel viability report timed out after 50s")
         except Exception as e:
             logger.warning(f"Claude parallel viability report failed: {e}")
-        
+
+        # Fallback only when AI is completely unavailable
         return {
-            "executive_summary": "Viability analysis based on market patterns and business context.",
-            "strengths": ["Market demand validated", "Clear target audience"],
-            "weaknesses": ["Competition level unknown", "Requires further market research"],
-            "opportunities": ["Growing market segment", "Technology enablers available"],
-            "threats": ["Market saturation risk", "Regulatory considerations"],
-            "confidence_score": 75,
+            "executive_summary": f"AI analysis temporarily unavailable for: {idea[:100]}. Please try again.",
+            "strengths": ["Market demand to be validated"],
+            "weaknesses": ["Requires AI analysis for accurate assessment"],
+            "opportunities": ["Full analysis available on retry"],
+            "threats": ["Incomplete data without AI analysis"],
+            "confidence_score": 30,
+            "ai_unavailable": True,
         }
 
     async def _search_opportunities(self, filters: Dict[str, Any]) -> List[Opportunity]:

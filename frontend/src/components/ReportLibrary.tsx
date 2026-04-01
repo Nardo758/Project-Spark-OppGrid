@@ -251,6 +251,7 @@ export default function ReportLibrary({
   const [guestEmail, setGuestEmail] = useState('')
   const [purchaseLoading, setPurchaseLoading] = useState(false)
   const [purchaseError, setPurchaseError] = useState<string | null>(null)
+  const [exportingFormat, setExportingFormat] = useState<string | null>(null)
 
   // Report section toggle
   const [showBundles, setShowBundles] = useState(false)
@@ -413,11 +414,15 @@ export default function ReportLibrary({
         body: JSON.stringify(body),
       })
       
-      if (!res.ok) throw new Error('Analysis failed')
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.detail || `Analysis failed (${res.status})`)
+      }
       const result = await res.json()
       setConsultantResult(result)
     } catch (e) {
       console.error(e)
+      setPurchaseError(e instanceof Error ? e.message : 'Analysis failed. Please try again.')
     } finally {
       setConsultantLoading(false)
     }
@@ -1187,12 +1192,78 @@ export default function ReportLibrary({
                 <CheckCircle className="w-5 h-5" />
                 <span className="font-medium">{generatedReport.title || 'Report Generated'}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <button className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm flex items-center gap-1">
-                  <Download className="w-4 h-4" />
-                  Export
+              <div className="flex items-center gap-3">
+                {generatedReport.id && (
+                  <>
+                    <button
+                      onClick={async () => {
+                        setExportingFormat('pdf')
+                        try {
+                          const res = await fetch(`/api/v1/reports/${generatedReport.id}/export/pdf`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          })
+                          if (!res.ok) throw new Error('Export failed')
+                          const blob = await res.blob()
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `OppGrid - ${(generatedReport.title || 'Report').slice(0, 60)}.pdf`
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          URL.revokeObjectURL(url)
+                        } catch { setPurchaseError('PDF export failed') }
+                        finally { setExportingFormat(null) }
+                      }}
+                      disabled={exportingFormat === 'pdf'}
+                      className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {exportingFormat === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                      PDF
+                    </button>
+                    <button
+                      onClick={async () => {
+                        setExportingFormat('docx')
+                        try {
+                          const res = await fetch(`/api/v1/reports/${generatedReport.id}/export/docx`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          })
+                          if (!res.ok) throw new Error('Export failed')
+                          const blob = await res.blob()
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `OppGrid - ${(generatedReport.title || 'Report').slice(0, 60)}.docx`
+                          document.body.appendChild(a)
+                          a.click()
+                          document.body.removeChild(a)
+                          URL.revokeObjectURL(url)
+                        } catch { setPurchaseError('Word export failed') }
+                        finally { setExportingFormat(null) }
+                      }}
+                      disabled={exportingFormat === 'docx'}
+                      className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {exportingFormat === 'docx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                      Word
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => {
+                    const content = generatedReport.content || generatedReport.summary || ''
+                    const w = window.open('', '_blank')
+                    if (w) {
+                      w.document.write(`<!DOCTYPE html><html><head><title>${generatedReport.title || 'Report'}</title><style>body{font-family:system-ui,sans-serif;padding:40px;max-width:900px;margin:0 auto;line-height:1.6}.header{background:#7c3aed;color:white;padding:20px 28px;margin:-40px -40px 32px -40px}h1,h2{color:#1e293b}h2{color:#7c3aed}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d1d5db;padding:8px 12px}th{background:#f3f4f6}@media print{body{padding:0}.header{margin:0 0 20px 0}}</style></head><body><div class="header"><h1 style="color:white;margin:0">OppGrid</h1><div style="color:rgba(255,255,255,0.8)">${generatedReport.title || 'Report'}</div></div>${content}</body></html>`)
+                      w.document.close()
+                      w.print()
+                    }
+                  }}
+                  className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm flex items-center gap-1"
+                >
+                  Print
                 </button>
-                <button onClick={() => setGeneratedReport(null)} className="text-white/80 hover:text-white">
+                <button onClick={() => setGeneratedReport(null)} className="text-white/80 hover:text-white ml-1">
                   ✕
                 </button>
               </div>
@@ -1207,9 +1278,18 @@ export default function ReportLibrary({
             )}
             {generatedReport.content && (
               <div className="prose prose-sm max-w-none">
-                <div className="whitespace-pre-wrap text-gray-800 text-sm leading-relaxed">
-                  {generatedReport.content}
-                </div>
+                <div
+                  className="text-gray-800 text-sm leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: generatedReport.content }}
+                />
+              </div>
+            )}
+            {generatedReport.confidence_score && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-500">
+                <span>Confidence: {generatedReport.confidence_score}/100</span>
+                {generatedReport.completed_at && (
+                  <span>| Generated {new Date(generatedReport.completed_at).toLocaleDateString()}</span>
+                )}
               </div>
             )}
           </div>
