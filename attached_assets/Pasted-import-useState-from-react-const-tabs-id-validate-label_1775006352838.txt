@@ -1,0 +1,1049 @@
+import { useState } from "react"
+
+const tabs = [
+  { id: "validate", label: "Validate idea", icon: "💡" },
+  { id: "search", label: "Search ideas", icon: "🔍" },
+  { id: "location", label: "Identify location", icon: "📍" },
+  { id: "clone", label: "Clone success", icon: "📋" },
+]
+
+function FourPsBar({ product, price, place, promotion }) {
+  const bars = [
+    { label: "Product", score: product, color: "#185FA5" },
+    { label: "Price", score: price, color: "#0F6E56" },
+    { label: "Place", score: place, color: "#BA7517" },
+    { label: "Promotion", score: promotion, color: "#993556" },
+  ]
+  return (
+    <div className="flex items-center gap-1.5">
+      {bars.map(b => (
+        <div key={b.label} title={`${b.label}: ${b.score}/100`} className="flex flex-col items-center gap-0.5">
+          <div className="w-5 h-16 rounded-sm relative overflow-hidden" style={{ background: "#e5e5e5" }}>
+            <div className="absolute bottom-0 w-full rounded-sm" style={{ height: `${b.score}%`, background: b.color }} />
+          </div>
+          <span className="text-[9px] text-gray-400">{b.label[0]}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function BlurGate({ children, title, price, subtitle }) {
+  return (
+    <div className="relative rounded-xl overflow-hidden">
+      <div className="blur-[6px] pointer-events-none opacity-50">{children}</div>
+      <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(250,250,249,0.3)", backdropFilter: "blur(2px)" }}>
+        <div className="bg-white border border-gray-200 rounded-xl p-6 text-center max-w-sm shadow-sm">
+          <p className="font-semibold text-gray-900 text-sm mb-1">{title}</p>
+          <p className="text-xs text-gray-500 mb-4">{subtitle}</p>
+          <button className="px-5 py-2.5 rounded-lg text-white text-sm font-medium" style={{ background: "#D97757" }}>
+            {price}
+          </button>
+          <p className="text-[10px] text-gray-400 mt-2">Consultants charge $1,500+ for this</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ScoreCard({ label, value, color, suffix = "%" }) {
+  const pct = suffix === "%" ? value : value * 10
+  return (
+    <div className="bg-gray-50 rounded-lg p-4">
+      <div className="text-xs text-gray-500 mb-1">{label}</div>
+      <div className="text-2xl font-medium text-gray-900">{value}{suffix}</div>
+      <div className="mt-2 h-1 bg-gray-200 rounded-full">
+        <div className="h-1 rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
+      </div>
+    </div>
+  )
+}
+
+function MetricCard({ label, value, color }) {
+  return (
+    <div className="border border-gray-100 rounded-lg p-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-lg font-medium mt-0.5" style={{ color: color || "#1C1917" }}>{value}</div>
+    </div>
+  )
+}
+
+function OppRow({ title, category, score }) {
+  return (
+    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors">
+      <div>
+        <div className="text-sm font-medium text-gray-900">{title}</div>
+        <div className="text-xs text-gray-500">{category}</div>
+      </div>
+      <div className="text-right">
+        <div className="text-sm font-medium" style={{ color: "#D97757" }}>{score}</div>
+        <div className="text-[10px] text-gray-400">score</div>
+      </div>
+    </div>
+  )
+}
+
+function ValidateResults() {
+  return (
+    <div className="space-y-4">
+      {/* Verdict Banner */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="px-3 py-0.5 rounded-full text-xs font-medium" style={{ background: "#E1F5EE", color: "#085041" }}>Hybrid recommended</span>
+          <span className="text-xs text-gray-400">2.4s</span>
+        </div>
+        <p className="text-sm font-medium text-gray-900 mb-1">Mental health clinics perform best as hybrid models — physical presence builds trust, while telehealth expands reach and reduces overhead.</p>
+        <p className="text-xs text-gray-500">The U.S. mental health market is projected at $280B+ with rising demand post-pandemic. Insurance reimbursement and regulatory tailwinds favor new entrants.</p>
+      </div>
+
+      {/* Three Score Cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <ScoreCard label="Online viability" value={72} color="#185FA5" />
+        <ScoreCard label="Physical viability" value={85} color="#0F6E56" />
+        <ScoreCard label="Overall confidence" value={8.4} color="#D97757" suffix="/10" />
+      </div>
+
+      {/* 4P's Intelligence (Free) */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-sm font-medium text-gray-900">4P's market intelligence</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: "#E1F5EE", color: "#085041" }}>Free preview</span>
+        </div>
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <MetricCard label="TAM" value="$280B" />
+          <MetricCard label="Growth" value="7.5% CAGR" />
+          <MetricCard label="Competition" value="Medium" color="#BA7517" />
+          <MetricCard label="Demand signal" value="Strong" color="#0F6E56" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs font-medium mb-2" style={{ color: "#0F6E56" }}>Advantages</p>
+            <div className="text-xs text-gray-500 leading-relaxed space-y-1">
+              <p>Growing de-stigmatization of therapy</p>
+              <p>Insurance parity laws expanding coverage</p>
+              <p>Telehealth reimbursement now permanent</p>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-medium mb-2" style={{ color: "#D97757" }}>Risks to evaluate</p>
+            <div className="text-xs text-gray-500 leading-relaxed space-y-1">
+              <p>Therapist recruitment is competitive</p>
+              <p>Insurance credentialing takes 3-6 months</p>
+              <p>High liability insurance costs</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Blurred Feasibility Gate */}
+      <BlurGate
+        title="Unlock full feasibility study"
+        price="Get report — $25"
+        subtitle="Startup costs, revenue projections, competitive landscape, top locations, and 90-day launch plan."
+      >
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm font-medium text-gray-900 mb-3">Full feasibility breakdown</p>
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <MetricCard label="Startup cost range" value="$150K - $350K" />
+            <MetricCard label="Break-even timeline" value="12-18 months" />
+            <MetricCard label="Revenue model" value="Fee-for-service" />
+            <MetricCard label="Top locations" value="Austin, Denver, Raleigh" />
+          </div>
+          <p className="text-xs text-gray-500">Detailed competitive landscape with 8 direct competitors, pricing benchmarks, staffing models, and 90-day launch timeline with milestones...</p>
+        </div>
+      </BlurGate>
+
+      {/* Related Opportunities */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <p className="text-sm font-medium text-gray-900 mb-3">Related opportunities</p>
+        <div className="space-y-2">
+          <OppRow title="Teletherapy platform for underserved areas" category="Health & Wellness" score="8.7" />
+          <OppRow title="Corporate mental wellness programs" category="Work & Productivity" score="7.9" />
+          <OppRow title="AI-assisted therapy matching service" category="Technology" score="7.4" />
+        </div>
+      </div>
+
+      {/* Action Bar */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex gap-2 flex-wrap">
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium" style={{ background: "#D97757" }}>Get full feasibility — $25</button>
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50">Download free summary</button>
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50">Save to workspace</button>
+        </div>
+        <p className="text-[10px] text-gray-400 text-center mt-2">Powered by DeepSeek + Claude AI · 4P's data from 6 live sources</p>
+      </div>
+    </div>
+  )
+}
+
+function SearchResults() {
+  return (
+    <div className="space-y-4">
+      {/* Search Summary */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-sm font-medium text-gray-900">Search results for "fitness"</span>
+          <span className="text-xs text-gray-400">14 opportunities · 3 trends · 820ms</span>
+        </div>
+      </div>
+
+      {/* AI Synthesis */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5" style={{ borderLeft: "3px solid #D97757" }}>
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">AI synthesis</p>
+        <p className="text-sm text-gray-700 leading-relaxed">The fitness industry shows strong demand signals across recovery, outdoor training, and AI-personalized coaching. Consumer frustration with generic gym memberships is creating openings for niche, experience-driven models. Geographic concentration in Sun Belt cities suggests expansion opportunities in underserved Midwest markets.</p>
+      </div>
+
+      {/* Trending Now */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <p className="text-sm font-medium text-gray-900 mb-3">📈 Trending now</p>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { name: "Recovery-focused fitness", strength: 87, growth: "+23%", desc: "Cold plunge, sauna, percussion therapy studios" },
+            { name: "AI personal training", strength: 72, growth: "+41%", desc: "Computer vision form correction + adaptive programming" },
+            { name: "Outdoor bootcamps", strength: 68, growth: "+15%", desc: "Post-COVID preference for open-air group fitness" },
+          ].map(t => (
+            <div key={t.name} className="rounded-lg p-3 border border-amber-100" style={{ background: "linear-gradient(135deg, #FFF7ED, #FFF1E6)" }}>
+              <div className="text-sm font-medium text-gray-900">{t.name}</div>
+              <div className="text-xs text-gray-500 mt-1">{t.desc}</div>
+              <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400">
+                <span>Strength: {t.strength}%</span>
+                <span className="text-green-600">Growth: {t.growth}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Opportunity Results */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-sm font-medium text-gray-900">Opportunities (14)</span>
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <span>Sort: Score ↓</span>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {[
+            { title: "Boutique recovery studio (cold plunge + sauna)", cat: "Health & Wellness", score: 9.1, product: 88, price: 72, place: 81, promotion: 65 },
+            { title: "AI-powered personal training app", cat: "Technology", score: 8.6, product: 91, price: 68, place: 55, promotion: 78 },
+            { title: "Mobile outdoor fitness programming", cat: "Health & Wellness", score: 8.2, product: 79, price: 82, place: 73, promotion: 60 },
+            { title: "Corporate wellness subscription platform", cat: "Work & Productivity", score: 7.8, product: 74, price: 70, place: 48, promotion: 72 },
+            { title: "Youth athletic development center", cat: "Education", score: 7.5, product: 71, price: 65, place: 80, promotion: 55 },
+          ].map(o => (
+            <div key={o.title} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors">
+              <div className="flex-1 mr-4">
+                <div className="text-sm font-medium text-gray-900">{o.title}</div>
+                <div className="text-xs text-gray-500">{o.cat}</div>
+              </div>
+              <div className="flex items-center gap-4">
+                <FourPsBar product={o.product} price={o.price} place={o.place} promotion={o.promotion} />
+                <div className="text-right min-w-[40px]">
+                  <div className="text-sm font-medium" style={{ color: "#D97757" }}>{o.score}</div>
+                  <div className="text-[10px] text-gray-400">score</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Blurred remaining */}
+      <BlurGate
+        title="See all 14 opportunities with full data"
+        price="Unlock with Explorer — $15"
+        subtitle="Full opportunity details, source data, and geographic intelligence."
+      >
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-2">
+          <OppRow title="Neighborhood fitness micro-gym franchise" category="Shopping & Services" score="7.2" />
+          <OppRow title="Wearable-integrated gym experience" category="Technology" score="7.0" />
+          <OppRow title="Senior-focused functional fitness studio" category="Health & Wellness" score="6.9" />
+          <OppRow title="Virtual reality cycling studio" category="Technology" score="6.7" />
+        </div>
+      </BlurGate>
+
+      {/* Action Bar */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex gap-2 flex-wrap">
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium" style={{ background: "#D97757" }}>Generate market report — $99</button>
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700">Export search results (CSV)</button>
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700">Save search to workspace</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function LocationResults() {
+  return (
+    <div className="space-y-4">
+      {/* Location Header */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-sm font-medium text-gray-900">Market analysis: Coffee Shop in Austin, Texas</span>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: "#E1F5EE", color: "#085041" }}>Favorable</span>
+        </div>
+        <p className="text-xs text-gray-500">Inferred category: Food & Beverage · Analyzed in 3.2s</p>
+      </div>
+
+      {/* Map Placeholder */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="h-56 relative" style={{ background: "linear-gradient(135deg, #E8F4E8, #D4E8D4)" }}>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-4xl mb-2">🗺️</div>
+              <p className="text-sm font-medium text-gray-700">Interactive map with competitor pins</p>
+              <p className="text-xs text-gray-500 mt-1">12 competitors plotted · 3mi & 5mi radius circles</p>
+              <div className="flex items-center justify-center gap-3 mt-3 text-[10px]">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> 3mi radius</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-400 inline-block"></span> 5mi radius</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Competitors</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: "#D97757" }}></span> Recommended sites</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Market Score + Demographics */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-xs text-gray-500 mb-1">Market score</p>
+          <div className="text-3xl font-medium text-gray-900 mb-2">82<span className="text-lg text-gray-400">/100</span></div>
+          <div className="h-2 bg-gray-100 rounded-full mb-3">
+            <div className="h-2 rounded-full" style={{ width: "82%", background: "#0F6E56" }} />
+          </div>
+          <div className="space-y-1 text-xs text-gray-500">
+            <p>✓ High income area ($78K median)</p>
+            <p>✓ Large population (1M+ metro)</p>
+            <p>⚠ 12 existing competitors</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-xs font-medium text-gray-900 mb-3">Demographics</p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Population</span>
+              <span className="font-medium text-gray-900">1,028,000</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Median income</span>
+              <span className="font-medium text-gray-900">$78,400</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Median age</span>
+              <span className="font-medium text-gray-900">34</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Competition level</span>
+              <span className="font-medium" style={{ color: "#BA7517" }}>Moderate (12)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4P's Intelligence */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <p className="text-sm font-medium text-gray-900 mb-3">4P's intelligence</p>
+        <div className="grid grid-cols-4 gap-3">
+          {[
+            { icon: "📦", label: "Product", score: 81, detail: "Strong demand signal, Google Trends ↑18%" },
+            { icon: "💲", label: "Price", score: 74, detail: "Median rent $32/sqft, avg ticket $5.20" },
+            { icon: "📍", label: "Place", score: 88, detail: "3 high-traffic zones, low unemployment" },
+            { icon: "📢", label: "Promotion", score: 62, detail: "12 competitors, avg 4.2★ rating" },
+          ].map(p => (
+            <div key={p.label} className="rounded-lg p-3 bg-gray-50">
+              <div className="flex items-center gap-1 mb-1">
+                <span className="text-sm">{p.icon}</span>
+                <span className="text-xs font-medium text-gray-900">{p.label}</span>
+              </div>
+              <div className="text-lg font-medium text-gray-900 mb-1">{p.score}</div>
+              <div className="text-[10px] text-gray-500 leading-relaxed">{p.detail}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Site Recommendations */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <p className="text-sm font-medium text-gray-900 mb-3">Site recommendations</p>
+        <div className="space-y-2">
+          {[
+            { type: "South Congress (SoCo)", priority: "High", reason: "Highest foot traffic, tourist + local mix, avg rent $38/sqft" },
+            { type: "East 6th Street", priority: "High", reason: "Young professional density, emerging corridor, avg rent $28/sqft" },
+            { type: "The Domain", priority: "Medium", reason: "Tech worker concentration, established retail, avg rent $42/sqft" },
+          ].map(s => (
+            <div key={s.type} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+              <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${s.priority === "High" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>{s.priority}</span>
+              <div>
+                <div className="text-sm font-medium text-gray-900">{s.type}</div>
+                <div className="text-xs text-gray-500">{s.reason}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Blurred Competition Deep Dive */}
+      <BlurGate
+        title="Unlock competitor deep dive"
+        price="Get location report — $25"
+        subtitle="Full competitor profiles, pricing comparison, customer sentiment, and foot traffic analysis."
+      >
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm font-medium text-gray-900 mb-3">Competitor profiles (12)</p>
+          <div className="space-y-2">
+            {["Houndstooth Coffee — 4.6★, 2,100 reviews, $4.50 avg", "Fleet Coffee — 4.5★, 890 reviews, $5.00 avg", "Epoch Coffee — 4.3★, 1,400 reviews, $4.25 avg"].map(c => (
+              <div key={c} className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700">{c}</div>
+            ))}
+          </div>
+        </div>
+      </BlurGate>
+
+      {/* Action Bar */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex gap-2 flex-wrap">
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium" style={{ background: "#D97757" }}>Get location report — $25</button>
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700">Download free summary</button>
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700">Save to workspace</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CloneResults() {
+  return (
+    <div className="space-y-4">
+      {/* Source Business Analysis */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">Source business</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-900">Sweetgreen</p>
+            <p className="text-xs text-gray-500">3424 Washington Blvd, Los Angeles, CA</p>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">Fast Casual</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700">Health Food</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-gray-500">Analysis radius</div>
+            <div className="text-sm font-medium text-gray-900">3 miles</div>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-3 mt-4">
+          <MetricCard label="Category" value="Fast Casual" />
+          <MetricCard label="Avg rating" value="4.5★" />
+          <MetricCard label="Price level" value="$$" />
+          <MetricCard label="Trade area pop." value="285K" />
+        </div>
+      </div>
+
+      {/* Map with Matching Locations */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="h-52 relative" style={{ background: "linear-gradient(135deg, #E8EEF4, #D4DDE8)" }}>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-4xl mb-2">📍</div>
+              <p className="text-sm font-medium text-gray-700">5 matching locations in Austin, TX</p>
+              <p className="text-xs text-gray-500 mt-1">Similarity scored by demographics + competition</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Matching Locations */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <p className="text-sm font-medium text-gray-900 mb-3">Matching locations</p>
+        <div className="space-y-2">
+          {[
+            { name: "South Lamar Blvd area", city: "Austin", similarity: 92, demo: 88, comp: 95, income: "$82K", pop: "45K", factors: ["Similar demographics", "Low fast-casual density", "High foot traffic"] },
+            { name: "Mueller Development", city: "Austin", similarity: 87, demo: 91, comp: 82, income: "$89K", pop: "38K", factors: ["Health-conscious community", "New retail space", "Young professionals"] },
+            { name: "Domain NORTHSIDE", city: "Austin", similarity: 83, demo: 85, comp: 80, income: "$95K", pop: "52K", factors: ["Tech worker density", "Lunch traffic", "Premium positioning"] },
+          ].map((loc, i) => (
+            <div key={loc.name} className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full text-white text-[10px] font-medium flex items-center justify-center" style={{ background: "#D97757" }}>{i + 1}</span>
+                    <span className="text-sm font-medium text-gray-900">{loc.name}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5 ml-7">{loc.city} · ${loc.income} median · {loc.pop} trade area</p>
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-medium" style={{ color: loc.similarity >= 90 ? "#0F6E56" : "#BA7517" }}>{loc.similarity}%</div>
+                  <div className="text-[10px] text-gray-400">match</div>
+                </div>
+              </div>
+              <div className="ml-7 flex items-center gap-4 text-[10px] text-gray-400 mb-2">
+                <span>Demographics: {loc.demo}%</span>
+                <span>Competition: {loc.comp}%</span>
+              </div>
+              <div className="ml-7 flex flex-wrap gap-1">
+                {loc.factors.map(f => (
+                  <span key={f} className="px-2 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600">{f}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Deep Clone Upsell */}
+      <BlurGate
+        title="Unlock deep clone analysis"
+        price="Deep analysis — $49"
+        subtitle="3mi & 5mi radius comparison, detailed demographics, competition mapping, and expansion playbook."
+      >
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-sm font-medium text-gray-900 mb-3">Deep clone: South Lamar Blvd</p>
+          <div className="grid grid-cols-2 gap-3">
+            <MetricCard label="3-mile population" value="45,200" />
+            <MetricCard label="5-mile population" value="128,400" />
+            <MetricCard label="Competitor density" value="2 within 1mi" />
+            <MetricCard label="Match confidence" value="92% — Excellent" />
+          </div>
+        </div>
+      </BlurGate>
+
+      {/* Action Bar */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <div className="flex gap-2 flex-wrap">
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium" style={{ background: "#D97757" }}>Deep clone top location — $49</button>
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700">Download free summary</button>
+          <button className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700">Save to workspace</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const REPORT_CATEGORIES = [
+  { name: "Analysis", icon: "📊", reports: [
+    { slug: "feasibility_study", name: "Feasibility Study", price: "$25", tier: "free", hot: true },
+    { slug: "business_plan", name: "Business Plan", price: "$149", tier: "pro" },
+    { slug: "financial_model", name: "Financial Model", price: "$129", tier: "pro" },
+    { slug: "market_analysis", name: "Market Analysis", price: "$99", tier: "business" },
+    { slug: "pestle_analysis", name: "PESTLE Analysis", price: "$99", tier: "business" },
+    { slug: "strategic_assessment", name: "Strategic Assessment", price: "$89", tier: "pro" },
+    { slug: "pitch_deck", name: "Pitch Deck Assistant", price: "$79", tier: "pro" },
+  ]},
+  { name: "Marketing", icon: "📣", reports: [
+    { slug: "ad_creatives", name: "Ad Creatives", price: "$49", tier: "pro" },
+    { slug: "content_calendar", name: "Content Calendar", price: "$39", tier: "pro" },
+    { slug: "email_funnel", name: "Email Funnel System", price: "$49", tier: "pro" },
+    { slug: "seo_strategy", name: "SEO Content Strategy", price: "$39", tier: "pro" },
+    { slug: "sales_funnel", name: "Sales Funnel", price: "$39", tier: "pro" },
+    { slug: "lead_magnet", name: "Lead Magnet", price: "$29", tier: "pro" },
+    { slug: "user_personas", name: "User Personas", price: "$29", tier: "pro" },
+  ]},
+  { name: "Product", icon: "🛠️", reports: [
+    { slug: "mvp_roadmap", name: "MVP Roadmap", price: "$59", tier: "pro" },
+    { slug: "feature_specs", name: "Feature Specs", price: "$49", tier: "pro" },
+    { slug: "prd", name: "Product Requirements Doc", price: "$79", tier: "business" },
+  ]},
+  { name: "Brand & Launch", icon: "🚀", reports: [
+    { slug: "brand_package", name: "Brand Package", price: "$59", tier: "pro" },
+    { slug: "landing_page", name: "Landing Page Copy", price: "$49", tier: "pro" },
+    { slug: "gtm_strategy", name: "GTM Strategy", price: "$69", tier: "pro" },
+    { slug: "gtm_calendar", name: "GTM Launch Calendar", price: "$49", tier: "pro" },
+    { slug: "pricing_strategy", name: "Pricing Strategy", price: "$59", tier: "business" },
+    { slug: "kpi_dashboard", name: "KPI Dashboard", price: "$39", tier: "pro" },
+  ]},
+  { name: "Research", icon: "🔬", reports: [
+    { slug: "competitive_analysis", name: "Competitive Analysis", price: "$49", tier: "pro" },
+    { slug: "interview_guide", name: "Customer Interview Guide", price: "$29", tier: "pro" },
+  ]},
+]
+
+function ReportSelector({ onSelect, selectedSlug }) {
+  const [expandedCat, setExpandedCat] = useState("Analysis")
+  return (
+    <div className="space-y-1">
+      {REPORT_CATEGORIES.map(cat => (
+        <div key={cat.name}>
+          <button
+            onClick={() => setExpandedCat(expandedCat === cat.name ? null : cat.name)}
+            className="w-full flex items-center justify-between p-2 rounded-lg text-xs font-medium text-gray-700 hover:bg-gray-50"
+          >
+            <span>{cat.icon} {cat.name} ({cat.reports.length})</span>
+            <span className="text-gray-400">{expandedCat === cat.name ? "▾" : "▸"}</span>
+          </button>
+          {expandedCat === cat.name && (
+            <div className="ml-2 space-y-0.5 mb-2">
+              {cat.reports.map(r => (
+                <button
+                  key={r.slug}
+                  onClick={() => onSelect(r)}
+                  className={`w-full flex items-center justify-between p-2 rounded-lg text-xs transition-colors ${selectedSlug === r.slug ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {r.name}
+                    {r.hot && <span className="px-1 py-0 rounded text-[9px] bg-orange-100 text-orange-600">Popular</span>}
+                  </span>
+                  <span className={selectedSlug === r.slug ? "text-gray-300" : "text-gray-400"}>{r.price}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ReportPreview({ report }) {
+  if (!report) return null
+  const sections = {
+    feasibility_study: ["Executive Summary", "Market Viability", "Financial Projections", "Risk Assessment", "Go/No-Go Recommendation"],
+    business_plan: ["Executive Summary", "Company Description", "Market Analysis", "Organization & Management", "Service/Product Line", "Marketing & Sales", "Financial Projections", "Appendix"],
+    market_analysis: ["TAM/SAM/SOM Analysis", "Customer Segmentation", "Competitive Landscape", "Market Trends", "Geographic Intelligence", "Entry Strategy"],
+    financial_model: ["Revenue Projections (5yr)", "Cost Structure", "Unit Economics", "Break-even Analysis", "Cash Flow Forecast", "Sensitivity Analysis"],
+    ad_creatives: ["Facebook/Instagram Ads (3 variants)", "Google Ads (3 variants)", "LinkedIn Ads (3 variants)", "Creative Direction", "A/B Testing Plan"],
+    brand_package: ["Brand Name Options (5)", "Tagline Variations", "Color Palette + Hex Codes", "Typography Pairings", "Brand Voice Guidelines", "Logo Concepts"],
+    mvp_roadmap: ["Core Feature Prioritization", "Sprint Planning (12 weeks)", "Tech Stack Recommendation", "Resource Requirements", "Launch Milestones"],
+    gtm_strategy: ["Target Market Definition", "Positioning Statement", "Channel Strategy", "Launch Timeline", "Budget Allocation", "KPI Framework"],
+  }
+  const s = sections[report.slug] || ["Executive Summary", "Detailed Analysis", "Recommendations", "Action Items"]
+  const consultantPrices = {
+    feasibility_study: "$1,500-$15,000", business_plan: "$2,000-$5,000", market_analysis: "$5,000-$50,000",
+    financial_model: "$3,000-$15,000", ad_creatives: "$2,000-$8,000", brand_package: "$5,000-$25,000",
+    mvp_roadmap: "$3,000-$10,000", gtm_strategy: "$5,000-$20,000",
+  }
+  const cp = consultantPrices[report.slug] || "$2,000-$10,000"
+  return (
+    <div className="space-y-3 mt-3">
+      <div className="p-3 rounded-lg border border-green-200" style={{ background: "linear-gradient(135deg, #F0FDF4, #ECFDF5)" }}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium text-gray-900">{report.name}</span>
+          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-green-600 text-white">{report.price}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-1 text-center mb-2">
+          <div className="p-1.5 bg-white rounded border border-gray-200">
+            <div className="text-[10px] text-gray-400 line-through">Consultants</div>
+            <div className="text-xs font-medium text-gray-500">{cp}</div>
+          </div>
+          <div className="p-1.5 bg-green-600 rounded text-white">
+            <div className="text-[10px] opacity-80">OppGrid</div>
+            <div className="text-xs font-bold">{report.price}</div>
+          </div>
+        </div>
+      </div>
+      <div className="p-3 bg-gray-50 rounded-lg">
+        <div className="text-[10px] text-gray-400 font-medium mb-2">What you'll get:</div>
+        <div className="flex flex-wrap gap-1">
+          {s.map(sec => (
+            <span key={sec} className="px-2 py-0.5 bg-white border border-gray-200 rounded text-[10px] text-gray-600">{sec}</span>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+        <span>🔒 Secure payment</span>
+        <span>·</span>
+        <span>✓ Money-back guarantee</span>
+        <span>·</span>
+        <span>stripe Powered by Stripe</span>
+      </div>
+    </div>
+  )
+}
+
+function GeneratedReportViewer() {
+  return (
+    <div className="space-y-4">
+      {/* Report Header */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-900">Feasibility Study: Mental Health Clinic</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">Completed</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">Generated March 31, 2026 · Report #OG-2026-00847 · 4P's data quality: 78%</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="p-2 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">📄 PDF</button>
+            <button className="p-2 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">📝 DOCX</button>
+            <button className="p-2 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">🖨 Print</button>
+            <button className="p-2 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">📧 Email</button>
+          </div>
+        </div>
+
+        {/* OppGrid Branding */}
+        <div className="border-t border-gray-100 pt-3">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-6 h-6 rounded bg-gray-900 flex items-center justify-center text-white text-[10px] font-bold">OG</div>
+            <span className="text-xs font-medium text-gray-700">OppGrid Intelligence Report</span>
+          </div>
+          <p className="text-[10px] text-gray-400">Confidential · Prepared exclusively for the account holder · Data sources: OppGrid platform signals, Google Trends, Google Places, Census Bureau, BLS</p>
+        </div>
+      </div>
+
+      {/* Report Body Preview */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="space-y-5">
+          {/* Section 1 */}
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">1. Executive summary</p>
+            <div className="h-3 bg-gray-100 rounded w-full mb-1.5"></div>
+            <div className="h-3 bg-gray-100 rounded w-11/12 mb-1.5"></div>
+            <div className="h-3 bg-gray-100 rounded w-10/12 mb-1.5"></div>
+            <div className="h-3 bg-gray-100 rounded w-9/12"></div>
+          </div>
+
+          {/* Section 2 - with 4P's data */}
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">2. Market viability — 4P's analysis</p>
+            <div className="grid grid-cols-4 gap-2 mb-3">
+              {[
+                { label: "Product", score: 82, color: "#185FA5" },
+                { label: "Price", score: 74, color: "#0F6E56" },
+                { label: "Place", score: 88, color: "#BA7517" },
+                { label: "Promotion", score: 65, color: "#993556" },
+              ].map(p => (
+                <div key={p.label} className="text-center p-2 bg-gray-50 rounded-lg">
+                  <div className="text-[10px] text-gray-500">{p.label}</div>
+                  <div className="text-lg font-medium" style={{ color: p.color }}>{p.score}</div>
+                  <div className="h-1 bg-gray-200 rounded-full mt-1">
+                    <div className="h-1 rounded-full" style={{ width: `${p.score}%`, background: p.color }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="h-3 bg-gray-100 rounded w-full mb-1.5"></div>
+            <div className="h-3 bg-gray-100 rounded w-10/12 mb-1.5"></div>
+            <div className="h-3 bg-gray-100 rounded w-11/12"></div>
+          </div>
+
+          {/* Section 3 */}
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">3. Financial projections</p>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <MetricCard label="Startup costs" value="$180K-$320K" />
+              <MetricCard label="Monthly revenue (yr 1)" value="$35K-$55K" />
+              <MetricCard label="Break-even" value="14 months" />
+            </div>
+            <div className="h-3 bg-gray-100 rounded w-full mb-1.5"></div>
+            <div className="h-3 bg-gray-100 rounded w-9/12"></div>
+          </div>
+
+          {/* Section 4 */}
+          <div>
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">4. Risk assessment</p>
+            <div className="h-3 bg-gray-100 rounded w-full mb-1.5"></div>
+            <div className="h-3 bg-gray-100 rounded w-10/12 mb-1.5"></div>
+            <div className="h-3 bg-gray-100 rounded w-11/12"></div>
+          </div>
+
+          {/* Section 5 */}
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">5. Go / no-go recommendation</p>
+            <div className="p-3 rounded-lg" style={{ background: "#E1F5EE" }}>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">✅</span>
+                <span className="text-sm font-medium" style={{ color: "#085041" }}>GO — with conditions</span>
+              </div>
+              <div className="h-3 bg-white/50 rounded w-11/12 mt-2 mb-1"></div>
+              <div className="h-3 bg-white/50 rounded w-10/12"></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Data Quality Footer */}
+        <div className="mt-5 pt-3 border-t border-gray-100">
+          <div className="flex items-center justify-between text-[10px] text-gray-400">
+            <span>Data quality: 78% complete · Weakest pillar: Promotion</span>
+            <span>Recommended: Run competitive analysis to strengthen Promotion data</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Upsell */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <p className="text-sm font-medium text-gray-900 mb-3">Go deeper with your analysis</p>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { name: "Business Plan", price: "$149", desc: "Full strategy document" },
+            { name: "Financial Model", price: "$129", desc: "5-year projections" },
+            { name: "Market Analysis", price: "$99", desc: "TAM/SAM/SOM + competitive" },
+          ].map(r => (
+            <div key={r.name} className="p-3 border border-gray-200 rounded-lg hover:border-gray-300 cursor-pointer transition-colors">
+              <div className="text-xs font-medium text-gray-900">{r.name}</div>
+              <div className="text-[10px] text-gray-500 mt-0.5">{r.desc}</div>
+              <div className="text-xs font-medium mt-2" style={{ color: "#D97757" }}>{r.price}</div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 p-3 rounded-lg border-2 border-dashed border-purple-200 bg-purple-50 text-center">
+          <p className="text-xs font-medium text-purple-700">Save 28% with the Starter Bundle — $329</p>
+          <p className="text-[10px] text-purple-500">Feasibility + Business Plan + Financial Model + Pitch Deck</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const INPUT_CONFIGS = {
+  validate: { placeholder: "Mental Health Clinic", label: "Describe your business idea", button: "✦ Analyze" },
+  search: { placeholder: "fitness, coffee, delivery...", label: "Search keyword", button: "Search ideas" },
+  location: { placeholder: "Austin, Texas", label: "City", extra: "Coffee shop with drive-thru", extraLabel: "Business type", button: "Analyze market" },
+  clone: { placeholder: "Sweetgreen", label: "Business name", extra: "3424 Washington Blvd, LA", extraLabel: "Business address", button: "Find locations" },
+}
+
+export default function ConsultantStudioWireframe() {
+  const [activeTab, setActiveTab] = useState("validate")
+  const [showResults, setShowResults] = useState(null)
+  const [selectedReport, setSelectedReport] = useState(null)
+  const [showBundles, setShowBundles] = useState(true)
+  const [showReport, setShowReport] = useState(false)
+  const [view, setView] = useState("studio") // studio | report
+
+  const cfg = INPUT_CONFIGS[activeTab]
+
+  if (view === "report") {
+    return (
+      <div className="max-w-4xl mx-auto p-4" style={{ fontFamily: "Inter, system-ui, sans-serif", background: "#FAFAF9" }}>
+        <button onClick={() => setView("studio")} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-4">
+          ← Back to Consultant Studio
+        </button>
+        <GeneratedReportViewer />
+      </div>
+    )
+  }
+
+  return (
+    <div className="max-w-5xl mx-auto p-4" style={{ fontFamily: "Inter, system-ui, sans-serif", background: "#FAFAF9" }}>
+      {/* Header */}
+      <div className="mb-4">
+        <h1 className="text-lg font-semibold text-gray-900">Consultant Studio</h1>
+        <p className="text-xs text-gray-500 mt-0.5">Validate ideas, discover opportunities, analyze locations, and generate professional reports.</p>
+      </div>
+
+      {/* Social Proof */}
+      <div className="rounded-xl p-3 mb-4 flex flex-wrap items-center justify-between gap-3" style={{ background: "linear-gradient(135deg, #1C1917, #374151)" }}>
+        <div className="flex items-center gap-4 text-white text-xs">
+          <span className="font-medium">⚡ 2,847 reports generated this month</span>
+          <span className="hidden sm:inline text-gray-300">⭐ Trusted by YC, Techstars & 500 Startups founders</span>
+        </div>
+        <span className="px-2 py-1 bg-white/15 rounded-full text-xs text-white">🎁 First report FREE</span>
+      </div>
+
+      {/* === SINGLE UNIFIED CARD: Input + Reports === */}
+      <div className="bg-white rounded-xl border border-gray-200 mb-4">
+
+        {/* Tab Bar - full width across the top of the card */}
+        <div className="flex gap-1 p-1.5 border-b border-gray-100">
+          {tabs.map(t => (
+            <button
+              key={t.id}
+              onClick={() => { setActiveTab(t.id); setShowResults(null) }}
+              className={`flex-1 flex items-center justify-center gap-1 py-2 px-2 rounded-md text-[11px] font-medium transition-colors ${activeTab === t.id ? "bg-gray-900 text-white" : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"}`}
+            >
+              <span className="text-xs">{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Two columns inside the card */}
+        <div className="grid grid-cols-5">
+
+          {/* LEFT: Business Context */}
+          <div className="col-span-3 p-5 border-r border-gray-100">
+            <label className="block text-xs font-medium text-gray-700 mb-2">Business context</label>
+            <p className="text-[11px] text-gray-400 mb-3">{tabs.find(t => t.id === activeTab)?.label}: {
+              activeTab === "validate" ? "Describe your idea for an Online/Physical/Hybrid recommendation" :
+              activeTab === "search" ? "Browse opportunities by keyword or category" :
+              activeTab === "location" ? "Enter a city + business type for market analysis" :
+              "Enter a successful business to find replicable locations"
+            }</p>
+
+            {activeTab === "validate" && (
+              <textarea
+                defaultValue="Mental Health Clinic"
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm resize-none mb-3"
+                rows={3}
+                placeholder="Describe your business idea in detail..."
+              />
+            )}
+
+            {activeTab === "search" && (
+              <div className="space-y-2 mb-3">
+                <input type="text" defaultValue="fitness" placeholder="Keyword..." className="w-full p-2.5 border border-gray-200 rounded-lg text-sm" />
+                <select className="w-full p-2.5 border border-gray-200 rounded-lg text-sm bg-white">
+                  <option value="">All Categories</option>
+                  <option>💼 Work & Productivity</option>
+                  <option>🏥 Health & Wellness</option>
+                  <option>💻 Technology</option>
+                  <option>💰 Money & Finance</option>
+                </select>
+              </div>
+            )}
+
+            {activeTab === "location" && (
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">City</label>
+                  <input type="text" defaultValue="Austin, Texas" className="w-full p-2.5 border border-gray-200 rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-[11px] text-gray-500 mb-1">Business type</label>
+                  <input type="text" defaultValue="Coffee shop with drive-thru" className="w-full p-2.5 border border-gray-200 rounded-lg text-sm" />
+                </div>
+              </div>
+            )}
+
+            {activeTab === "clone" && (
+              <div className="space-y-2 mb-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">Business name</label>
+                    <input type="text" defaultValue="Sweetgreen" className="w-full p-2.5 border border-gray-200 rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">Business address</label>
+                    <input type="text" defaultValue="3424 Washington Blvd, LA" className="w-full p-2.5 border border-gray-200 rounded-lg text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">Target city</label>
+                    <input type="text" defaultValue="Austin, TX" className="w-full p-2.5 border border-gray-200 rounded-lg text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-gray-500 mb-1">Radius</label>
+                    <select className="w-full p-2.5 border border-gray-200 rounded-lg text-sm bg-white">
+                      <option>3 miles</option><option>5 miles</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Google + Maps icons */}
+            <div className="flex items-center justify-end gap-1 mb-3">
+              <span className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[10px]">📍</span>
+              <span className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center text-[10px]">G</span>
+            </div>
+
+            <button onClick={() => setShowResults(activeTab)} className="w-full py-3 rounded-lg text-white text-sm font-semibold" style={{ background: "#1C1917" }}>
+              ✦ Analyze
+            </button>
+          </div>
+
+          {/* RIGHT: Report Selection + Bundles + Stripe */}
+          <div className="col-span-2 p-5">
+            <label className="block text-xs font-medium text-gray-700 mb-2">Select report type</label>
+
+            {/* Dropdown */}
+            <select
+              value={selectedReport?.slug || ""}
+              onChange={(e) => {
+                if (!e.target.value) { setSelectedReport(null); return }
+                const all = REPORT_CATEGORIES.flatMap(c => c.reports)
+                const found = all.find(r => r.slug === e.target.value)
+                if (found) setSelectedReport(found)
+              }}
+              className="w-full p-2.5 border border-gray-200 rounded-lg text-sm bg-white mb-2"
+            >
+              <option value="">Choose a report...</option>
+              {REPORT_CATEGORIES.map(cat => (
+                <optgroup key={cat.name} label={`${cat.icon} ${cat.name}`}>
+                  {cat.reports.map(r => (
+                    <option key={r.slug} value={r.slug}>{r.name} — {r.price}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+
+            {/* Bundle Toggle */}
+            <button
+              onClick={() => setShowBundles(!showBundles)}
+              className="flex items-center gap-1 text-xs font-medium mb-2 hover:underline"
+              style={{ color: "#0F6E56" }}
+            >
+              💎 {showBundles ? "Hide bundles" : "View bundle deals (save up to 83%)"}
+            </button>
+
+            {/* Bundles */}
+            {showBundles && (
+              <div className="space-y-1.5 mb-3">
+                {[
+                  { name: "Starter Bundle", badge: "MOST POPULAR", price: "$329", desc: "Validation + Pitch package for fundraising", saves: "Save $53 (14%)", count: "4 reports included", featured: true },
+                  { name: "Strategic Analysis Bundle", price: "$229", desc: "Complete competitive and environmental intelligence", saves: "Save $58 (20%)", count: "3 reports included" },
+                  { name: "Professional Bundle", price: "$549", desc: "Complete execution package - replaces $30,000+ in consulting", saves: "Save $120 (18%)", count: "7 reports included" },
+                  { name: "Consultant License", price: "$2499", desc: "Unlimited reports for 25 opportunities per year", saves: "Save $12500 (83%)", count: "7 reports included" },
+                ].map(b => (
+                  <button
+                    key={b.name}
+                    onClick={() => setSelectedReport({ slug: b.name.toLowerCase().replace(/ /g, "_"), name: b.name, price: b.price, bundle: true })}
+                    className={`w-full text-left p-2.5 rounded-lg border-2 transition-colors ${b.featured ? "border-yellow-400 bg-yellow-50/30" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-semibold text-gray-900">{b.name}</span>
+                          {b.badge && (
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-bold text-white" style={{ background: "#D97757" }}>{b.badge}</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{b.desc}</p>
+                        <p className="text-[10px] font-medium mt-0.5" style={{ color: "#0F6E56" }}>{b.saves}</p>
+                      </div>
+                      <div className="text-right ml-2 flex-shrink-0">
+                        <div className="text-base font-bold text-gray-900">{b.price}</div>
+                        <div className="text-[9px] text-gray-400">{b.count}</div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Selected Report Preview (when individual report chosen) */}
+            {selectedReport && !selectedReport.bundle && <ReportPreview report={selectedReport} />}
+
+            {/* Generate Button */}
+            <button
+              onClick={() => { if (showResults && selectedReport) setView("report") }}
+              disabled={!showResults || !selectedReport}
+              className={`w-full py-3 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${showResults && selectedReport ? "text-white cursor-pointer shadow-sm" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
+              style={showResults && selectedReport ? { background: "linear-gradient(135deg, #7C3AED, #6D28D9)" } : {}}
+            >
+              <span>✦</span>
+              {!showResults && !selectedReport ? "Run analysis first ↑" :
+               showResults && !selectedReport ? "Select a report →" :
+               !showResults && selectedReport ? "Run analysis first ↑" :
+               `Generate Report`}
+            </button>
+
+            {/* Stripe Trust Signals */}
+            <div className="flex flex-col items-center gap-1 mt-3">
+              <div className="flex items-center gap-3 text-[11px] text-gray-400">
+                <span>○ Secure payment</span>
+                <span>☑ Money-back guarantee</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+                <span className="font-bold tracking-tight" style={{ color: "#635BFF" }}>stripe</span>
+                <span>Powered by Stripe</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Results below the unified card */}
+      {showResults === "validate" && <ValidateResults />}
+      {showResults === "search" && <SearchResults />}
+      {showResults === "location" && <LocationResults />}
+      {showResults === "clone" && <CloneResults />}
+
+      {!showResults && (
+        <div className="text-center py-12 text-gray-400 text-sm">
+          Run an analysis to see enriched results, then select a report to generate
+        </div>
+      )}
+    </div>
+  )
+}
