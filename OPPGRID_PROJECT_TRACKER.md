@@ -16,14 +16,16 @@
 | **Database** | ✅ Ready | 100% | None |
 | **Authentication** | ✅ Complete | 100% | None |
 | **Consultant Studio** | 🟡 Partial | 65% | Data + Workflow (Design DONE) |
-| **Payment Gating** | 🔴 Needs Rework | 20% | Update to Alloc + Per-Report Model |
-| **Stripe Integration** | ⚠️ Partial | 60% | Checkout UI + Gating Logic |
+| **Payment Gating** | ✅ Endpoints Wired | 85% | Phase 2B: Stripe Webhook TODO |
+| **Stripe Integration** | 🟡 In Progress | 30% | Checkout + Webhook TODO |
+| **Admin Pricing Controls** | ❌ Backlog | 0% | Post-Launch Feature |
+| **Custom Report Types** | ❌ Backlog | 0% | Post-Launch Feature |
 | **Google Scraper** | ⚠️ Stub | 40% | SERPAPI_KEY + Job Scheduling |
 | **Reddit Scraper** | ❌ Missing | 0% | Not Implemented |
 | **Frontend-Backend Wiring** | ⚠️ Partial | 70% | Integration Testing |
 | **Production Readiness** | ⚠️ Dev Only | 30% | Optimization + Security |
 
-**Overall Progress: 70% Complete (April 1, 2026 - Studio Design Phase 1 2/3 DONE)**
+**Overall Progress: 72% Complete (April 1, 2026 - Phase 2A Payment Gating DONE, Phase 2B Stripe TODO)**
 
 ---
 
@@ -152,8 +154,13 @@
   - Charge Stripe if overage
   - Generate report
 
-#### Phase 2: Stripe Integration - 🔴 TODO
-- [ ] Add one-time charge endpoint for overages
+#### Phase 2: Stripe Integration - ✅ IN PROGRESS
+- [x] Wire quota service into endpoints (DONE April 1, 08:00 AM)
+- [ ] Add one-time charge endpoint for overages (Phase 2B - TODO)
+- [ ] Stripe checkout session endpoint
+- [ ] Webhook handler for payment success
+- [ ] Auto-account creation for guests
+- [ ] Email delivery post-payment
 - [ ] Update subscription webhook to reset quotas
 - [ ] Handle failed payments gracefully
 
@@ -164,6 +171,61 @@
   - For pro members: "Generate free (4/5 remaining)" or "Generate for $10"
   - For business members: "Generate free (12/15 remaining)" or "Generate for $8"
 - [ ] Add quota display in user dashboard
+- [ ] Create ReportGenerationButton component
+- [ ] Wire to endpoint with payment flow
+
+#### Phase 4: Admin Pricing Controls - 🔴 TODO (Post-Launch)
+**Priority:** MEDIUM | **Effort:** 2-3 hours
+
+Move pricing from hardcoded to configurable:
+
+- [ ] Create `PricingConfig` model (store in DB)
+  - Report layer prices (currently: $15, $25, $35)
+  - Subscription tier prices (Pro $99/mo, Business $299/mo)
+  - Quota allocations (Pro: 5/2/0, Business: 15/8/3)
+  - Overage pricing (Pro discount: 33%, Business discount: 47%)
+
+- [ ] Admin endpoints
+  - `GET /admin/pricing/reports` - View all report prices
+  - `PATCH /admin/pricing/reports` - Update report prices
+  - `GET /admin/pricing/subscriptions` - View subscription pricing
+  - `PATCH /admin/pricing/subscriptions` - Update subscription pricing
+  - `GET /admin/pricing/quotas` - View quota allocations
+  - `PATCH /admin/pricing/quotas` - Update quota allocations
+
+- [ ] Update ReportQuotaService to fetch from DB (not hardcoded)
+- [ ] Add admin panel UI forms (optional, can manage via API)
+- [ ] Audit trail of pricing changes
+
+#### Phase 5: New Report Types Management - 🔴 TODO (Post-Launch)
+**Priority:** MEDIUM | **Effort:** 3-4 hours
+
+Allow admins to create custom report types without code changes:
+
+- [ ] Create `ReportType` configuration system (currently: Layer 1/2/3 hardcoded)
+  - Dynamic report type definitions
+  - Custom pricing per type
+  - Custom quota allocations
+  - Custom report generation templates
+
+- [ ] Admin endpoints
+  - `GET /admin/report-types` - List all report types
+  - `POST /admin/report-types` - Create new report type
+  - `PATCH /admin/report-types/{id}` - Update report type
+  - `DELETE /admin/report-types/{id}` - Disable report type
+
+- [ ] Report type fields
+  - name (e.g., "Executive Summary")
+  - slug (e.g., "executive-summary")
+  - base_price_cents
+  - tier_allocations (Pro, Business)
+  - tier_overage_prices
+  - description
+  - enabled (true/false)
+
+- [ ] Update endpoint routing to support dynamic types
+- [ ] Update frontend to dynamically load report types
+- [ ] Add admin panel UI (optional)
 
 ### Files to Update
 
