@@ -63,7 +63,7 @@ class GeneratedReport(Base):
     report_type = Column(Enum(ReportType, values_callable=lambda x: [e.value for e in x]), nullable=False, index=True)
     status = Column(Enum(ReportStatus, values_callable=lambda x: [e.value for e in x]), default=ReportStatus.PENDING, nullable=False)
     
-    title = Column(String(255), nullable=True)
+    title = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
     content = Column(Text, nullable=True)
     

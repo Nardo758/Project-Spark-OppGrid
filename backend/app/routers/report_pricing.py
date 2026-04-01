@@ -1459,13 +1459,14 @@ async def generate_free_report(
 
     report_product = REPORT_PRODUCTS[request_data.report_type]
 
+    raw_title = f"{report_product.name}: {title_suffix}"
     report = GeneratedReport(
         user_id=current_user.id if current_user else None,
         opportunity_id=request_data.opportunity_id if opportunity else None,
         report_type=report_type_enum,
         status=ReportStatus.GENERATING,
-        title=f"{report_product.name}: {title_suffix}",
-        summary=f"Free report - {free_check['reason']}. {request_data.idea_description or ''}".strip(),
+        title=raw_title[:255],
+        summary=f"Free report - {free_check['reason']}. {request_data.idea_description or ''}".strip()[:1000],
     )
     db.add(report)
     db.commit()
