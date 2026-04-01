@@ -1,12 +1,6 @@
 import { useMemo } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import ReportLibrary from '../../components/ReportLibrary'
-
-const TITLE_BY_TYPE: Record<string, string> = {
-  'business-plan': 'Business Plan Reports',
-  financials: 'Financial Reports',
-  'pitch-deck': 'Pitch Deck Reports',
-}
 
 function parseOptionalPositiveInt(raw: string | null): number | undefined {
   if (!raw) return undefined
@@ -16,7 +10,6 @@ function parseOptionalPositiveInt(raw: string | null): number | undefined {
 }
 
 export default function ReportStudio() {
-  const { type } = useParams()
   const [searchParams] = useSearchParams()
 
   const opportunityId = useMemo(() => {
@@ -26,19 +19,18 @@ export default function ReportStudio() {
     )
   }, [searchParams])
 
-  const title = type ? TITLE_BY_TYPE[type] || 'Consultant Studio Reports' : 'Consultant Studio Reports'
-
   return (
-    <div className="min-h-screen bg-stone-50 py-8">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-stone-900">{title}</h1>
-          <p className="text-sm text-stone-600 mt-1">
-            Generate AI-powered reports using your workspace and opportunity context.
-          </p>
+    <div className="min-h-screen bg-gray-50 py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto mb-6 sm:mb-8">
+        <div className="flex items-center gap-2.5 mb-1.5">
+          <div className="w-2 h-7 rounded-full bg-gradient-to-b from-[#D97757] to-[#BA7517]" />
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Report Studio</h1>
         </div>
-        <ReportLibrary opportunityId={opportunityId} />
+        <p className="text-sm text-gray-500 ml-[18px]">
+          AI-powered business reports using your analysis data
+        </p>
       </div>
+      <ReportLibrary opportunityId={opportunityId} />
     </div>
   )
 }

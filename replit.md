@@ -40,6 +40,20 @@ OppGrid utilizes a modern hybrid architecture with a React 18 frontend (Vite, Ta
 *   **Mapbox:** Used for map visualizations.
 *   **SBA (Small Business Administration):** Provides curated loan program data and financing course information.
 
+## Report Studio (`/build/reports`)
+Redesigned Report Studio page with:
+- **4 input mode tabs**: Validate Idea, Search Ideas, Identify Location, Clone Success
+- **Single CTA**: "Analyze & Generate Reports" coral button triggers `/api/v1/consultant/validate-idea` (or search/location/clone endpoints)
+- **Analysis results**: ScoreRing (overall confidence), FourPsHorizontalBar (Product/Price/Place/Promotion), advantages/risks lists
+- **Free reports**: "Just Generated" section with Idea Validation + Feasibility Study cards (auto-generated via `/api/v1/report-pricing/generate-free-report` for authenticated users; guests see sign-in prompt)
+- **27 purchasable reports**: Compact accordion across 4 categories (Strategy & Analysis, Marketing & Growth, Product & Launch, Research) with expandable detail panels showing sections, delivery time, and pricing
+- **Entitlement-aware purchase flow**: Checks `/api/v1/reports/check-access` first; if user has tier access, generates directly via `/api/v1/reports/generate`; otherwise redirects to Stripe checkout via `/api/v1/report-pricing/template-checkout`
+- **Modal report viewer**: Supports JSON structured data, HTML content (dangerouslySetInnerHTML), and markdown section rendering with PDF/Word export
+- **Guest vs authenticated UX**: Guests see sign-in prompt instead of Report History; free report generation skipped for guests with amber sign-in banner
+
+Key files: `frontend/src/components/ReportLibrary.tsx`, `frontend/src/pages/build/ReportStudio.tsx`
+Shared components from `ResultCards.tsx`: `ScoreRing`, `FourPsHorizontalBar`, `OppRow`
+
 ## Consultant Studio Results UI
 The Consultant Studio (`frontend/src/pages/build/ConsultantStudio.tsx`) features an enhanced results UI with:
 - **BlurGate paywall overlays** on premium content (feasibility studies, competitor deep dives, deep clone analysis) with Stripe checkout integration via `/api/v1/report-pricing/template-checkout`

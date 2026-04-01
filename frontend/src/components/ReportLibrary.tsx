@@ -1,85 +1,74 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { 
-  FileText, 
-  Loader2, 
+import { useQuery } from '@tanstack/react-query'
+import {
+  FileText,
+  Loader2,
   CheckCircle,
   Sparkles,
   BarChart3,
   Target,
   Users,
-  TrendingUp,
   Mail,
   Search as SearchIcon,
   Calendar,
   DollarSign,
   Megaphone,
   ClipboardList,
-  Wand2,
   Download,
   Lightbulb,
   MapPin,
   Copy,
   Globe,
-  Store,
-  Building2,
   Briefcase,
   PieChart,
   LineChart,
   Presentation,
   FileSpreadsheet,
   Shield,
-  Package,
-  Zap,
-  Star,
   Lock,
   Clock,
-  TrendingDown,
   Gift,
+  ChevronDown,
+  ChevronRight,
+  ShoppingCart,
+  AlertTriangle,
+  X,
+  Printer,
+  Rocket,
+  Palette,
+  Layout,
+  Layers,
+  BookOpen,
+  MousePointer,
+  LogIn,
 } from 'lucide-react'
-import { FourPsBar, BlurGate, ScoreCard, MetricCard, OppRow } from './ConsultantResults/ResultCards'
+import DOMPurify from 'dompurify'
+import { FourPsHorizontalBar, ScoreRing, OppRow } from './ConsultantResults/ResultCards'
 import { useAuthStore } from '../stores/authStore'
 
-type ReportTemplate = {
-  id: number
+type InputMode = 'validate' | 'search' | 'location' | 'clone'
+
+type ReportItem = {
   slug: string
-  name: string
+  title: string
   description: string
-  category: string
-  min_tier: string
-  price_cents?: number
-  display_order: number
+  price: string
+  priceCents: number
+  consultantPrice: string
+  icon: any
+  accentColor: string
+  sections: string[]
+  deliveryTime: string
+  isStudio: boolean
 }
 
-// Fallback prices for templates (in cents) - used if API doesn't have price_cents
-const TEMPLATE_PRICES: Record<string, number> = {
-  ad_creatives: 4900,
-  brand_package: 5900,
-  landing_page: 4900,
-  content_calendar: 3900,
-  email_funnel: 4900,
-  email_sequence: 2900,
-  lead_magnet: 2900,
-  sales_funnel: 3900,
-  seo_content: 3900,
-  tweet_landing: 1900,
-  user_personas: 2900,
-  feature_specs: 4900,
-  mvp_roadmap: 5900,
-  prd: 7900,
-  gtm_calendar: 4900,
-  gtm_strategy: 6900,
-  kpi_dashboard: 3900,
-  pricing_strategy: 5900,
-  competitive_analysis: 4900,
-  customer_interview: 2900,
-}
-
-type CategoryWithTemplates = {
-  category: string
-  display_name: string
-  templates: ReportTemplate[]
+type ReportCategory = {
+  id: string
+  label: string
+  icon: any
+  color: string
+  reports: ReportItem[]
 }
 
 type GeneratedReport = {
@@ -94,168 +83,101 @@ type GeneratedReport = {
   completed_at?: string
 }
 
-type InputMode = 'validate' | 'search' | 'location' | 'clone'
-
-type ConsultantStudioReport = {
-  id: string
-  name: string
-  description: string
-  price: number
-  consultant_price?: string
-  included_in_tier: string | null
-}
-
-type Bundle = {
-  id: string
-  name: string
-  description: string
-  price: number
-  reports: string[]
-  savings: number
-  consultant_value?: string
-}
-
 const INPUT_MODES = [
+  { id: 'validate' as InputMode, label: 'Validate Idea', icon: Lightbulb, description: 'Describe your business idea and get an Online/Physical/Hybrid recommendation with viability analysis.' },
+  { id: 'search' as InputMode, label: 'Search Ideas', icon: SearchIcon, description: 'Browse validated opportunities by keyword or category.' },
+  { id: 'location' as InputMode, label: 'Identify Location', icon: MapPin, description: 'Enter a city + business type for market analysis.' },
+  { id: 'clone' as InputMode, label: 'Clone Success', icon: Copy, description: 'Analyze a successful business and find similar markets.' },
+]
+
+const REPORT_CATEGORIES: ReportCategory[] = [
   {
-    id: 'validate' as InputMode,
-    label: 'Validate Idea',
-    icon: Lightbulb,
-    description: 'Describe your business idea and get an Online/Physical/Hybrid recommendation with viability analysis.',
+    id: 'strategy', label: 'Strategy & Analysis', icon: Target, color: '#185FA5',
+    reports: [
+      { slug: 'market_analysis', title: 'Market Analysis', description: 'TAM/SAM/SOM with competitive landscape and growth trends.', price: '$99', priceCents: 9900, consultantPrice: '$2,000 - $8,000', icon: PieChart, accentColor: '#185FA5', sections: ['Market Size', 'Growth Trends', 'Customer Segments', 'Competitive Landscape', 'Entry Strategy', 'Revenue Projections'], deliveryTime: '2-3 hrs', isStudio: true },
+      { slug: 'business_plan', title: 'Business Plan', description: 'Comprehensive strategy document with financial projections.', price: '$149', priceCents: 14900, consultantPrice: '$3,000 - $15,000', icon: FileSpreadsheet, accentColor: '#0F6E56', sections: ['Executive Summary', 'Company Description', 'Market Analysis', 'Organization', 'Marketing Strategy', 'Financial Projections'], deliveryTime: '4-6 hrs', isStudio: true },
+      { slug: 'financial_model', title: 'Financial Model', description: '5-year projections, unit economics, and sensitivity analysis.', price: '$129', priceCents: 12900, consultantPrice: '$2,500 - $10,000', icon: LineChart, accentColor: '#BA7517', sections: ['Revenue Model', 'Cost Structure', 'Unit Economics', 'Cash Flow', '5-Year P&L', 'Sensitivity Analysis'], deliveryTime: '3-5 hrs', isStudio: true },
+      { slug: 'strategic_assessment', title: 'Strategic Assessment', description: 'SWOT analysis and competitive positioning.', price: '$89', priceCents: 8900, consultantPrice: '$1,500 - $5,000', icon: Briefcase, accentColor: '#185FA5', sections: ['SWOT Analysis', 'Competitive Positioning', 'Value Proposition', 'Strategic Options', 'Recommendations'], deliveryTime: '2-3 hrs', isStudio: true },
+      { slug: 'pestle_analysis', title: 'PESTLE Analysis', description: 'Political, Economic, Social, Tech, Legal, Environmental factors.', price: '$99', priceCents: 9900, consultantPrice: '$1,500 - $5,000', icon: Shield, accentColor: '#0F6E56', sections: ['Political', 'Economic', 'Social', 'Technological', 'Legal', 'Environmental'], deliveryTime: '2-3 hrs', isStudio: true },
+      { slug: 'competitive_analysis', title: 'Competitive Analysis', description: 'Deep competitor benchmarking with strategic recommendations.', price: '$149', priceCents: 14900, consultantPrice: '$2,000 - $6,000', icon: BarChart3, accentColor: '#D97757', sections: ['Competitor Profiles', 'Feature Matrix', 'Pricing Comparison', 'Market Positioning'], deliveryTime: '3-4 hrs', isStudio: false },
+      { slug: 'pricing_strategy', title: 'Pricing Strategy', description: 'Optimal pricing model based on market and competitor data.', price: '$139', priceCents: 13900, consultantPrice: '$1,500 - $5,000', icon: DollarSign, accentColor: '#BA7517', sections: ['Market Pricing', 'Value-Based Pricing', 'Competitor Pricing', 'Recommended Model'], deliveryTime: '2-4 hrs', isStudio: false },
+    ]
   },
   {
-    id: 'search' as InputMode,
-    label: 'Search Ideas',
-    icon: SearchIcon,
-    description: 'Browse our database of validated opportunities by keyword or category to find inspiration.',
+    id: 'marketing', label: 'Marketing & Growth', icon: Megaphone, color: '#D97757',
+    reports: [
+      { slug: 'ad_creatives', title: 'Ad Creatives', description: 'Platform-optimized ad copy and creative concepts.', price: '$79', priceCents: 7900, consultantPrice: '$500 - $2,000', icon: Sparkles, accentColor: '#D97757', sections: ['Ad Copy Variants', 'Visual Concepts', 'Platform Targeting', 'A/B Test Ideas'], deliveryTime: '1-2 hrs', isStudio: false },
+      { slug: 'brand_package', title: 'Brand Package', description: 'Brand identity including mission, voice, visual guidelines.', price: '$149', priceCents: 14900, consultantPrice: '$3,000 - $10,000', icon: Palette, accentColor: '#D97757', sections: ['Brand Mission', 'Voice & Tone', 'Visual Identity', 'Brand Guidelines'], deliveryTime: '2-4 hrs', isStudio: false },
+      { slug: 'landing_page', title: 'Landing Page', description: 'Conversion-optimized landing page copy and structure.', price: '$99', priceCents: 9900, consultantPrice: '$1,000 - $3,000', icon: Layout, accentColor: '#185FA5', sections: ['Hero Section', 'Value Props', 'Social Proof', 'CTA Strategy'], deliveryTime: '2-3 hrs', isStudio: false },
+      { slug: 'content_calendar', title: 'Content Calendar', description: '30-day content strategy across all channels.', price: '$129', priceCents: 12900, consultantPrice: '$1,500 - $4,000', icon: Calendar, accentColor: '#0F6E56', sections: ['Content Pillars', 'Platform Strategy', '30-Day Calendar', 'Content Templates'], deliveryTime: '2-3 hrs', isStudio: false },
+      { slug: 'email_funnel', title: 'Email Funnel System', description: 'Complete automated email sequence for lead nurturing.', price: '$179', priceCents: 17900, consultantPrice: '$2,000 - $5,000', icon: Mail, accentColor: '#BA7517', sections: ['Welcome Sequence', 'Nurture Flow', 'Sales Emails', 'Re-engagement'], deliveryTime: '3-4 hrs', isStudio: false },
+      { slug: 'email_sequence', title: 'Email Sequence', description: 'Targeted email campaign for a specific objective.', price: '$79', priceCents: 7900, consultantPrice: '$500 - $1,500', icon: Mail, accentColor: '#D97757', sections: ['Subject Lines', 'Email Copy', 'Send Schedule', 'Segmentation'], deliveryTime: '1-2 hrs', isStudio: false },
+      { slug: 'lead_magnet', title: 'Lead Magnet', description: 'High-value lead capture asset concept and outline.', price: '$89', priceCents: 8900, consultantPrice: '$500 - $2,000', icon: Gift, accentColor: '#D97757', sections: ['Magnet Concept', 'Content Outline', 'Landing Page Copy', 'Distribution Plan'], deliveryTime: '2-3 hrs', isStudio: false },
+      { slug: 'sales_funnel', title: 'Sales Funnel', description: 'End-to-end customer acquisition funnel design.', price: '$149', priceCents: 14900, consultantPrice: '$2,000 - $5,000', icon: Layers, accentColor: '#185FA5', sections: ['Awareness Stage', 'Consideration Stage', 'Decision Stage', 'Retention Strategy'], deliveryTime: '3-4 hrs', isStudio: false },
+      { slug: 'seo_content', title: 'SEO Content', description: 'SEO-optimized content strategy with keyword targeting.', price: '$129', priceCents: 12900, consultantPrice: '$1,500 - $4,000', icon: Globe, accentColor: '#0F6E56', sections: ['Keyword Research', 'Content Briefs', 'On-Page SEO', 'Link Strategy'], deliveryTime: '2-3 hrs', isStudio: false },
+    ]
   },
   {
-    id: 'location' as InputMode,
-    label: 'Identify Location',
-    icon: MapPin,
-    description: 'Enter a city + business type to get market analysis, demographics, and competition data.',
+    id: 'product', label: 'Product & Launch', icon: Rocket, color: '#0F6E56',
+    reports: [
+      { slug: 'pitch_deck', title: 'Pitch Deck', description: 'Investor-ready presentation content and structure.', price: '$79', priceCents: 7900, consultantPrice: '$2,000 - $5,000', icon: Presentation, accentColor: '#BA7517', sections: ['Problem', 'Solution', 'Market Size', 'Business Model', 'Traction', 'Team', 'Financials', 'Ask'], deliveryTime: '2-3 hrs', isStudio: true },
+      { slug: 'feature_specs', title: 'Feature Specs', description: 'Detailed feature specifications with user stories.', price: '$149', priceCents: 14900, consultantPrice: '$2,000 - $6,000', icon: ClipboardList, accentColor: '#0F6E56', sections: ['Feature List', 'User Stories', 'Acceptance Criteria', 'Priority Matrix'], deliveryTime: '3-4 hrs', isStudio: false },
+      { slug: 'mvp_roadmap', title: 'MVP Roadmap', description: 'Phased product development plan with milestones.', price: '$179', priceCents: 17900, consultantPrice: '$3,000 - $8,000', icon: Rocket, accentColor: '#185FA5', sections: ['MVP Scope', 'Phase 1-3 Plan', 'Tech Stack', 'Timeline & Milestones'], deliveryTime: '3-5 hrs', isStudio: false },
+      { slug: 'prd', title: 'Product Requirements Doc', description: 'Complete PRD with technical and business requirements.', price: '$169', priceCents: 16900, consultantPrice: '$3,000 - $8,000', icon: BookOpen, accentColor: '#D97757', sections: ['Objectives', 'Requirements', 'User Flows', 'Technical Specs', 'Success Metrics'], deliveryTime: '4-6 hrs', isStudio: false },
+      { slug: 'gtm_strategy', title: 'GTM Strategy', description: 'Go-to-market strategy with channel and positioning plan.', price: '$189', priceCents: 18900, consultantPrice: '$3,000 - $8,000', icon: Rocket, accentColor: '#D97757', sections: ['Market Positioning', 'Channel Strategy', 'Launch Plan', 'Growth Levers'], deliveryTime: '3-5 hrs', isStudio: false },
+      { slug: 'gtm_calendar', title: 'GTM Launch Calendar', description: 'Day-by-day launch execution plan with tasks and owners.', price: '$159', priceCents: 15900, consultantPrice: '$2,000 - $5,000', icon: Calendar, accentColor: '#BA7517', sections: ['Pre-Launch Tasks', 'Launch Day Plan', 'Week 1-4 Actions', 'KPI Tracking'], deliveryTime: '2-3 hrs', isStudio: false },
+      { slug: 'kpi_dashboard', title: 'KPI Dashboard', description: 'Key performance indicators and tracking framework.', price: '$119', priceCents: 11900, consultantPrice: '$1,500 - $4,000', icon: BarChart3, accentColor: '#0F6E56', sections: ['North Star Metric', 'Leading Indicators', 'Dashboard Layout', 'Review Cadence'], deliveryTime: '2-3 hrs', isStudio: false },
+    ]
   },
   {
-    id: 'clone' as InputMode,
-    label: 'Clone Success',
-    icon: Copy,
-    description: 'Analyze a successful business and find similar markets where you could replicate it.',
+    id: 'research', label: 'Research', icon: SearchIcon, color: '#D97757',
+    reports: [
+      { slug: 'user_personas', title: 'User Personas', description: 'Data-driven customer personas with behavior insights.', price: '$99', priceCents: 9900, consultantPrice: '$1,000 - $3,000', icon: Users, accentColor: '#D97757', sections: ['Demographics', 'Pain Points', 'Behaviors', 'Buying Triggers'], deliveryTime: '2-3 hrs', isStudio: false },
+      { slug: 'customer_interview', title: 'Customer Interview Guide', description: 'Structured interview script for customer discovery.', price: '$89', priceCents: 8900, consultantPrice: '$500 - $2,000', icon: Users, accentColor: '#185FA5', sections: ['Research Questions', 'Interview Script', 'Analysis Framework', 'Insight Template'], deliveryTime: '2-3 hrs', isStudio: false },
+      { slug: 'tweet_landing', title: 'Tweet Landing Page', description: 'Viral tweet thread + micro landing page content.', price: '$49', priceCents: 4900, consultantPrice: '$300 - $800', icon: MousePointer, accentColor: '#D97757', sections: ['Tweet Thread', 'Hook Variants', 'Landing Copy', 'CTA Options'], deliveryTime: '0.5-1 hr', isStudio: false },
+      { slug: 'feasibility_study', title: 'Feasibility Study', description: 'Quick viability check with market validation data.', price: '$25', priceCents: 2500, consultantPrice: '$1,500 - $15,000', icon: Target, accentColor: '#0F6E56', sections: ['Executive Summary', 'Market Opportunity', 'Technical Feasibility', 'Financial Viability', 'Risk Assessment'], deliveryTime: '1-2 hrs', isStudio: true },
+    ]
   },
 ]
 
-// Consultant pricing for comparison (what firms typically charge)
-const CONSULTANT_PRICES: Record<string, string> = {
-  feasibility_study: '$1,500 - $15,000',
-  pitch_deck: '$2,000 - $5,000',
-  strategic_assessment: '$1,500 - $5,000',
-  market_analysis: '$2,000 - $8,000',
-  pestle_analysis: '$1,500 - $5,000',
-  financial_model: '$2,500 - $10,000',
-  business_plan: '$3,000 - $15,000',
-}
-
-// Sample preview content for each report type
-const REPORT_PREVIEWS: Record<string, { sections: string[]; sampleInsight: string }> = {
-  feasibility_study: {
-    sections: ['Executive Summary', 'Market Opportunity', 'Technical Feasibility', 'Financial Viability', 'Risk Assessment', 'Recommendation'],
-    sampleInsight: 'Based on 47 comparable businesses in your target market, the projected success rate is 73%...',
-  },
-  market_analysis: {
-    sections: ['Market Size (TAM/SAM/SOM)', 'Growth Trends', 'Customer Segments', 'Competitive Landscape', 'Market Entry Strategy', 'Revenue Projections'],
-    sampleInsight: 'Your total addressable market is estimated at $4.2B with a 12% CAGR...',
-  },
-  business_plan: {
-    sections: ['Executive Summary', 'Company Description', 'Market Analysis', 'Organization & Management', 'Product/Service Line', 'Marketing Strategy', 'Financial Projections'],
-    sampleInsight: 'With the proposed go-to-market strategy, break-even is projected within 18 months...',
-  },
-  financial_model: {
-    sections: ['Revenue Model', 'Cost Structure', 'Unit Economics', 'Cash Flow Projections', '5-Year P&L', 'Sensitivity Analysis'],
-    sampleInsight: 'Customer LTV:CAC ratio of 4.2x indicates strong unit economics...',
-  },
-  pitch_deck: {
-    sections: ['Problem', 'Solution', 'Market Size', 'Business Model', 'Traction', 'Team', 'Financials', 'Ask'],
-    sampleInsight: 'Recommended ask: $1.5M at $8M pre-money valuation based on comparable raises...',
-  },
-  strategic_assessment: {
-    sections: ['SWOT Analysis', 'Competitive Positioning', 'Value Proposition', 'Strategic Options', 'Recommended Strategy'],
-    sampleInsight: 'Key differentiator identified: 3x faster delivery than nearest competitor...',
-  },
-  pestle_analysis: {
-    sections: ['Political Factors', 'Economic Factors', 'Social Factors', 'Technological Factors', 'Legal Factors', 'Environmental Factors'],
-    sampleInsight: 'Regulatory tailwind: New legislation expected to increase market by 25%...',
-  },
-}
-
-// Icons for Consultant Studio reports
-const studioReportIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  feasibility_study: Target,
-  pitch_deck: Presentation,
-  strategic_assessment: Briefcase,
-  market_analysis: PieChart,
-  pestle_analysis: Shield,
-  financial_model: LineChart,
-  business_plan: FileSpreadsheet,
-}
-
-const categoryIcons: Record<string, React.ComponentType<{ className?: string }>> = {
-  popular: Sparkles,
-  marketing: Megaphone,
-  product: ClipboardList,
-  business: BarChart3,
-  research: SearchIcon,
-}
+const TOTAL_REPORTS = REPORT_CATEGORIES.reduce((sum, cat) => sum + cat.reports.length, 0)
 
 interface ReportLibraryProps {
   opportunityId?: number
-  workspaceId?: number
   customContext?: string
-  onReportGenerated?: (report: GeneratedReport) => void
 }
 
-export default function ReportLibrary({ 
-  opportunityId, 
-  workspaceId, 
+export default function ReportLibrary({
+  opportunityId,
   customContext,
-  onReportGenerated 
 }: ReportLibraryProps) {
   const { isAuthenticated, token } = useAuthStore()
-  const queryClient = useQueryClient()
-  
-  // Input mode state
+
   const [inputMode, setInputMode] = useState<InputMode>('validate')
-  
-  // Validate Idea inputs
   const [ideaDescription, setIdeaDescription] = useState(customContext || '')
-  
-  // Search Ideas inputs
   const [searchQuery, setSearchQuery] = useState('')
   const [searchCategory, setSearchCategory] = useState('')
-  
-  // Identify Location inputs
   const [locationCity, setLocationCity] = useState('')
   const [locationBusiness, setLocationBusiness] = useState('')
-  
-  // Clone Success inputs
   const [cloneBusinessName, setCloneBusinessName] = useState('')
   const [cloneBusinessAddress, setCloneBusinessAddress] = useState('')
   const [cloneTargetCity, setCloneTargetCity] = useState('')
-  
-  // Report generation state
-  const [selectedReport, setSelectedReport] = useState<{ type: 'studio' | 'template'; slug: string; name: string } | null>(null)
-  const [generatingSlug, setGeneratingSlug] = useState<string | null>(null)
-  const [generatedReport, setGeneratedReport] = useState<GeneratedReport | null>(null)
-  
-  // Consultant results
+
   const [consultantResult, setConsultantResult] = useState<any>(null)
   const [consultantLoading, setConsultantLoading] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
 
-  // Guest state
-  const [guestEmail, setGuestEmail] = useState('')
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
+  const [expandedReport, setExpandedReport] = useState<string | null>(null)
+
+  const [viewingReport, setViewingReport] = useState<GeneratedReport | null>(null)
+  const [generatingFree, setGeneratingFree] = useState<string | null>(null)
+  const [freeReports, setFreeReports] = useState<Record<string, GeneratedReport>>({})
+  const [generateError, setGenerateError] = useState<string | null>(null)
+
   const [purchaseLoading, setPurchaseLoading] = useState(false)
-  const [purchaseError, setPurchaseError] = useState<string | null>(null)
+  const [generatingReport, setGeneratingReport] = useState<string | null>(null)
   const [exportingFormat, setExportingFormat] = useState<string | null>(null)
-
-  // Report section toggle
-  const [showBundles, setShowBundles] = useState(false)
 
   const isGuest = !isAuthenticated
 
@@ -265,126 +187,39 @@ export default function ReportLibrary({
     return h
   }
 
-  // Fetch Consultant Studio reports (original 7)
-  const { data: studioReports } = useQuery<{ reports: ConsultantStudioReport[]; bundles: Bundle[] }>({
-    queryKey: ['studio-reports'],
+  const { data: reportHistory } = useQuery<GeneratedReport[]>({
+    queryKey: ['my-reports', token],
     queryFn: async () => {
-      const res = await fetch('/api/v1/report-pricing/public')
-      if (!res.ok) throw new Error('Failed to fetch studio reports')
+      if (!token) return []
+      const res = await fetch('/api/v1/reports/my-reports', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) return []
       return res.json()
     },
+    enabled: isAuthenticated,
   })
 
-  // Fetch Template reports (20+)
-  const { data: categories, isLoading } = useQuery<CategoryWithTemplates[]>({
-    queryKey: ['report-templates'],
-    queryFn: async () => {
-      const res = await fetch('/api/v1/reports/templates/public')
-      if (!res.ok) throw new Error('Failed to fetch templates')
-      return res.json()
-    },
-  })
-
-  // Fetch template pricing with member discounts
-  type TemplatePricingItem = {
-    slug: string
-    name: string
-    base_price_cents: number
-    member_price_cents: number
-    discount_percent: number
-    is_included: boolean
-    is_purchased: boolean
-  }
-  
-  const { data: templatePricing } = useQuery<{ templates: TemplatePricingItem[]; user_tier: string | null; tier_discount_percent: number }>({
-    queryKey: ['template-pricing', token],
-    queryFn: async () => {
-      const hdrs: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (token) hdrs['Authorization'] = `Bearer ${token}`
-      const res = await fetch('/api/v1/report-pricing/template-pricing', { headers: hdrs })
-      if (!res.ok) throw new Error('Failed to fetch template pricing')
-      return res.json()
-    },
-  })
-  
-  // Helper to get template pricing info
-  const getTemplatePricing = (slug: string) => {
-    const pricing = templatePricing?.templates.find(t => t.slug === slug)
-    if (!pricing) {
-      const fallbackPrice = TEMPLATE_PRICES[slug] || 4900
-      return { base: fallbackPrice, member: fallbackPrice, discount: 0, included: false, purchased: false }
-    }
-    return {
-      base: pricing.base_price_cents,
-      member: pricing.member_price_cents,
-      discount: pricing.discount_percent,
-      included: pricing.is_included,
-      purchased: pricing.is_purchased,
+  const canAnalyze = () => {
+    switch (inputMode) {
+      case 'validate': return ideaDescription.trim().length > 10
+      case 'search': return !!(searchQuery.trim() || searchCategory)
+      case 'location': return !!(locationCity.trim() && locationBusiness.trim())
+      case 'clone': return !!(cloneBusinessName.trim() && cloneBusinessAddress.trim())
+      default: return false
     }
   }
 
-  const generateMutation = useMutation({
-    mutationFn: async ({ reportType, context, isStudio }: { reportType: string; context: string; isStudio: boolean }) => {
-      setGeneratingSlug(reportType)
-      
-      if (isStudio) {
-        const res = await fetch('/api/v1/report-pricing/generate-free-report', {
-          method: 'POST',
-          headers: headers(),
-          body: JSON.stringify({
-            report_type: reportType,
-            idea_description: context,
-            opportunity_id: opportunityId,
-          }),
-        })
-        if (!res.ok) {
-          const text = await res.text()
-          let detail = 'Failed to generate report'
-          try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
-          throw new Error(detail)
-        }
-        return res.json()
-      } else {
-        const res = await fetch('/api/v1/reports/generate', {
-          method: 'POST',
-          headers: headers(),
-          body: JSON.stringify({
-            template_slug: reportType,
-            opportunity_id: opportunityId,
-            workspace_id: workspaceId,
-            custom_context: context,
-          }),
-        })
-        if (!res.ok) {
-          const text = await res.text()
-          let detail = 'Failed to generate report'
-          try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
-          throw new Error(detail)
-        }
-        return res.json() as Promise<GeneratedReport>
-      }
-    },
-    onSuccess: (report) => {
-      setGeneratingSlug(null)
-      setGeneratedReport(report)
-      queryClient.invalidateQueries({ queryKey: ['my-reports'] })
-      onReportGenerated?.(report)
-    },
-    onError: (err: Error) => {
-      setGeneratingSlug(null)
-      setGenerateError(err.message || 'Failed to generate report. Please try again.')
-    },
-  })
-
-  // Run consultant analysis
   const runConsultantAnalysis = async () => {
     setConsultantLoading(true)
     setConsultantResult(null)
-    
+    setAnalysisError(null)
+    setFreeReports({})
+
     try {
       let endpoint = ''
       let body: any = {}
-      
+
       switch (inputMode) {
         case 'validate':
           endpoint = '/api/v1/consultant/validate-idea'
@@ -400,63 +235,114 @@ export default function ReportLibrary({
           break
         case 'clone':
           endpoint = '/api/v1/consultant/clone-success'
-          body = { 
-            business_name: cloneBusinessName, 
+          body = {
+            business_name: cloneBusinessName,
             business_address: cloneBusinessAddress,
             target_city: cloneTargetCity || undefined,
-            radius_miles: 3
+            radius_miles: 3,
           }
           break
       }
-      
+
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify(body),
       })
-      
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}))
         throw new Error(errData.detail || `Analysis failed (${res.status})`)
       }
       const result = await res.json()
       setConsultantResult(result)
+
+      if (inputMode === 'validate' && result.success) {
+        generateFreeReports(result)
+      }
     } catch (e) {
-      console.error(e)
-      setPurchaseError(e instanceof Error ? e.message : 'Analysis failed. Please try again.')
+      setAnalysisError(e instanceof Error ? e.message : 'Analysis failed. Please try again.')
     } finally {
       setConsultantLoading(false)
     }
   }
 
-  const formatPrice = (cents: number) => `$${(cents / 100).toFixed(0)}`
-  
-  const calculateSavingsPercent = (yourPrice: number, consultantPrice: string) => {
-    // Extract lower bound from consultant price range
-    const match = consultantPrice.match(/\$([0-9,]+)/)
-    if (!match) return 90
-    const consultantLow = parseInt(match[1].replace(',', ''))
-    const savings = Math.round((1 - (yourPrice / 100) / consultantLow) * 100)
-    return Math.min(99, Math.max(80, savings))
-  }
+  const generateFreeReports = async (analysisResult: any) => {
+    if (!isAuthenticated) return
+    const context = `Idea: ${ideaDescription}\n\nAnalysis: ${JSON.stringify(analysisResult, null, 2)}`
+    const reportTypes = ['feasibility_study']
 
-  const getTierBadge = (tier: string | null) => {
-    if (!tier) return { text: 'PAY', className: 'bg-amber-100 text-amber-700' }
-    const badges: Record<string, { text: string; className: string }> = {
-      free: { text: 'FREE', className: 'bg-green-100 text-green-700' },
-      pro: { text: 'PRO', className: 'bg-purple-100 text-purple-700' },
-      business: { text: 'BIZ', className: 'bg-blue-100 text-blue-700' },
-      enterprise: { text: 'ENT', className: 'bg-gray-100 text-gray-700' },
+    for (const reportType of reportTypes) {
+      setGeneratingFree(reportType)
+      try {
+        const res = await fetch('/api/v1/report-pricing/generate-free-report', {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({
+            report_type: reportType,
+            idea_description: context,
+            opportunity_id: opportunityId,
+          }),
+        })
+        if (res.ok) {
+          const report = await res.json()
+          setFreeReports(prev => ({ ...prev, [reportType]: report }))
+        }
+      } catch {
+      }
     }
-    return badges[tier] || { text: tier.toUpperCase(), className: 'bg-gray-100 text-gray-600' }
+    setGeneratingFree(null)
   }
 
-  const allTemplates = categories?.flatMap(cat => cat.templates) || []
+  const handleReportAction = async (report: ReportItem) => {
+    if (!isAuthenticated) {
+      setGenerateError('Please sign in to purchase or generate reports.')
+      return
+    }
+    setPurchaseLoading(true)
+    setGenerateError(null)
+    try {
+      const accessRes = await fetch(`/api/v1/reports/check-access?template_slug=${encodeURIComponent(report.slug)}`, {
+        method: 'POST',
+        headers: headers(),
+      })
+      if (accessRes.ok) {
+        const accessData = await accessRes.json()
+        if (accessData.has_access) {
+          await handleGenerateReport(report)
+          return
+        }
+      }
+      const baseUrl = window.location.origin
+      const returnPath = window.location.pathname
+      const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}`
+      const cancelUrl = `${baseUrl}/billing/return?status=canceled&return_to=${encodeURIComponent(returnPath)}`
 
-  const getContextForReport = () => {
+      const res = await fetch('/api/v1/report-pricing/template-checkout', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          template_slug: report.slug,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Failed to start checkout')
+      if (data.url) window.location.href = data.url
+      else throw new Error('No checkout URL returned')
+    } catch (e) {
+      setGenerateError(e instanceof Error ? e.message : 'Checkout failed')
+    } finally {
+      setPurchaseLoading(false)
+    }
+  }
+
+  const getContextForMode = () => {
     switch (inputMode) {
       case 'validate':
-        return consultantResult 
+        return consultantResult
           ? `Idea: ${ideaDescription}\n\nAnalysis: ${JSON.stringify(consultantResult, null, 2)}`
           : ideaDescription
       case 'search':
@@ -476,1046 +362,797 @@ export default function ReportLibrary({
     }
   }
 
-  const canAnalyze = () => {
-    switch (inputMode) {
-      case 'validate': return ideaDescription.trim().length > 10
-      case 'search': return searchQuery.trim() || searchCategory
-      case 'location': return locationCity.trim() && locationBusiness.trim()
-      case 'clone': return cloneBusinessName.trim() && cloneBusinessAddress.trim()
-      default: return false
-    }
-  }
-
-  const canGenerateReport = selectedReport && (consultantResult || canAnalyze())
-
-  // Template checkout handler
-  const handleTemplateCheckout = async (templateSlug: string) => {
-    setPurchaseLoading(true)
-    setPurchaseError(null)
-    
+  const handleGenerateReport = async (report: ReportItem) => {
+    setGeneratingReport(report.slug)
+    setGenerateError(null)
     try {
-      const baseUrl = window.location.origin
-      const returnPath = window.location.pathname
-      const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}`
-      const cancelUrl = `${baseUrl}/billing/return?status=canceled&return_to=${encodeURIComponent(returnPath)}`
-      
-      const res = await fetch('/api/v1/report-pricing/template-checkout', {
+      const context = getContextForMode()
+      const res = await fetch('/api/v1/reports/generate', {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify({
-          template_slug: templateSlug,
-          success_url: successUrl,
-          cancel_url: cancelUrl,
+          template_slug: report.slug,
+          custom_context: context,
+          opportunity_id: opportunityId,
         }),
       })
-      
-      const data = await res.json()
-      
       if (!res.ok) {
-        throw new Error(data.detail || 'Failed to start checkout')
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.detail || 'Report generation failed')
       }
-      
-      if (data.url) {
-        window.location.href = data.url
-      } else {
-        throw new Error('No checkout URL returned from server')
-      }
+      const generated = await res.json()
+      setViewingReport(generated)
     } catch (e) {
-      setPurchaseError(e instanceof Error ? e.message : 'Checkout failed')
-      console.error('Checkout error:', e)
+      setGenerateError(e instanceof Error ? e.message : 'Report generation failed')
     } finally {
+      setGeneratingReport(null)
       setPurchaseLoading(false)
     }
   }
 
-  const [generateError, setGenerateError] = useState<string | null>(null)
-
-  const handleGenerateReport = () => {
-    console.log('[ReportLibrary] handleGenerateReport called', { selectedReport })
-    setGenerateError(null)
-    if (!selectedReport) {
-      console.warn('[ReportLibrary] No selectedReport, returning')
-      return
+  const handleExport = async (format: string) => {
+    if (!viewingReport || !token) return
+    setExportingFormat(format)
+    try {
+      const res = await fetch(`/api/v1/reports/${viewingReport.id}/export/${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `report-${viewingReport.id}.${format}`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setGenerateError('Export failed. Please try again.')
+    } finally {
+      setExportingFormat(null)
     }
-
-    // Allow guests to generate reports - no authentication required for free reports
-    // Guests will see a "Sign in to Save" prompt after generation
-    
-    // For templates, check if purchase is required
-    if (selectedReport.type === 'template') {
-      const pricing = getTemplatePricing(selectedReport.slug)
-      console.log('[ReportLibrary] Template pricing:', { pricing, slug: selectedReport.slug })
-      if (!pricing.included && !pricing.purchased) {
-        // Need to purchase first
-        console.log('[ReportLibrary] Starting checkout for template')
-        handleTemplateCheckout(selectedReport.slug)
-        return
-      }
-    }
-    
-    const context = getContextForReport()
-    console.log('[ReportLibrary] Generating report with context:', { context })
-    generateMutation.mutate({ 
-      reportType: selectedReport.slug, 
-      context,
-      isStudio: selectedReport.type === 'studio'
-    })
-  }
-  
-  // Check if selected template needs purchase
-  const needsTemplatePurchase = selectedReport?.type === 'template' && (() => {
-    const pricing = getTemplatePricing(selectedReport.slug)
-    return !pricing.included && !pricing.purchased
-  })()
-
-  if (isLoading) {
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="flex items-center justify-center gap-2 text-gray-500">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span>Loading...</span>
-        </div>
-      </div>
-    )
   }
 
   return (
-    <div className="space-y-6">
-      {/* Social Proof Banner */}
-      <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-4 text-white">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Zap className="w-5 h-5 text-yellow-300" />
-              <span className="font-semibold">2,847 reports generated this month</span>
-            </div>
-            <div className="hidden sm:flex items-center gap-2">
-              <Star className="w-4 h-4 text-yellow-300 fill-yellow-300" />
-              <span className="text-sm">Trusted by founders from YC, Techstars & 500 Startups</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 bg-white/20 px-3 py-1 rounded-full text-sm">
-            <Gift className="w-4 h-4" />
-            <span>First report FREE for new users</span>
-          </div>
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-5">
+          {INPUT_MODES.map((mode) => {
+            const Icon = mode.icon
+            return (
+              <button
+                key={mode.id}
+                onClick={() => {
+                  setInputMode(mode.id)
+                  setConsultantResult(null)
+                  setFreeReports({})
+                  setAnalysisError(null)
+                }}
+                aria-label={mode.label}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-3 rounded-xl text-xs font-medium transition-all ${
+                  inputMode === mode.id
+                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                <span className="hidden sm:inline">{mode.label}</span>
+              </button>
+            )
+          })}
         </div>
-      </div>
 
-      {/* Two-Column Layout */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <div className="grid md:grid-cols-2 gap-6">
-          
-          {/* LEFT: Business Context with 4 Modes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Business Context
-            </label>
-            
-            {/* Mode Tabs */}
-            <div className="flex flex-wrap gap-1 mb-4 p-1 bg-gray-100 rounded-lg">
-              {INPUT_MODES.map((mode) => {
-                const Icon = mode.icon
-                const isActive = inputMode === mode.id
-                return (
-                  <button
-                    key={mode.id}
-                    onClick={() => {
-                      setInputMode(mode.id)
-                      setConsultantResult(null)
-                    }}
-                    className={`flex-1 min-w-0 flex items-center justify-center gap-1 px-2 py-2 rounded-md text-xs font-medium transition-all ${
-                      isActive
-                        ? 'bg-white text-gray-900 shadow-sm'
-                        : 'text-gray-600 hover:text-gray-900'
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate hidden sm:inline">{mode.label}</span>
-                  </button>
-                )
-              })}
-            </div>
+        {inputMode === 'validate' && (
+          <textarea
+            value={ideaDescription}
+            onChange={(e) => setIdeaDescription(e.target.value)}
+            placeholder="Describe your business idea in detail — the more context you provide, the better your analysis will be..."
+            className="w-full border border-gray-200 rounded-xl p-4 text-sm text-gray-700 bg-gray-50/50 resize-none focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757] transition-all placeholder:text-gray-400"
+            rows={4}
+          />
+        )}
 
-            <p className="text-xs text-gray-500 mb-3">
-              {INPUT_MODES.find(m => m.id === inputMode)?.description}
-            </p>
-
-            {/* Mode-Specific Inputs */}
-            {inputMode === 'validate' && (
-              <textarea
-                value={ideaDescription}
-                onChange={(e) => setIdeaDescription(e.target.value)}
-                placeholder="Describe your business idea in detail..."
-                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none text-sm"
-                rows={4}
-              />
-            )}
-
-            {inputMode === 'search' && (
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Keyword (e.g., coffee, fitness...)"
-                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
-                />
-                <select
-                  value={searchCategory}
-                  onChange={(e) => setSearchCategory(e.target.value)}
-                  className="w-full p-3 border border-gray-200 rounded-lg bg-white text-sm"
-                >
-                  <option value="">All Categories</option>
-                  <option value="work_productivity">💼 Work & Productivity</option>
-                  <option value="money_finance">💰 Money & Finance</option>
-                  <option value="health_wellness">🏥 Health & Wellness</option>
-                  <option value="technology">💻 Technology</option>
-                </select>
-              </div>
-            )}
-
-            {inputMode === 'location' && (
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={locationCity}
-                  onChange={(e) => setLocationCity(e.target.value)}
-                  placeholder="City (e.g., Miami, Florida)"
-                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
-                />
-                <input
-                  type="text"
-                  value={locationBusiness}
-                  onChange={(e) => setLocationBusiness(e.target.value)}
-                  placeholder="Business type (e.g., Coffee shop)"
-                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
-                />
-              </div>
-            )}
-
-            {inputMode === 'clone' && (
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  value={cloneBusinessName}
-                  onChange={(e) => setCloneBusinessName(e.target.value)}
-                  placeholder="Business name (e.g., Sweetgreen)"
-                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
-                />
-                <input
-                  type="text"
-                  value={cloneBusinessAddress}
-                  onChange={(e) => setCloneBusinessAddress(e.target.value)}
-                  placeholder="Business address"
-                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
-                />
-                <input
-                  type="text"
-                  value={cloneTargetCity}
-                  onChange={(e) => setCloneTargetCity(e.target.value)}
-                  placeholder="Target city (optional)"
-                  className="w-full p-3 border border-gray-200 rounded-lg text-sm"
-                />
-              </div>
-            )}
-
-            <button
-              onClick={runConsultantAnalysis}
-              disabled={!canAnalyze() || consultantLoading}
-              className="mt-3 w-full px-4 py-2.5 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
-            >
-              {consultantLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Analyzing...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Analyze
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* RIGHT: Report Selection */}
-          <div className="flex flex-col">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Select Report Type
-            </label>
-            
+        {inputMode === 'search' && (
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search keyword (e.g., coffee, fitness, SaaS...)"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+            />
             <select
-              value={selectedReport ? `${selectedReport.type}:${selectedReport.slug}` : ''}
-              onChange={(e) => {
-                if (!e.target.value) {
-                  setSelectedReport(null)
-                  return
-                }
-                const [type, slug] = e.target.value.split(':')
-                if (type === 'studio') {
-                  const report = studioReports?.reports.find(r => r.id === slug)
-                  setSelectedReport({ type: 'studio', slug, name: report?.name || slug })
-                } else {
-                  const template = allTemplates.find(t => t.slug === slug)
-                  setSelectedReport({ type: 'template', slug, name: template?.name || slug })
-                }
-              }}
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 bg-white text-sm"
+              value={searchCategory}
+              onChange={(e) => setSearchCategory(e.target.value)}
+              className="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
             >
-              <option value="">Choose a report...</option>
-              
-              <optgroup label="📊 Consultant Studio Reports">
-                {studioReports?.reports.map(report => (
-                  <option key={report.id} value={`studio:${report.id}`}>
-                    {report.name} — {formatPrice(report.price)}
-                  </option>
-                ))}
-              </optgroup>
-              
-              {categories?.map(cat => (
-                <optgroup key={cat.category} label={`📝 ${cat.display_name}`}>
-                  {cat.templates.map(template => {
-                    const pricing = getTemplatePricing(template.slug)
-                    const priceDisplay = pricing.included 
-                      ? '✓ Included' 
-                      : pricing.purchased 
-                        ? '✓ Purchased'
-                        : pricing.discount > 0
-                          ? `${formatPrice(pricing.member)} (${pricing.discount}% off)`
-                          : formatPrice(pricing.base)
-                    return (
-                      <option key={template.slug} value={`template:${template.slug}`}>
-                        {template.name} — {priceDisplay}
-                      </option>
-                    )
-                  })}
-                </optgroup>
-              ))}
+              <option value="">All Categories</option>
+              <option value="work_productivity">Work & Productivity</option>
+              <option value="money_finance">Money & Finance</option>
+              <option value="health_wellness">Health & Wellness</option>
+              <option value="technology">Technology</option>
             </select>
-
-            {/* Selected Report Info with Value Comparison */}
-            {selectedReport && selectedReport.type === 'studio' && (
-              <>
-                {(() => {
-                  const report = studioReports?.reports.find(r => r.id === selectedReport.slug)
-                  const Icon = studioReportIcons[selectedReport.slug] || FileText
-                  const consultantPrice = CONSULTANT_PRICES[selectedReport.slug] || '$2,000 - $10,000'
-                  const savingsPercent = calculateSavingsPercent(report?.price || 0, consultantPrice)
-                  const preview = REPORT_PREVIEWS[selectedReport.slug]
-                  
-                  return (
-                    <div className="mt-3 space-y-3">
-                      {/* Value Comparison Card */}
-                      <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg border border-green-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Icon className="w-5 h-5 text-green-600" />
-                          <span className="font-semibold text-gray-900">{report?.name}</span>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3 mb-3">
-                          <div className="text-center p-2 bg-white rounded border border-gray-200">
-                            <div className="text-xs text-gray-500 line-through">Consultants charge</div>
-                            <div className="font-semibold text-gray-700">{consultantPrice}</div>
-                          </div>
-                          <div className="text-center p-2 bg-green-600 rounded text-white">
-                            <div className="text-xs opacity-90">Your price</div>
-                            <div className="font-bold text-lg">{formatPrice(report?.price || 0)}</div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center justify-center gap-2 text-green-700 font-semibold">
-                          <TrendingDown className="w-4 h-4" />
-                          <span>Save {savingsPercent}%+</span>
-                        </div>
-                      </div>
-                      
-                      {/* Preview Card */}
-                      {preview && (
-                        <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Lock className="w-4 h-4 text-gray-400" />
-                            <span className="text-xs font-medium text-gray-600">What you'll get:</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {preview.sections.slice(0, 4).map((section, i) => (
-                              <span key={i} className="px-2 py-0.5 bg-white border border-gray-200 rounded text-xs text-gray-600">
-                                {section}
-                              </span>
-                            ))}
-                            {preview.sections.length > 4 && (
-                              <span className="px-2 py-0.5 text-xs text-gray-400">
-                                +{preview.sections.length - 4} more
-                              </span>
-                            )}
-                          </div>
-                          <div className="p-2 bg-white rounded border border-dashed border-gray-300">
-                            <p className="text-xs text-gray-500 italic blur-[2px] select-none">
-                              {preview.sampleInsight}
-                            </p>
-                          </div>
-                          <div className="mt-2 flex items-center gap-1 text-xs text-amber-600">
-                            <Clock className="w-3 h-3" />
-                            <span>Generated in under 60 seconds</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })()}
-              </>
-            )}
-
-            {selectedReport && selectedReport.type === 'template' && (
-              <div className="mt-3 p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                {(() => {
-                  const template = allTemplates.find(t => t.slug === selectedReport.slug)
-                  const pricing = getTemplatePricing(selectedReport.slug)
-                  const userTier = templatePricing?.user_tier
-                  
-                  return (
-                    <>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-gray-900">{template?.name}</span>
-                        <div className="flex items-center gap-2">
-                          {pricing.included && (
-                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700">
-                              ✓ INCLUDED
-                            </span>
-                          )}
-                          {pricing.purchased && !pricing.included && (
-                            <span className="px-2 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-700">
-                              ✓ PURCHASED
-                            </span>
-                          )}
-                          {!pricing.included && !pricing.purchased && (
-                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${getTierBadge(template?.min_tier || null).className}`}>
-                              {getTierBadge(template?.min_tier || null).text}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-600 mb-3">{template?.description}</p>
-                      
-                      {pricing.included || pricing.purchased ? (
-                        <div className="p-3 bg-green-50 rounded border border-green-200 text-center">
-                          <CheckCircle className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                          <div className="text-sm font-semibold text-green-700">
-                            {pricing.included ? 'Included in your plan' : 'Already purchased'}
-                          </div>
-                          <div className="text-xs text-green-600">Generate unlimited times</div>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Member vs Non-member pricing */}
-                          <div className="grid grid-cols-2 gap-2 mb-2">
-                            <div className="text-center p-2 bg-gray-100 rounded border border-gray-200">
-                              <div className="text-xs text-gray-500">Non-member</div>
-                              <div className="font-semibold text-gray-700">{formatPrice(pricing.base)}</div>
-                            </div>
-                            <div className={`text-center p-2 rounded ${
-                              pricing.discount > 0 
-                                ? 'bg-blue-600 text-white' 
-                                : 'bg-gray-100 border border-gray-200'
-                            }`}>
-                              <div className={`text-xs ${pricing.discount > 0 ? 'opacity-90' : 'text-gray-500'}`}>
-                                {userTier ? `${userTier.charAt(0).toUpperCase() + userTier.slice(1)} price` : 'Member price'}
-                              </div>
-                              <div className="font-bold">
-                                {pricing.discount > 0 ? formatPrice(pricing.member) : formatPrice(pricing.base)}
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {pricing.discount > 0 && (
-                            <div className="flex items-center justify-center gap-2 text-green-600 text-sm font-medium">
-                              <TrendingDown className="w-4 h-4" />
-                              <span>You save {pricing.discount}% as a member!</span>
-                            </div>
-                          )}
-                          
-                          {!userTier && (
-                            <div className="mt-2 text-center text-xs text-gray-500">
-                              <a href="/pricing" className="text-blue-600 hover:underline">
-                                Sign up for member pricing →
-                              </a>
-                            </div>
-                          )}
-                        </>
-                      )}
-                      
-                      <div className="mt-3 flex items-center gap-1 text-xs text-blue-600">
-                        <Clock className="w-3 h-3" />
-                        <span>Ready in 60 seconds</span>
-                      </div>
-                    </>
-                  )
-                })()}
-              </div>
-            )}
-
-            {/* Bundles Section */}
-            <button
-              onClick={() => setShowBundles(!showBundles)}
-              className="mt-3 text-xs text-purple-600 hover:text-purple-700 flex items-center gap-1"
-            >
-              <Package className="w-3 h-3" />
-              {showBundles ? 'Hide bundles' : 'View bundle deals (save up to 45%)'}
-            </button>
-
-            {showBundles && studioReports?.bundles && (
-              <div className="mt-2 space-y-2">
-                {studioReports.bundles.map((bundle, idx) => (
-                  <div 
-                    key={bundle.id} 
-                    className={`p-3 rounded-lg border ${idx === 0 ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200' : 'bg-purple-50 border-purple-100'}`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-gray-900 text-sm">{bundle.name}</span>
-                        {idx === 0 && (
-                          <span className="px-2 py-0.5 bg-amber-500 text-white text-xs font-bold rounded">
-                            ⭐ MOST POPULAR
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-lg font-bold text-gray-900">{formatPrice(bundle.price)}</span>
-                    </div>
-                    <p className="text-xs text-gray-600 mb-2">{bundle.description}</p>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-green-600 font-medium">
-                        Save {formatPrice(bundle.savings)} ({Math.round(bundle.savings / (bundle.price + bundle.savings) * 100)}%)
-                      </span>
-                      <span className="text-gray-500">
-                        {bundle.reports.length} reports included
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {isGuest && selectedReport && (
-              <div className="mt-3">
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  <Mail className="w-3 h-3 inline mr-1" />
-                  Email for delivery
-                </label>
-                <input
-                  type="email"
-                  value={guestEmail}
-                  onChange={(e) => setGuestEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  className="w-full p-2 border border-gray-200 rounded-lg text-sm"
-                />
-              </div>
-            )}
-
-            {purchaseError && (
-              <div className="mt-2 p-2 bg-red-50 text-red-700 text-xs rounded-lg">
-                {purchaseError}
-              </div>
-            )}
-
-            {generateError && (
-              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-sm text-red-700">{generateError}</p>
-                {!isAuthenticated && (
-                  <Link
-                    to="/login"
-                    className="inline-block mt-2 px-4 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600"
-                  >
-                    Sign In
-                  </Link>
-                )}
-              </div>
-            )}
-
-            <button
-              onClick={handleGenerateReport}
-              disabled={!canGenerateReport || generateMutation.isPending || purchaseLoading}
-              className={`mt-4 px-4 py-3 font-semibold rounded-lg disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${
-                needsTemplatePurchase 
-                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                  : 'bg-amber-500 text-white hover:bg-amber-600'
-              }`}
-            >
-              {generateMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Generating...
-                </>
-              ) : purchaseLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Starting checkout...
-                </>
-              ) : needsTemplatePurchase ? (
-                <>
-                  <DollarSign className="w-4 h-4" />
-                  Purchase & Generate — {formatPrice(getTemplatePricing(selectedReport?.slug || '').member)}
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-4 h-4" />
-                  Generate Report
-                </>
-              )}
-            </button>
-
-            {/* Trust Signals */}
-            <div className="mt-3 flex flex-col items-center gap-2">
-              <div className="flex items-center gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1">
-                  <Shield className="w-3 h-3" />
-                  Secure payment
-                </span>
-                <span className="flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3" />
-                  Money-back guarantee
-                </span>
-              </div>
-              {/* Stripe Badge */}
-              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-full">
-                <svg className="w-8 h-3.5" viewBox="0 0 60 25" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M59.64 14.28c0-4.98-2.41-8.91-7.02-8.91-4.63 0-7.44 3.93-7.44 8.87 0 5.85 3.31 8.81 8.06 8.81 2.32 0 4.07-.52 5.39-1.26v-3.89c-1.32.66-2.84 1.07-4.77 1.07-1.89 0-3.56-.66-3.78-2.96h9.52c0-.25.04-1.26.04-1.73zm-9.62-1.85c0-2.2 1.34-3.11 2.57-3.11 1.19 0 2.46.91 2.46 3.11h-5.03z" fill="#635BFF"/>
-                  <path d="M38.99 5.37c-1.91 0-3.14.9-3.82 1.52l-.25-1.21h-4.28v22.83l4.86-1.03.01-5.54c.7.5 1.72 1.22 3.42 1.22 3.45 0 6.6-2.78 6.6-8.9-.02-5.6-3.21-8.89-6.54-8.89zm-1.15 13.68c-1.14 0-1.81-.41-2.28-.91l-.02-7.18c.5-.56 1.19-.95 2.3-.95 1.76 0 2.97 1.97 2.97 4.51 0 2.59-1.19 4.53-2.97 4.53z" fill="#635BFF"/>
-                  <path d="M28.24 4.18l4.88-1.05V0l-4.88 1.03v3.15zM28.24 5.68h4.88v17.22h-4.88V5.68z" fill="#635BFF"/>
-                  <path d="M23.24 6.97l-.31-1.29h-4.2v17.22h4.86V11.3c1.15-1.5 3.09-1.22 3.7-1.01V5.68c-.63-.24-2.92-.68-4.05 1.29z" fill="#635BFF"/>
-                  <path d="M13.54 2.12l-4.75 1.01-.02 15.76c0 2.91 2.18 5.05 5.1 5.05 1.61 0 2.79-.3 3.44-.65v-3.95c-.63.25-3.74 1.15-3.74-1.74V9.56h3.74V5.68h-3.74l-.03-3.56z" fill="#635BFF"/>
-                  <path d="M4.87 9.83c0-.76.63-1.05 1.66-1.05 1.49 0 3.37.45 4.86 1.26V5.54c-1.63-.65-3.24-.9-4.86-.9C2.64 4.64 0 6.61 0 9.99c0 5.27 7.26 4.43 7.26 6.7 0 .9-.78 1.19-1.88 1.19-1.63 0-3.71-.67-5.36-1.57v4.57c1.82.78 3.67 1.12 5.36 1.12 3.97 0 6.7-1.96 6.7-5.39-.02-5.69-7.31-4.68-7.31-6.78z" fill="#635BFF"/>
-                </svg>
-                <span className="text-xs text-gray-500">Powered by Stripe</span>
-              </div>
-            </div>
           </div>
-        </div>
+        )}
+
+        {inputMode === 'location' && (
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={locationCity}
+              onChange={(e) => setLocationCity(e.target.value)}
+              placeholder="City (e.g., Miami, Florida)"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+            />
+            <input
+              type="text"
+              value={locationBusiness}
+              onChange={(e) => setLocationBusiness(e.target.value)}
+              placeholder="Business type (e.g., Coffee shop)"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+            />
+          </div>
+        )}
+
+        {inputMode === 'clone' && (
+          <div className="space-y-3">
+            <input
+              type="text"
+              value={cloneBusinessName}
+              onChange={(e) => setCloneBusinessName(e.target.value)}
+              placeholder="Business name (e.g., Sweetgreen)"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+            />
+            <input
+              type="text"
+              value={cloneBusinessAddress}
+              onChange={(e) => setCloneBusinessAddress(e.target.value)}
+              placeholder="Business address"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+            />
+            <input
+              type="text"
+              value={cloneTargetCity}
+              onChange={(e) => setCloneTargetCity(e.target.value)}
+              placeholder="Target city (optional)"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+            />
+          </div>
+        )}
+
+        {analysisError && (
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">{analysisError}</p>
+          </div>
+        )}
+
+        <button
+          onClick={runConsultantAnalysis}
+          disabled={!canAnalyze() || consultantLoading}
+          className="mt-4 w-full py-3 bg-[#D97757] hover:bg-[#c4684b] text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md active:scale-[0.98]"
+        >
+          {consultantLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Analyzing...
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-4 h-4" />
+              Analyze & Generate Reports
+            </>
+          )}
+        </button>
       </div>
 
-      {/* Consultant Analysis Results */}
-      {consultantResult && (
-        <div className="space-y-4 animate-fade-in">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">
-              {INPUT_MODES.find(m => m.id === inputMode)?.label} Results
-            </h3>
-            <button onClick={() => setConsultantResult(null)} className="text-gray-400 hover:text-gray-600 text-sm">
-              ✕
+      {consultantResult && consultantResult.success && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm animate-slide-up" style={{ borderLeft: '3px solid #0F6E56' }}>
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-1.5 h-5 rounded-full bg-[#0F6E56]" />
+            <h2 className="text-lg font-bold text-gray-900">Analysis Results</h2>
+            {inputMode === 'validate' && consultantResult.recommendation && (
+              <span className="ml-auto text-[10px] px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
+                {consultantResult.recommendation.charAt(0).toUpperCase() + consultantResult.recommendation.slice(1)} Business
+              </span>
+            )}
+            <button onClick={() => setConsultantResult(null)} className="text-gray-400 hover:text-gray-600 ml-2 transition-colors">
+              <X className="w-4 h-4" />
             </button>
           </div>
 
-          {inputMode === 'validate' && consultantResult.success && (
-            <div className="space-y-4">
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  {(() => {
-                    const rec = consultantResult.recommendation
-                    if (!rec) return null
-                    const colorMap: Record<string, { bg: string; text: string }> = {
-                      online: { bg: '#DBEAFE', text: '#1E40AF' },
-                      physical: { bg: '#E1F5EE', text: '#085041' },
-                      hybrid: { bg: '#E1F5EE', text: '#085041' },
-                    }
-                    const colors = colorMap[rec] || { bg: '#F3F4F6', text: '#374151' }
-                    return (
-                      <span className="px-3 py-0.5 rounded-full text-xs font-medium" style={{ background: colors.bg, color: colors.text }}>
-                        {rec.charAt(0).toUpperCase() + rec.slice(1)} recommended
-                      </span>
-                    )
-                  })()}
-                  <span className="text-xs text-gray-400">{((consultantResult.processing_time_ms || 0) / 1000).toFixed(1)}s</span>
-                </div>
-                {(consultantResult.viability_report || consultantResult.verdict_summary) && (
-                  <>
-                    <p className="text-sm font-medium text-gray-900 mb-1">
-                      {consultantResult.verdict_summary
-                        || (consultantResult.viability_report?.summary
-                          ? (typeof consultantResult.viability_report.summary === 'string'
-                            ? consultantResult.viability_report.summary.split('.').slice(0, 2).join('.') + '.'
-                            : 'Analysis complete.')
-                          : 'Analysis complete for your business idea.')}
-                    </p>
-                    {consultantResult.verdict_detail && (
-                      <p className="text-xs text-gray-600 mb-1">{consultantResult.verdict_detail}</p>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <ScoreCard label="Online viability" value={consultantResult.online_score || 0} color="#185FA5" />
-                <ScoreCard label="Physical viability" value={consultantResult.physical_score || 0} color="#0F6E56" />
-                <ScoreCard
-                  label="Overall confidence"
-                  value={consultantResult.confidence_score != null
-                    ? consultantResult.confidence_score
-                    : Number((((consultantResult.online_score || 0) + (consultantResult.physical_score || 0)) / 20).toFixed(1))}
-                  color="#D97757"
-                  suffix={consultantResult.confidence_score != null ? '%' : '/10'}
+          {inputMode === 'validate' && (
+            <>
+              <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-5">
+                <ScoreRing
+                  score={consultantResult.confidence_score || Math.round(((consultantResult.online_score || 0) + (consultantResult.physical_score || 0)) / 2)}
+                  label="Overall"
+                  color="#0F6E56"
                 />
+                <ScoreRing score={consultantResult.online_score || 0} label="Online" color="#185FA5" />
+                <ScoreRing score={consultantResult.physical_score || 0} label="Physical" color="#D97757" />
+                {consultantResult.four_ps_scores && (
+                  <ScoreRing
+                    score={Math.round(
+                      ((consultantResult.four_ps_scores.product || 0) +
+                        (consultantResult.four_ps_scores.price || 0) +
+                        (consultantResult.four_ps_scores.place || 0) +
+                        (consultantResult.four_ps_scores.promotion || 0)) / 4
+                    )}
+                    label="4P's Avg"
+                    color="#BA7517"
+                  />
+                )}
               </div>
 
               {consultantResult.four_ps_scores && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-gray-900">4P's Market Scores</span>
-                    {consultantResult.data_quality?.enriched && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#DBEAFE', color: '#1E40AF' }}>Real market data</span>
-                    )}
-                  </div>
-                  <FourPsBar
-                    product={consultantResult.four_ps_scores.product || 0}
-                    price={consultantResult.four_ps_scores.price || 0}
-                    place={consultantResult.four_ps_scores.place || 0}
-                    promotion={consultantResult.four_ps_scores.promotion || 0}
-                  />
+                <div className="space-y-2.5 mb-6 bg-gray-50/50 rounded-xl p-4">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">4P's Analysis</h4>
+                  <FourPsHorizontalBar label="Product" score={consultantResult.four_ps_scores.product || 0} color="#0F6E56" />
+                  <FourPsHorizontalBar label="Price" score={consultantResult.four_ps_scores.price || 0} color="#185FA5" />
+                  <FourPsHorizontalBar label="Place" score={consultantResult.four_ps_scores.place || 0} color="#D97757" />
+                  <FourPsHorizontalBar label="Promotion" score={consultantResult.four_ps_scores.promotion || 0} color="#BA7517" />
                 </div>
               )}
 
               {consultantResult.viability_report && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-sm font-medium text-gray-900">4P's market intelligence</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#E1F5EE', color: '#085041' }}>Free preview</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-3 mb-4">
-                    <MetricCard
-                      label="TAM"
-                      value={String(consultantResult.viability_report.tam || (typeof consultantResult.viability_report.market_size === 'string' ? consultantResult.viability_report.market_size : 'N/A'))}
-                    />
-                    <MetricCard
-                      label="Growth"
-                      value={String(consultantResult.market_intelligence?.growth_trend || consultantResult.viability_report.growth || 'N/A')}
-                    />
-                    <MetricCard
-                      label="Competition"
-                      value={String(consultantResult.market_intelligence?.competition_level || consultantResult.viability_report.competition || 'N/A')}
-                      color="#BA7517"
-                    />
-                    <MetricCard
-                      label="Demand signal"
-                      value={String(consultantResult.market_intelligence?.demand_level || consultantResult.viability_report.demand_signal || 'N/A')}
-                      color="#0F6E56"
-                    />
-                  </div>
-                  {consultantResult.market_intelligence && (
-                    <div className="grid grid-cols-4 gap-3 mb-4">
-                      {consultantResult.market_intelligence.population && (
-                        <MetricCard label="Population" value={Number(consultantResult.market_intelligence.population).toLocaleString()} />
-                      )}
-                      {consultantResult.market_intelligence.median_income && (
-                        <MetricCard label="Median Income" value={`$${Number(consultantResult.market_intelligence.median_income).toLocaleString()}`} />
-                      )}
-                      {consultantResult.market_intelligence.competitor_count != null && (
-                        <MetricCard label="Competitors" value={`${consultantResult.market_intelligence.competitor_count} nearby`} color="#BA7517" />
-                      )}
-                      {consultantResult.market_intelligence.google_trends_interest != null && (
-                        <MetricCard label="Search Interest" value={`${consultantResult.market_intelligence.google_trends_interest}/100`} color="#185FA5" />
-                      )}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                  {(consultantResult.viability_report.tam || consultantResult.viability_report.market_size) && (
+                    <div className="p-3 rounded-xl border border-gray-100 bg-gray-50 text-center" style={{ borderTop: '2px solid #185FA5' }}>
+                      <p className="text-[10px] text-gray-500 mb-1 font-medium">Market Size</p>
+                      <p className="text-sm font-bold text-[#185FA5]">
+                        {consultantResult.viability_report.tam || consultantResult.viability_report.market_size}
+                      </p>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs font-medium mb-2" style={{ color: '#0F6E56' }}>Advantages</p>
-                      <div className="text-xs text-gray-500 leading-relaxed space-y-1">
-                        {(consultantResult.advantages || consultantResult.viability_report?.advantages || consultantResult.viability_report?.strengths || []).slice(0, 3).map((item: string, i: number) => (
-                          <p key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</p>
-                        ))}
-                        {!(consultantResult.advantages || consultantResult.viability_report?.advantages || consultantResult.viability_report?.strengths || []).length && (
-                          <p className="text-gray-400">Analysis data available in full report</p>
-                        )}
-                      </div>
+                  {(consultantResult.market_intelligence?.growth_trend || consultantResult.viability_report.growth) && (
+                    <div className="p-3 rounded-xl border border-gray-100 bg-gray-50 text-center" style={{ borderTop: '2px solid #0F6E56' }}>
+                      <p className="text-[10px] text-gray-500 mb-1 font-medium">Growth</p>
+                      <p className="text-sm font-bold text-[#0F6E56]">
+                        {consultantResult.market_intelligence?.growth_trend || consultantResult.viability_report.growth}
+                      </p>
                     </div>
-                    <div>
-                      <p className="text-xs font-medium mb-2" style={{ color: '#D97757' }}>Risks to evaluate</p>
-                      <div className="text-xs text-gray-500 leading-relaxed space-y-1">
-                        {(consultantResult.risks || consultantResult.viability_report?.risks || consultantResult.viability_report?.weaknesses || []).slice(0, 3).map((item: string, i: number) => (
-                          <p key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</p>
-                        ))}
-                        {!(consultantResult.risks || consultantResult.viability_report?.risks || consultantResult.viability_report?.weaknesses || []).length && (
-                          <p className="text-gray-400">Risk analysis available in full report</p>
-                        )}
-                      </div>
+                  )}
+                  {(consultantResult.market_intelligence?.competition_level || consultantResult.viability_report.competition) && (
+                    <div className="p-3 rounded-xl border border-gray-100 bg-gray-50 text-center" style={{ borderTop: '2px solid #BA7517' }}>
+                      <p className="text-[10px] text-gray-500 mb-1 font-medium">Competition</p>
+                      <p className="text-sm font-bold text-[#BA7517]">
+                        {consultantResult.market_intelligence?.competition_level || consultantResult.viability_report.competition}
+                      </p>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
-              <BlurGate
-                title="Unlock full feasibility study"
-                priceLabel="Get report — $25"
-                subtitle="Startup costs, revenue projections, competitive landscape, top locations, and 90-day launch plan."
-                onPurchase={() => handleTemplateCheckout('feasibility_study')}
-                loading={purchaseLoading}
-              >
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <p className="text-sm font-medium text-gray-900 mb-3">Full feasibility breakdown</p>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <MetricCard label="Startup cost range" value={consultantResult.feasibility_preview?.capital_required || '$150K - $350K'} />
-                    <MetricCard label="Break-even timeline" value="12-18 months" />
-                    <MetricCard label="Market size estimate" value={consultantResult.feasibility_preview?.market_size_estimate || 'Fee-for-service'} />
-                    <MetricCard label="Revenue benchmark" value={consultantResult.feasibility_preview?.revenue_benchmark || 'Austin, Denver, Raleigh'} />
-                  </div>
-                  <p className="text-xs text-gray-500">Detailed competitive landscape with pricing benchmarks, staffing models, and 90-day launch timeline...</p>
-                </div>
-              </BlurGate>
-
-              {consultantResult.similar_opportunities && consultantResult.similar_opportunities.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <p className="text-sm font-medium text-gray-900 mb-3">Related opportunities</p>
-                  <div className="space-y-2">
-                    {consultantResult.similar_opportunities.map((opp: { id: number; title: string; score?: number }) => (
-                      <OppRow key={opp.id} title={opp.title} score={opp.score} to={`/opportunity/${opp.id}`} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div className="bg-emerald-50/50 rounded-xl p-4 border border-emerald-100">
+                  <h4 className="text-xs font-semibold text-emerald-800 mb-3 flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Key Advantages
+                  </h4>
+                  <ul className="space-y-2">
+                    {(consultantResult.advantages || consultantResult.viability_report?.strengths || []).slice(0, 4).map((a: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-gray-700 leading-relaxed">
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                        {typeof a === 'string' ? a : JSON.stringify(a)}
+                      </li>
                     ))}
-                  </div>
+                    {!(consultantResult.advantages || consultantResult.viability_report?.strengths || []).length && (
+                      <li className="text-xs text-gray-400">Details available in full report</li>
+                    )}
+                  </ul>
                 </div>
-              )}
-
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={() => handleTemplateCheckout('feasibility_study')}
-                    disabled={purchaseLoading}
-                    className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition-colors"
-                    style={{ background: '#D97757' }}
-                  >
-                    Get full feasibility — $25
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!token) { window.location.href = '/login'; return }
-                      setConsultantResult(null)
-                    }}
-                    className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Save free summary
-                  </button>
+                <div className="bg-amber-50/50 rounded-xl p-4 border border-amber-100">
+                  <h4 className="text-xs font-semibold text-amber-800 mb-3 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500" /> Key Risks
+                  </h4>
+                  <ul className="space-y-2">
+                    {(consultantResult.risks || consultantResult.viability_report?.weaknesses || []).slice(0, 4).map((r: string, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-xs text-gray-700 leading-relaxed">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+                        {typeof r === 'string' ? r : JSON.stringify(r)}
+                      </li>
+                    ))}
+                    {!(consultantResult.risks || consultantResult.viability_report?.weaknesses || []).length && (
+                      <li className="text-xs text-gray-400">Risk analysis available in full report</li>
+                    )}
+                  </ul>
                 </div>
-                <p className="text-[10px] text-gray-400 text-center mt-2">Powered by DeepSeek + Claude AI · 4P's data from 6 live sources</p>
               </div>
-            </div>
+            </>
           )}
 
-          {inputMode === 'search' && consultantResult.success && (
+          {inputMode === 'search' && (
             <div className="space-y-3">
               {consultantResult.ai_synthesis && (
-                <div className="rounded-lg p-4 mb-3" style={{ borderLeft: '3px solid #D97757', background: '#FFF7ED' }}>
+                <div className="rounded-lg p-3 mb-3 border-l-3 bg-amber-50" style={{ borderLeft: '3px solid #D97757' }}>
                   <p className="text-sm text-gray-700 leading-relaxed">{consultantResult.ai_synthesis}</p>
                 </div>
               )}
-              <div className="text-sm text-gray-600">Found {consultantResult.total_count || 0} opportunities</div>
-              {consultantResult.opportunities?.slice(0, 5).map((opp: { id: number; title: string; score?: number; category?: string }) => (
+              <p className="text-sm text-gray-500">Found {consultantResult.total_count || 0} opportunities</p>
+              {consultantResult.opportunities?.slice(0, 5).map((opp: any) => (
                 <OppRow key={opp.id} title={opp.title} category={opp.category} score={opp.score} to={`/opportunity/${opp.id}`} />
               ))}
             </div>
           )}
 
-          {inputMode === 'location' && consultantResult.success && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
-                <MetricCard label="Competition" value={String(consultantResult.geo_analysis?.competitors?.length || 0)} color="#BA7517" />
-                <MetricCard label="Density" value={String(consultantResult.geo_analysis?.market_density || 'N/A')} color="#185FA5" />
-                <MetricCard label="Category" value={String(consultantResult.inferred_category || 'N/A')} color="#0F6E56" />
+          {inputMode === 'location' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {consultantResult.inferred_category && (
+                  <div className="p-3 rounded-xl border border-gray-100 bg-gray-50 text-center" style={{ borderTop: '2px solid #0F6E56' }}>
+                    <p className="text-[10px] text-gray-500 mb-1 font-medium">Category</p>
+                    <p className="text-sm font-bold text-[#0F6E56]">{consultantResult.inferred_category}</p>
+                  </div>
+                )}
+                <div className="p-3 rounded-xl border border-gray-100 bg-gray-50 text-center" style={{ borderTop: '2px solid #BA7517' }}>
+                  <p className="text-[10px] text-gray-500 mb-1 font-medium">Competitors</p>
+                  <p className="text-sm font-bold text-[#BA7517]">{consultantResult.geo_analysis?.competitors?.length || 0}</p>
+                </div>
+                {consultantResult.geo_analysis?.market_density && (
+                  <div className="p-3 rounded-xl border border-gray-100 bg-gray-50 text-center" style={{ borderTop: '2px solid #185FA5' }}>
+                    <p className="text-[10px] text-gray-500 mb-1 font-medium">Density</p>
+                    <p className="text-sm font-bold text-[#185FA5]">{consultantResult.geo_analysis.market_density}</p>
+                  </div>
+                )}
               </div>
               {consultantResult.four_ps_scores && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <span className="text-sm font-medium text-gray-900 mb-3 block">4P's Market Scores</span>
-                  <FourPsBar
-                    product={consultantResult.four_ps_scores.product || 0}
-                    price={consultantResult.four_ps_scores.price || 0}
-                    place={consultantResult.four_ps_scores.place || 0}
-                    promotion={consultantResult.four_ps_scores.promotion || 0}
-                  />
+                <div className="space-y-2">
+                  <FourPsHorizontalBar label="Product" score={consultantResult.four_ps_scores.product || 0} color="#0F6E56" />
+                  <FourPsHorizontalBar label="Price" score={consultantResult.four_ps_scores.price || 0} color="#185FA5" />
+                  <FourPsHorizontalBar label="Place" score={consultantResult.four_ps_scores.place || 0} color="#D97757" />
+                  <FourPsHorizontalBar label="Promotion" score={consultantResult.four_ps_scores.promotion || 0} color="#BA7517" />
                 </div>
               )}
-              {consultantResult.site_recommendations && consultantResult.site_recommendations.length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <p className="text-sm font-medium text-gray-900 mb-3">Site recommendations</p>
-                  <div className="space-y-2">
-                    {consultantResult.site_recommendations.map((site: { name?: string; area?: string; priority?: string; score?: number; reason?: string }, idx: number) => {
-                      const priority = site.priority || (site.score && site.score >= 80 ? 'High' : 'Medium') || (idx < 2 ? 'High' : 'Medium')
-                      return (
-                        <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-medium" style={{
-                            background: priority === 'High' ? '#E1F5EE' : '#FFF7ED',
-                            color: priority === 'High' ? '#085041' : '#BA7517',
-                          }}>{priority}</span>
-                          <div>
-                            <div className="text-sm font-medium text-gray-900">{site.name || site.area || `Site ${idx + 1}`}</div>
-                            {site.reason && <div className="text-xs text-gray-500">{site.reason}</div>}
-                          </div>
-                        </div>
-                      )
-                    })}
+              {consultantResult.site_recommendations?.slice(0, 3).map((site: any, idx: number) => (
+                <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-medium" style={{
+                    background: (site.priority === 'High' || idx < 2) ? '#E1F5EE' : '#FFF7ED',
+                    color: (site.priority === 'High' || idx < 2) ? '#085041' : '#BA7517',
+                  }}>{site.priority || (idx < 2 ? 'High' : 'Medium')}</span>
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{site.name || site.area || `Site ${idx + 1}`}</div>
+                    {site.reason && <div className="text-xs text-gray-500">{site.reason}</div>}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {inputMode === 'clone' && consultantResult.success && (
-            <div className="space-y-4">
-              {consultantResult.source_business && (
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Source business</p>
-                  <p className="font-medium text-gray-900">{consultantResult.source_business.name}</p>
-                  {consultantResult.source_business.category && (
-                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium" style={{ background: '#E1F5EE', color: '#085041' }}>
-                      {consultantResult.source_business.category}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="text-sm text-gray-600">
-                Found {consultantResult.matching_locations?.length || 0} matching locations
-              </div>
-              {consultantResult.matching_locations?.slice(0, 3).map((loc: { name: string; city: string; state: string; similarity_score: number; demographics_match?: number; competition_match?: number }, idx: number) => (
-                <div key={idx} className="p-4 bg-white rounded-xl border border-gray-200">
-                  <div className="flex justify-between mb-2">
-                    <div>
-                      <div className="font-medium text-gray-900">{loc.name}</div>
-                      <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold" style={{ color: '#D97757' }}>{loc.similarity_score}%</div>
-                      <div className="text-[10px] text-gray-400">Match</div>
-                    </div>
-                  </div>
-                  {(loc.demographics_match || loc.competition_match) && (
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      {loc.demographics_match && (
-                        <div>
-                          <span className="text-gray-500">Demographics: </span>
-                          <span className="font-medium text-gray-900">{loc.demographics_match}%</span>
-                        </div>
-                      )}
-                      {loc.competition_match && (
-                        <div>
-                          <span className="text-gray-500">Competition: </span>
-                          <span className="font-medium text-gray-900">{loc.competition_match}%</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               ))}
             </div>
           )}
 
-          <div className="text-xs text-gray-400 mt-2">
-            Processed in {((consultantResult.processing_time_ms || 0) / 1000).toFixed(1)}s
+          {inputMode === 'clone' && (
+            <div className="space-y-3">
+              {consultantResult.source_business && (
+                <div className="p-3 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Source business</p>
+                  <p className="font-medium text-gray-900">{consultantResult.source_business.name}</p>
+                  {consultantResult.source_business.category && (
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">
+                      {consultantResult.source_business.category}
+                    </span>
+                  )}
+                </div>
+              )}
+              <p className="text-sm text-gray-500">Found {consultantResult.matching_locations?.length || 0} matching locations</p>
+              {consultantResult.matching_locations?.slice(0, 3).map((loc: any, idx: number) => (
+                <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center">
+                  <div>
+                    <div className="font-medium text-gray-900 text-sm">{loc.name}</div>
+                    <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xl font-bold text-[#D97757]">{loc.similarity_score}%</div>
+                    <div className="text-[10px] text-gray-400">Match</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {inputMode === 'validate' && (
+            <div className="mt-6">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1.5 h-5 rounded-full bg-[#D97757]" />
+                <h3 className="text-base font-semibold text-gray-900">Just Generated</h3>
+                <span className="text-[10px] text-gray-400">Free with your analysis</span>
+              </div>
+              {isGuest && (
+                <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
+                  <LogIn className="w-4 h-4 text-amber-600 shrink-0" />
+                  <p className="text-xs text-amber-700">
+                    <Link to="/login" className="font-semibold underline hover:text-amber-900">Sign in</Link> to unlock free AI-generated reports with your analysis.
+                  </p>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { type: 'validate', title: 'Idea Validation', icon: Lightbulb, color: '#185FA5', desc: 'Business viability analysis with scoring' },
+                  { type: 'feasibility_study', title: 'Feasibility Study', icon: FileText, color: '#0F6E56', desc: 'Market opportunity and risk assessment' },
+                ].map((card) => {
+                  const isFeasibility = card.type === 'feasibility_study'
+                  const isGenerating = generatingFree === card.type
+                  const hasReport = isFeasibility ? !!freeReports.feasibility_study : !!consultantResult
+
+                  return (
+                    <button
+                      key={card.type}
+                      onClick={() => {
+                        if (isFeasibility && freeReports.feasibility_study) {
+                          setViewingReport(freeReports.feasibility_study)
+                        } else if (!isFeasibility && consultantResult) {
+                          setViewingReport({
+                            id: 0,
+                            report_type: 'idea_validation',
+                            status: 'completed',
+                            title: 'Idea Validation Report',
+                            content: JSON.stringify(consultantResult, null, 2),
+                            confidence_score: consultantResult.confidence_score,
+                            created_at: new Date().toISOString(),
+                          })
+                        }
+                      }}
+                      disabled={isGenerating}
+                      className="p-4 bg-white border-2 border-gray-100 rounded-xl hover:border-gray-300 hover:shadow-md transition-all text-left group disabled:opacity-60"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${card.color}12` }}>
+                          {isGenerating ? (
+                            <Loader2 className="w-4 h-4 animate-spin" style={{ color: card.color }} />
+                          ) : (
+                            <card.icon className="w-4 h-4" style={{ color: card.color }} />
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-sm font-semibold text-gray-900">{card.title}</span>
+                          <span className="text-[9px] ml-2 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 font-medium">FREE</span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-500">{card.desc}</p>
+                      <div className="flex items-center gap-1 mt-2 text-[10px] font-medium group-hover:text-gray-700 transition-colors" style={{ color: card.color }}>
+                        {isGenerating ? 'Generating...' : hasReport ? (
+                          <>View Report <ChevronRight className="w-3 h-3" /></>
+                        ) : 'Pending...'}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          <p className="text-[10px] text-gray-400 text-center mt-3">
+            Powered by DeepSeek + Claude AI · {((consultantResult.processing_time_ms || 0) / 1000).toFixed(1)}s
+          </p>
+        </div>
+      )}
+
+      {(consultantResult?.success || !consultantResult) && (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-5 rounded-full" style={{ background: '#BA7517' }} />
+              <h2 className="text-lg font-bold text-gray-900">Go Deeper</h2>
+              <span className="ml-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">{TOTAL_REPORTS} reports</span>
+            </div>
+            <span className="text-[10px] px-2.5 py-1 rounded-full font-semibold bg-amber-50 text-amber-700 border border-amber-200 hidden sm:inline">Save up to 30% with bundles</span>
+          </div>
+          <p className="text-xs text-gray-500 mb-5">Purchase additional reports tailored to your business context. Each uses your analysis data for personalized insights.</p>
+
+          {generateError && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm text-red-700">{generateError}</p>
+              <button onClick={() => setGenerateError(null)} className="text-xs text-red-500 mt-1 hover:underline">Dismiss</button>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            {REPORT_CATEGORIES.map((cat) => {
+              const CatIcon = cat.icon
+              const isCatExpanded = expandedCategory === cat.id
+              return (
+                <div key={cat.id} className={`rounded-xl transition-all ${isCatExpanded ? 'bg-white border border-gray-200 shadow-sm' : ''}`}>
+                  <button
+                    onClick={() => setExpandedCategory(isCatExpanded ? null : cat.id)}
+                    className={`w-full text-left flex items-center gap-2.5 px-3 py-3 rounded-xl transition-all ${
+                      isCatExpanded ? 'bg-gray-50 rounded-b-none border-b border-gray-100' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${cat.color}12` }}>
+                      <CatIcon className="w-3.5 h-3.5" style={{ color: cat.color }} />
+                    </div>
+                    <span className="flex-1 text-sm font-semibold text-gray-900">{cat.label}</span>
+                    <span className="text-[10px] text-gray-400">{cat.reports.length} reports</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isCatExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isCatExpanded && (
+                    <div className="px-2 pb-2 space-y-0.5">
+                      {cat.reports.map((report) => {
+                        const Icon = report.icon
+                        const isExpanded = expandedReport === report.slug
+                        return (
+                          <div key={report.slug} className={`transition-all ${isExpanded ? 'bg-white rounded-xl shadow-sm border border-gray-200' : ''}`}>
+                            <button
+                              onClick={() => setExpandedReport(isExpanded ? null : report.slug)}
+                              className={`w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                                isExpanded ? 'bg-gray-50 rounded-b-none' : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: `${report.accentColor}12` }}>
+                                <Icon className="w-3.5 h-3.5" style={{ color: report.accentColor }} />
+                              </div>
+                              <span className="flex-1 text-sm font-medium text-gray-900 truncate">{report.title}</span>
+                              <span className="text-xs text-gray-400 hidden sm:inline">{report.deliveryTime}</span>
+                              <span className="text-sm font-semibold min-w-[50px] text-right" style={{ color: report.accentColor }}>{report.price}</span>
+                              <span className="text-[10px] text-gray-400 line-through min-w-[80px] text-right hidden sm:inline">{report.consultantPrice}</span>
+                              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isExpanded && (
+                              <div className="px-4 pb-4 pt-3">
+                                <p className="text-xs text-gray-600 mb-3">{report.description}</p>
+                                <div className="flex flex-wrap gap-1.5 mb-4">
+                                  {report.sections.map((s, i) => (
+                                    <span key={i} className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-100">{s}</span>
+                                  ))}
+                                </div>
+                                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                                  <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                                      <Clock className="w-3.5 h-3.5" /> {report.deliveryTime}
+                                    </div>
+                                    <div className="flex items-center gap-1 text-[10px] text-gray-400 line-through">
+                                      {report.consultantPrice}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleReportAction(report)
+                                    }}
+                                    disabled={purchaseLoading || generatingReport === report.slug}
+                                    className="px-5 py-2 rounded-xl text-white text-xs font-semibold flex items-center gap-1.5 transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50"
+                                    style={{ background: report.accentColor }}
+                                  >
+                                    {purchaseLoading || generatingReport === report.slug ? (
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                      <ShoppingCart className="w-3.5 h-3.5" />
+                                    )}
+                                    {generatingReport === report.slug ? 'Generating...' : 'Get Report'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
 
-      {/* Generated Report Output */}
-      {generatedReport && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden animate-fade-in">
-          <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-4 text-white">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5" />
-                <span className="font-medium">{generatedReport.title || 'Report Generated'}</span>
+      {isGuest ? (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-1.5 h-5 rounded-full bg-gray-400" />
+            <h2 className="text-lg font-bold text-gray-900">Report History</h2>
+          </div>
+          <div className="text-center py-8">
+            <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-6 h-6 text-gray-400" />
+            </div>
+            <p className="text-sm font-medium text-gray-700 mb-1">Sign in to save and access your reports</p>
+            <p className="text-xs text-gray-400 mb-5">Your analysis data is preserved after sign-in</p>
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-all hover:shadow-md active:scale-[0.98]"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-1.5 h-5 rounded-full bg-[#185FA5]" />
+            <h2 className="text-lg font-bold text-gray-900">Report History</h2>
+            <span className="ml-auto text-[10px] text-gray-400">{reportHistory?.length || 0} reports</span>
+          </div>
+          {reportHistory && reportHistory.length > 0 ? (
+            <div className="space-y-2">
+              {reportHistory.slice(0, 10).map((report) => (
+                <button
+                  key={report.id}
+                  onClick={() => setViewingReport(report)}
+                  className="w-full text-left flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-all group"
+                >
+                  <div className="w-8 h-8 rounded-lg bg-[#185FA5]/10 flex items-center justify-center shrink-0">
+                    <FileText className="w-4 h-4 text-[#185FA5]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{report.title || report.report_type}</p>
+                    <p className="text-[10px] text-gray-400">
+                      {new Date(report.created_at).toLocaleDateString()} · {report.status}
+                    </p>
+                  </div>
+                  {report.confidence_score && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0F6E56]/10 text-[#0F6E56] font-semibold">{report.confidence_score}%</span>
+                  )}
+                  <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors shrink-0" />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
+                <FileText className="w-5 h-5 text-gray-300" />
               </div>
-              <div className="flex items-center gap-3">
-                {generatedReport.id && (
+              <p className="text-sm text-gray-400">No reports yet. Run an analysis to get started.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewingReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in print-container" onClick={() => setViewingReport(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-slide-up print-root" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-gradient-to-r from-[#0F6E56] to-[#185FA5] p-5 sm:p-6 text-white flex items-start justify-between shrink-0 report-header">
+              <div>
+                <p className="text-[10px] text-white/60 font-semibold uppercase tracking-wider">
+                  {viewingReport.report_type?.replace(/_/g, ' ')}
+                </p>
+                <h3 className="text-lg font-bold mt-1">
+                  {viewingReport.title || viewingReport.report_type?.replace(/_/g, ' ')}
+                </h3>
+                <div className="flex items-center gap-3 mt-2">
+                  <p className="text-xs text-white/70">
+                    Generated {new Date(viewingReport.created_at).toLocaleDateString()}
+                  </p>
+                  {viewingReport.confidence_score && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-medium">
+                      AI Confidence: {viewingReport.confidence_score}%
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setViewingReport(null)}
+                aria-label="Close report viewer"
+                className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors shrink-0 ml-4"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 sm:p-6 overflow-y-auto flex-1">
+              {viewingReport.summary && (
+                <div className="mb-5 p-4 bg-[#0F6E56]/5 rounded-xl border border-[#0F6E56]/15">
+                  <h4 className="text-sm font-bold text-gray-900 mb-1">Summary</h4>
+                  <p className="text-sm text-gray-700 leading-relaxed">{viewingReport.summary}</p>
+                </div>
+              )}
+
+              {viewingReport.content && (
+                <div className="prose prose-sm max-w-none">
+                  {(() => {
+                    try {
+                      const parsed = JSON.parse(viewingReport.content)
+                      if (parsed.viability_report || parsed.recommendation) {
+                        return (
+                          <div className="space-y-4">
+                            {parsed.verdict_summary && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-1">Recommendation</h4>
+                                <p className="text-sm text-gray-700">{parsed.verdict_summary}</p>
+                                {parsed.verdict_detail && <p className="text-xs text-gray-500 mt-1">{parsed.verdict_detail}</p>}
+                              </div>
+                            )}
+                            {parsed.viability_report?.summary && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-1">Analysis</h4>
+                                <p className="text-sm text-gray-700">{parsed.viability_report.summary}</p>
+                              </div>
+                            )}
+                            {parsed.advantages && parsed.advantages.length > 0 && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-1">Advantages</h4>
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {parsed.advantages.map((a: string, i: number) => (
+                                    <li key={i} className="text-sm text-gray-700">{a}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {parsed.risks && parsed.risks.length > 0 && (
+                              <div>
+                                <h4 className="text-sm font-semibold text-gray-900 mb-1">Risks</h4>
+                                <ul className="list-disc pl-5 space-y-1">
+                                  {parsed.risks.map((r: string, i: number) => (
+                                    <li key={i} className="text-sm text-gray-700">{r}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+                      return <pre className="text-xs text-gray-600 whitespace-pre-wrap">{JSON.stringify(parsed, null, 2)}</pre>
+                    } catch {
+                      const content = viewingReport.content!
+                      if (content.trim().startsWith('<') && content.includes('</')) {
+                        return <div className="text-sm text-gray-700 report-html-content" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }} />
+                      }
+                      const sections = content.split(/\n(?=#{1,3}\s)/)
+                      if (sections.length > 1) {
+                        return sections.map((section, i) => {
+                          const lines = section.trim().split('\n')
+                          const heading = lines[0].replace(/^#+\s*/, '')
+                          const body = lines.slice(1).join('\n').trim()
+                          return (
+                            <div key={i} className="mb-4">
+                              <h4 className="text-sm font-semibold text-gray-900 mb-1.5">{heading}</h4>
+                              <p className="text-sm text-gray-700 whitespace-pre-wrap">{body}</p>
+                            </div>
+                          )
+                        })
+                      }
+                      return <p className="text-sm text-gray-700 whitespace-pre-wrap">{content}</p>
+                    }
+                  })()}
+                </div>
+              )}
+
+              {!viewingReport.content && !viewingReport.summary && (
+                <div className="text-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Report content is being generated...</p>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-200 p-4 flex items-center justify-between bg-gray-50/80 backdrop-blur-sm shrink-0">
+              <div className="flex gap-2">
+                {isAuthenticated && viewingReport.id > 0 && (
                   <>
                     <button
-                      onClick={async () => {
-                        setExportingFormat('pdf')
-                        try {
-                          const res = await fetch(`/api/v1/reports/${generatedReport.id}/export/pdf`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                          })
-                          if (!res.ok) throw new Error('Export failed')
-                          const blob = await res.blob()
-                          const url = URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = `OppGrid - ${(generatedReport.title || 'Report').slice(0, 60)}.pdf`
-                          document.body.appendChild(a)
-                          a.click()
-                          document.body.removeChild(a)
-                          URL.revokeObjectURL(url)
-                        } catch { setPurchaseError('PDF export failed') }
-                        finally { setExportingFormat(null) }
-                      }}
-                      disabled={exportingFormat === 'pdf'}
-                      className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm flex items-center gap-1 disabled:opacity-50"
+                      onClick={() => handleExport('pdf')}
+                      disabled={!!exportingFormat}
+                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-all"
                     >
-                      {exportingFormat === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                      PDF
+                      {exportingFormat === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
                     </button>
                     <button
-                      onClick={async () => {
-                        setExportingFormat('docx')
-                        try {
-                          const res = await fetch(`/api/v1/reports/${generatedReport.id}/export/docx`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                          })
-                          if (!res.ok) throw new Error('Export failed')
-                          const blob = await res.blob()
-                          const url = URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = `OppGrid - ${(generatedReport.title || 'Report').slice(0, 60)}.docx`
-                          document.body.appendChild(a)
-                          a.click()
-                          document.body.removeChild(a)
-                          URL.revokeObjectURL(url)
-                        } catch { setPurchaseError('Word export failed') }
-                        finally { setExportingFormat(null) }
-                      }}
-                      disabled={exportingFormat === 'docx'}
-                      className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm flex items-center gap-1 disabled:opacity-50"
+                      onClick={() => handleExport('docx')}
+                      disabled={!!exportingFormat}
+                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-all"
                     >
-                      {exportingFormat === 'docx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-                      Word
+                      {exportingFormat === 'docx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Word
+                    </button>
+                    <button
+                      onClick={() => window.print()}
+                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-all"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Print
                     </button>
                   </>
                 )}
-                <button
-                  onClick={() => {
-                    const content = generatedReport.content || generatedReport.summary || ''
-                    const w = window.open('', '_blank')
-                    if (w) {
-                      w.document.write(`<!DOCTYPE html><html><head><title>${generatedReport.title || 'Report'}</title><style>body{font-family:system-ui,sans-serif;padding:40px;max-width:900px;margin:0 auto;line-height:1.6}.header{background:#7c3aed;color:white;padding:20px 28px;margin:-40px -40px 32px -40px}h1,h2{color:#1e293b}h2{color:#7c3aed}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d1d5db;padding:8px 12px}th{background:#f3f4f6}@media print{body{padding:0}.header{margin:0 0 20px 0}}</style></head><body><div class="header"><h1 style="color:white;margin:0">OppGrid</h1><div style="color:rgba(255,255,255,0.8)">${generatedReport.title || 'Report'}</div></div>${content}</body></html>`)
-                      w.document.close()
-                      w.print()
-                    }
-                  }}
-                  className="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-sm flex items-center gap-1"
-                >
-                  Print
-                </button>
-                <button onClick={() => setGeneratedReport(null)} className="text-white/80 hover:text-white ml-1">
-                  ✕
-                </button>
-              </div>
-            </div>
-          </div>
-          <div className="p-6">
-            {generatedReport.summary && (
-              <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm font-medium text-gray-700 mb-1">Summary</div>
-                <p className="text-sm text-gray-600">{generatedReport.summary}</p>
-              </div>
-            )}
-            {generatedReport.content && (
-              <div className="prose prose-sm max-w-none">
-                <div
-                  className="text-gray-800 text-sm leading-relaxed"
-                  dangerouslySetInnerHTML={{ __html: generatedReport.content }}
-                />
-              </div>
-            )}
-            {generatedReport.confidence_score && (
-              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2 text-xs text-gray-500">
-                <span>Confidence: {generatedReport.confidence_score}/100</span>
-                {generatedReport.completed_at && (
-                  <span>| Generated {new Date(generatedReport.completed_at).toLocaleDateString()}</span>
+                {!isAuthenticated && (
+                  <Link
+                    to="/login"
+                    className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-all"
+                  >
+                    <LogIn className="w-3.5 h-3.5" /> Sign in to export
+                  </Link>
                 )}
               </div>
-            )}
+              <button
+                onClick={() => setViewingReport(null)}
+                className="px-5 py-2 bg-[#0F6E56] text-white rounded-xl text-xs font-semibold hover:bg-[#0a5a46] transition-all"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

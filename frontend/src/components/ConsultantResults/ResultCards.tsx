@@ -2,10 +2,10 @@ import { Link } from 'react-router-dom'
 
 export function FourPsBar({ product, price, place, promotion }: { product: number; price: number; place: number; promotion: number }) {
   const bars = [
-    { label: 'Product', score: product, color: '#185FA5' },
-    { label: 'Price', score: price, color: '#0F6E56' },
-    { label: 'Place', score: place, color: '#BA7517' },
-    { label: 'Promotion', score: promotion, color: '#993556' },
+    { label: 'Product', score: product, color: '#0F6E56' },
+    { label: 'Price', score: price, color: '#185FA5' },
+    { label: 'Place', score: place, color: '#D97757' },
+    { label: 'Promotion', score: promotion, color: '#BA7517' },
   ]
   return (
     <div className="flex items-center gap-1.5">
@@ -17,6 +17,32 @@ export function FourPsBar({ product, price, place, promotion }: { product: numbe
           <span className="text-[9px] text-gray-400">{b.label[0]}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+export function FourPsHorizontalBar({ label, score, color }: { label: string; score: number; color: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs font-medium text-gray-600 w-20 text-right">{label}</span>
+      <div className="flex-1 h-3.5 bg-gray-100 rounded-full overflow-hidden">
+        <div className="h-full rounded-full transition-all duration-700 ease-out" style={{ width: `${score}%`, background: color }} />
+      </div>
+      <span className="text-xs font-bold w-10" style={{ color }}>{score}%</span>
+    </div>
+  )
+}
+
+export function ScoreRing({ score, label, color }: { score: number; label: string; color: string }) {
+  const r = 28, circ = 2 * Math.PI * r, offset = circ * (1 - score / 100)
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <svg width="68" height="68" viewBox="0 0 68 68">
+        <circle cx="34" cy="34" r={r} fill="none" stroke="#f0f0f0" strokeWidth="5" />
+        <circle cx="34" cy="34" r={r} fill="none" stroke={color} strokeWidth="5" strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" transform="rotate(-90 34 34)" />
+        <text x="34" y="36" textAnchor="middle" dominantBaseline="middle" fill={color} fontSize="14" fontWeight="700">{score}</text>
+      </svg>
+      <span className="text-[10px] text-gray-500 font-medium">{label}</span>
     </div>
   )
 }

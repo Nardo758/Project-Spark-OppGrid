@@ -387,10 +387,20 @@ async def check_report_access(
         raise HTTPException(status_code=404, detail="Template not found")
     
     user_tier = get_user_tier(current_user, db)
-    has_access = tier_has_access(user_tier, template.min_tier)
+    has_tier_access = tier_has_access(user_tier, template.min_tier)
+    
+    has_purchased = False
+    if not has_tier_access:
+        purchase = db.query(PurchasedTemplate).filter(
+            PurchasedTemplate.user_id == current_user.id,
+            PurchasedTemplate.template_slug == template_slug
+        ).first()
+        has_purchased = purchase is not None
     
     return {
-        "has_access": has_access,
+        "has_access": has_tier_access or has_purchased,
+        "has_tier_access": has_tier_access,
+        "has_purchased": has_purchased,
         "user_tier": user_tier,
         "required_tier": template.min_tier,
         "template_name": template.name
