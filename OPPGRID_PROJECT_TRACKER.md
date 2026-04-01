@@ -105,7 +105,74 @@
 
 ## 🎯 CRITICAL BLOCKERS
 
-### 1. 🔴 MISSING ENVIRONMENT VARIABLES
+### 1. 🔴 REPLIT DEPLOYMENT BLOCKER - PostGIS Schema Sync Error
+
+**Issue:** PostGIS schema synchronization error on Replit platform  
+**Error:** `ALTER TABLE 'spatial_ref_sys' ADD PRIMARY KEY ('srid')`  
+**Status:** Widespread issue, Replit engineering team working on fix  
+**Timeline:** No ETA provided  
+**Impact:** ❌ **Cannot deploy to Replit** (blocking production)  
+
+**Workarounds Identified:**
+
+#### Workaround A: Skip PostGIS Initialization (Recommended)
+```python
+# backend/app/db/database.py
+# Add conditional PostGIS import
+try:
+    from geoalchemy2 import Geometry
+    POSTGIS_AVAILABLE = True
+except:
+    POSTGIS_AVAILABLE = False
+    
+# Only initialize PostGIS if available
+if POSTGIS_AVAILABLE and not ON_REPLIT:
+    # Initialize PostGIS
+    pass
+```
+
+**Pros:** Keeps code structure, prevents error  
+**Cons:** Geo features disabled on Replit  
+**Effort:** 1-2 hours
+
+#### Workaround B: Use SQLite Instead (Fallback)
+```python
+# backend/.env
+DATABASE_URL=sqlite:///./oppgrid.db
+```
+
+**Pros:** No PostGIS needed, works on Replit  
+**Cons:** No spatial queries (trade-off)  
+**Effort:** 2-3 hours
+
+#### Workaround C: External PostgreSQL (Best)
+Use Render, Railway, or Supabase for PostgreSQL:
+```
+DATABASE_URL=postgresql://user:pass@external-db.com/oppgrid
+```
+
+**Pros:** Full PostGIS support, scales easily  
+**Cons:** Extra service, potential latency  
+**Effort:** 1 hour setup
+
+#### Workaround D: Disable Migrations Temporarily
+```bash
+# Skip PostGIS schema sync during deployment
+ALEMBIC_CONTEXT=skip_postgis alembic upgrade head
+```
+
+**Pros:** Minimal code changes  
+**Cons:** May cause schema inconsistencies  
+**Effort:** 30 minutes
+
+**Recommended Approach:**
+1. **Short-term:** Use SQLite (Workaround B) for development on Replit
+2. **Long-term:** Use external PostgreSQL (Workaround C) for production
+3. **Monitor:** Replit engineering fix (Workaround D as fallback)
+
+---
+
+### 2. 🔴 MISSING ENVIRONMENT VARIABLES
 
 ```
 DEEPSEEK_API_KEY         ❌ NOT SET
@@ -113,14 +180,14 @@ ANTHROPIC_API_KEY        ❌ NOT SET
 SERPAPI_KEY              ❌ NOT SET
 STRIPE_SECRET_KEY        ❌ NOT SET
 STRIPE_PUBLIC_KEY        ❌ NOT SET
-DATABASE_URL             ❌ NEEDS CONFIG
+DATABASE_URL             ❌ NEEDS CONFIG (See Blocker #1)
 ```
 
 **Impact:** 
-- Consultant Studio completely broken
+- Consultant Studio AI features disabled (DeepSeek/Claude)
 - Google scraper disabled
 - Stripe integration non-functional
-- AI features unavailable
+- Reports can't be fully generated
 
 ---
 
