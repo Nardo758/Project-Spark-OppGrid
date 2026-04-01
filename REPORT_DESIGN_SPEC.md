@@ -11,41 +11,103 @@
 
 This document defines the design, layout, and content structure for all OppGrid reports, particularly the **Validate Idea Report** generated in the Consultant Studio.
 
-All reports follow a consistent visual and structural template for brand consistency and professional presentation.
+All reports follow a consistent visual and structural template for **institutional, professional presentation** with:
+- **OppGrid branding** prominently displayed in header
+- **Report name/type** clearly labeled (e.g., "Validate Idea Analysis")
+- **Report date** clearly visible (e.g., "March 31, 2026")
+- **Professional layout** that looks like a corporate report
+- **Consistent styling** across all sections
+
+---
+
+## Design Philosophy
+
+**Goal:** Reports should look institutional and professional—the kind of document you'd send to investors, advisors, or co-founders.
+
+**Key Principles:**
+1. **Branded Header** - OppGrid logo/name top-center, unmistakable
+2. **Clear Metadata** - Date, report type, ID all immediately visible
+3. **Professional Typography** - Clean, serious fonts (no playful emojis in text)
+4. **Structured Layout** - Clear sections with visual hierarchy
+5. **Institutional Feel** - Look like a consulting report, not a casual document
+6. **Print-Ready** - Looks good on paper and screen
 
 ---
 
 ## 1. REPORT HEADER TEMPLATE
 
-### Visual Layout
+### Visual Layout (Institutional Design)
 
 ```
-═══════════════════════════════════════════════════════════════════
-  🎯 OppGrid Consultant Studio Report
-═══════════════════════════════════════════════════════════════════
+┌────────────────────────────────────────────────────────────────────┐
+│                                                                    │
+│                         🎯 OPPGRID                                 │
+│                    CONSULTANT STUDIO REPORT                        │
+│                                                                    │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  REPORT: Validate Idea Analysis                                   │
+│  SUBJECT: Mental Health Clinic                                    │
+│  DATE: March 31, 2026                                             │
+│  REPORT ID: REPT-2026-03-31-001                                   │
+│  TIME GENERATED: 10:45 PM PT                                      │
+│                                                                    │
+│  KEY VERDICT: HYBRID (Online + Physical) ✓ RECOMMENDED            │
+│  CONFIDENCE: 89%                                                  │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
 
-  VALIDATE IDEA ANALYSIS
+### PDF Header (Full Professional Layout)
 
-  Business Idea: Mental Health Clinic
-  Recommended Model: HYBRID (Online + Physical)
-  Confidence Score: 89%
-  Generated: March 31, 2026 at 10:45 PM PT
-  Report ID: REPT-2026-03-31-001
-
-───────────────────────────────────────────────────────────────────
+```
+╔════════════════════════════════════════════════════════════════════╗
+║                                                                    ║
+║                      ████  ██████  ████  ██████                  ║
+║                      █   █ █       █   █ █                        ║
+║                      ████  ██████  ████  ██████                  ║
+║                      █   █      █  █ █        █                   ║
+║                      ████  ██████  █  █ ██████                  ║
+║                                                                    ║
+║                    CONSULTANT STUDIO REPORT                        ║
+║                                                                    ║
+╠════════════════════════════════════════════════════════════════════╣
+║                                                                    ║
+║  REPORT NAME:           Validate Idea Analysis                    ║
+║  BUSINESS IDEA:         Mental Health Clinic                      ║
+║  REPORT ID:             REPT-2026-03-31-001                       ║
+║                                                                    ║
+║  REPORT DATE:           March 31, 2026                            ║
+║  GENERATED AT:          10:45 PM Pacific Time                     ║
+║  TIME TO GENERATE:      47 seconds                                ║
+║                                                                    ║
+║  ────────────────────────────────────────────────────────────    ║
+║                                                                    ║
+║  RECOMMENDATION:        HYBRID (Online + Physical)                ║
+║  CONFIDENCE SCORE:      89%                                       ║
+║  OVERALL RISK LEVEL:    MEDIUM (6.2/10)                           ║
+║                                                                    ║
+║  VERDICT:               ✓ PROCEED WITH VALIDATION                 ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝
 ```
 
 ### Header Fields
 
-| Field | Type | Max Length | Required | Notes |
-|-------|------|-----------|----------|-------|
-| `report_type` | enum | N/A | Yes | feasibility_study, market_analysis, business_plan, etc. |
-| `report_title` | string | 60 chars | Yes | "VALIDATE IDEA ANALYSIS" |
-| `business_idea` | string | 200 chars | Yes | User's original input |
-| `recommendation` | enum | N/A | Yes | online, physical, hybrid |
-| `confidence_score` | integer | N/A | Yes | 0-100, shown as % |
-| `generated_at` | datetime | N/A | Yes | ISO 8601 format, user's timezone |
-| `report_id` | string | 20 chars | Yes | Unique identifier: REPT-YYYY-MM-DD-NNN |
+| Field | Type | Max Length | Required | Display | Notes |
+|-------|------|-----------|----------|---------|-------|
+| `oppgrid_logo` | image | N/A | Yes | Top center | OppGrid branding |
+| `report_type_display` | string | 60 | Yes | Top | "CONSULTANT STUDIO REPORT" |
+| `report_name` | string | 100 | Yes | Line 1 | "Validate Idea Analysis" / "Market Analysis" / etc. |
+| `subject` | string | 200 | Yes | Line 2 | User's business idea or subject |
+| `report_id` | string | 20 | Yes | Line 3 | Unique: REPT-YYYY-MM-DD-NNN |
+| `report_date` | date | N/A | Yes | Line 4 | "March 31, 2026" (formatted) |
+| `generated_at` | datetime | N/A | Yes | Line 5 | "10:45 PM PT" (user's timezone) |
+| `generation_time_ms` | integer | N/A | Yes | Line 6 | "47 seconds" |
+| `recommendation` | enum | N/A | Yes | Verdict section | online, physical, hybrid |
+| `confidence_score` | integer | N/A | Yes | Verdict section | 0-100, shown as % |
+| `risk_score` | float | N/A | Yes | Verdict section | 0-10 scale |
+| `verdict_recommendation` | enum | N/A | Yes | Bottom | proceed, proceed_with_caution, do_not_proceed |
 
 ---
 
@@ -672,6 +734,100 @@ Need expert consultation? Book a consultant: /experts/booking
 - Orientation: Portrait
 - Font: Inter or Helvetica
 
+**Header Styling:**
+```css
+.report-header {
+  border: 2px solid #1C1917;
+  border-radius: 8px;
+  padding: 24px;
+  background: #FFFFFF;
+  page-break-after: avoid;
+  margin-bottom: 24px;
+}
+
+.report-header-top {
+  text-align: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #E5E5E5;
+  padding-bottom: 16px;
+}
+
+.report-logo {
+  font-size: 32px;
+  font-weight: bold;
+  color: #D97757;
+  margin-bottom: 8px;
+  letter-spacing: 2px;
+}
+
+.report-type {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1C1917;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.report-metadata {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  font-size: 11px;
+  color: #4B5563;
+  margin: 12px 0;
+}
+
+.metadata-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.metadata-label {
+  font-weight: 600;
+  color: #1C1917;
+  min-width: 140px;
+}
+
+.report-verdict {
+  background: #F5F5F4;
+  border-left: 4px solid #D97757;
+  padding: 16px;
+  margin-top: 16px;
+  border-radius: 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.verdict-item {
+  font-size: 11px;
+}
+
+.verdict-label {
+  font-weight: 600;
+  color: #1C1917;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.verdict-value {
+  font-size: 18px;
+  font-weight: bold;
+  color: #D97757;
+}
+
+.verdict-recommendation {
+  grid-column: 1 / -1;
+  background: #DCFCE7;
+  border-left: 4px solid #0F6E56;
+  padding: 12px;
+  border-radius: 4px;
+  color: #15803D;
+  font-weight: 600;
+  text-align: center;
+}
+```
+
 **Section Styling:**
 ```css
 h1 {
@@ -749,17 +905,31 @@ p {
 ### Full "Mental Health Clinic" Report
 
 ```
-═══════════════════════════════════════════════════════════════════
-  🎯 OppGrid Consultant Studio Report
-═══════════════════════════════════════════════════════════════════
-
-VALIDATE IDEA ANALYSIS
-
-Business Idea: Mental Health Clinic
-Recommended Model: HYBRID (Online + Physical)
-Confidence Score: 89%
-Generated: March 31, 2026 at 10:45 PM PT
-Report ID: REPT-2026-03-31-001
+╔════════════════════════════════════════════════════════════════════╗
+║                                                                    ║
+║                         🎯 OPPGRID                                 ║
+║                    CONSULTANT STUDIO REPORT                        ║
+║                                                                    ║
+╠════════════════════════════════════════════════════════════════════╣
+║                                                                    ║
+║  REPORT NAME:           Validate Idea Analysis                    ║
+║  SUBJECT:               Mental Health Clinic                      ║
+║  REPORT ID:             REPT-2026-03-31-001                       ║
+║                                                                    ║
+║  DATE:                  March 31, 2026                            ║
+║  TIME GENERATED:        10:45 PM Pacific Time                     ║
+║  ANALYSIS DURATION:     47 seconds                                ║
+║                                                                    ║
+║  ────────────────────────────────────────────────────────────    ║
+║                                                                    ║
+║  RECOMMENDATION:        HYBRID (Online + Physical)                ║
+║  CONFIDENCE SCORE:      89%                                       ║
+║  RISK LEVEL:            MEDIUM (6.2/10)                           ║
+║                                                                    ║
+║  VERDICT:               ✓ PROCEED WITH VALIDATION                 ║
+║                         (Low-Risk Exploration Phase)              ║
+║                                                                    ║
+╚════════════════════════════════════════════════════════════════════╝
 
 ───────────────────────────────────────────────────────────────────
 
