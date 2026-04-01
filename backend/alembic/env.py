@@ -14,15 +14,8 @@ import app.models
 
 config = context.config
 
-database_url = os.getenv("DATABASE_URL")
-if not database_url:
-    pghost = os.getenv("PGHOST", "localhost")
-    pgport = os.getenv("PGPORT", "5432")
-    pguser = os.getenv("PGUSER", "postgres")
-    pgpassword = os.getenv("PGPASSWORD", "")
-    pgdatabase = os.getenv("PGDATABASE", "replit")
-    database_url = f"postgresql://{pguser}:{pgpassword}@{pghost}:{pgport}/{pgdatabase}"
-
+from app.db.database import get_database_url
+database_url = get_database_url()
 config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
