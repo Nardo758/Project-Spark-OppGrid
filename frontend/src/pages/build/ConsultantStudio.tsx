@@ -67,7 +67,18 @@ const TABS: Tab[] = [
 // Types for API responses
 interface ViabilityReport {
   summary?: string
+  executive_summary?: string
+  market_opportunity?: string
+  value_proposition?: string
+  revenue_model?: string
+  execution_feasibility?: string
+  competitive_positioning?: string
+  key_success_factors?: string[]
+  critical_risks?: string[]
+  next_steps?: string[]
   market_size?: string | Record<string, unknown>
+  market_size_estimate?: string
+  tam_growth_rate?: string
   tam?: string
   growth?: string
   competition?: string
@@ -77,18 +88,8 @@ interface ViabilityReport {
   risks?: string[]
   weaknesses?: string[]
   key_actions?: string[]
-  four_ps_analysis?: {
-    product?: string
-    price?: string
-    place?: string
-    promotion?: string
-  }
-  four_ps_scores?: {
-    product_score?: number
-    price_score?: number
-    place_score?: number
-    promotion_score?: number
-  }
+  recommendation?: string
+  recommendation_rationale?: string
   [key: string]: any
 }
 
@@ -627,78 +628,107 @@ export default function ConsultantStudio() {
             </div>
           )}
 
-          {/* 4P's Detailed Analysis (from AI) */}
-          {validateResult.viability_report?.four_ps_analysis && (
+          {/* Enriched Analysis Sections */}
+          {validateResult.viability_report && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-sm font-medium text-gray-900">4P's Framework Analysis</span>
+                <span className="text-sm font-medium text-gray-900">Detailed Analysis</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#F3E8FF', color: '#6B21A8' }}>AI-Powered</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Product */}
-                <div className="border-l-4 border-blue-500 pl-4">
-                  <h4 className="text-xs font-bold text-blue-700 mb-2">📦 PRODUCT</h4>
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    {validateResult.viability_report.four_ps_analysis.product || 'Product analysis in progress...'}
+              
+              {/* Market Opportunity */}
+              {validateResult.viability_report.market_opportunity && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Market Opportunity</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {validateResult.viability_report.market_opportunity}
                   </p>
-                  {validateResult.viability_report.four_ps_scores?.product_score && (
-                    <div className="mt-2 pt-2 border-t border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-700">Score</span>
-                        <span className="text-xs font-bold text-blue-700">{validateResult.viability_report.four_ps_scores.product_score}/100</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
+              )}
 
-                {/* Price */}
-                <div className="border-l-4 border-green-500 pl-4">
-                  <h4 className="text-xs font-bold text-green-700 mb-2">💰 PRICE</h4>
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    {validateResult.viability_report.four_ps_analysis.price || 'Pricing analysis in progress...'}
+              {/* Value Proposition */}
+              {validateResult.viability_report.value_proposition && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Value Proposition & Market Fit</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {validateResult.viability_report.value_proposition}
                   </p>
-                  {validateResult.viability_report.four_ps_scores?.price_score && (
-                    <div className="mt-2 pt-2 border-t border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-700">Score</span>
-                        <span className="text-xs font-bold text-green-700">{validateResult.viability_report.four_ps_scores.price_score}/100</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
+              )}
 
-                {/* Place */}
-                <div className="border-l-4 border-orange-500 pl-4">
-                  <h4 className="text-xs font-bold text-orange-700 mb-2">📍 PLACE</h4>
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    {validateResult.viability_report.four_ps_analysis.place || 'Location analysis in progress...'}
+              {/* Revenue Model */}
+              {validateResult.viability_report.revenue_model && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Revenue Model & Unit Economics</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {validateResult.viability_report.revenue_model}
                   </p>
-                  {validateResult.viability_report.four_ps_scores?.place_score && (
-                    <div className="mt-2 pt-2 border-t border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-700">Score</span>
-                        <span className="text-xs font-bold text-orange-700">{validateResult.viability_report.four_ps_scores.place_score}/100</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
+              )}
 
-                {/* Promotion */}
-                <div className="border-l-4 border-red-500 pl-4">
-                  <h4 className="text-xs font-bold text-red-700 mb-2">📢 PROMOTION</h4>
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    {validateResult.viability_report.four_ps_analysis.promotion || 'Marketing analysis in progress...'}
+              {/* Execution Feasibility */}
+              {validateResult.viability_report.execution_feasibility && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Go-to-Market & Execution</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {validateResult.viability_report.execution_feasibility}
                   </p>
-                  {validateResult.viability_report.four_ps_scores?.promotion_score && (
-                    <div className="mt-2 pt-2 border-t border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-700">Score</span>
-                        <span className="text-xs font-bold text-red-700">{validateResult.viability_report.four_ps_scores.promotion_score}/100</span>
-                      </div>
-                    </div>
+                </div>
+              )}
+
+              {/* Competitive Positioning */}
+              {validateResult.viability_report.competitive_positioning && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Competitive Positioning</h4>
+                  <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
+                    {validateResult.viability_report.competitive_positioning}
+                  </p>
+                </div>
+              )}
+
+              {/* Key Success Factors */}
+              {validateResult.viability_report.key_success_factors && validateResult.viability_report.key_success_factors.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Critical Success Factors</h4>
+                  <ul className="space-y-1">
+                    {validateResult.viability_report.key_success_factors.map((factor: string, i: number) => (
+                      <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+                        {String(factor)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Critical Risks */}
+              {validateResult.viability_report.critical_risks && validateResult.viability_report.critical_risks.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-gray-900 mb-2">Critical Risks to Mitigate</h4>
+                  <ul className="space-y-1">
+                    {validateResult.viability_report.critical_risks.map((risk: string, i: number) => (
+                      <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+                        {String(risk)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Recommendation */}
+              {validateResult.viability_report.recommendation && (
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm font-semibold text-gray-900">Recommendation: {validateResult.viability_report.recommendation}</span>
+                  </div>
+                  {validateResult.viability_report.recommendation_rationale && (
+                    <p className="text-sm text-gray-600 mt-2">
+                      {validateResult.viability_report.recommendation_rationale}
+                    </p>
                   )}
                 </div>
-              </div>
+              )}
             </div>
           )}
 

@@ -258,46 +258,37 @@ Return a JSON object with these fields:
 Return ONLY valid JSON, no markdown formatting."""
 
         elif task_type == AITaskType.MARKET_RESEARCH:
-            return f"""You are a senior business consultant. Provide a comprehensive viability analysis using the 4 P's Framework.
+            return f"""You are a senior business consultant. Provide a comprehensive, enriched viability analysis.
 
 Business Idea: {idea}
 {f"Additional Context:{chr(10)}{context_str}" if context_str else ""}
 {f"Specific Request: {request}" if request else ""}
 
-Analyze this idea through the 4 P's Marketing Framework:
-1. PRODUCT: What is being offered? Unique value proposition? Product-market fit?
-2. PRICE: Pricing strategy? Customer willingness to pay? Revenue model viability?
-3. PLACE: Distribution channels? Geographic market? Location dependency?
-4. PROMOTION: Marketing approach? Customer acquisition? Brand positioning?
+Analyze this business idea deeply across:
+- The offering & value proposition (product viability, differentiation, market fit)
+- Revenue potential & unit economics (pricing, margins, customer willingness to pay)
+- Distribution & market access (go-to-market, channels, geographic scalability, location dependency)
+- Customer acquisition & positioning (competitive differentiation, marketing angles, brand potential)
 
-Also provide traditional SWOT analysis (strengths, weaknesses, opportunities, threats).
-
-Return a JSON object with these fields:
+Return a JSON object with these enriched fields:
 {{
-  "summary": "<2-3 sentence executive summary referencing 4 P's impact>",
-  "four_ps_analysis": {{
-    "product": "<analysis of product viability, differentiation, fit>",
-    "price": "<analysis of pricing strategy, revenue potential, margins>",
-    "place": "<analysis of distribution, geographic feasibility, location strategy>",
-    "promotion": "<analysis of go-to-market, customer acquisition, brand positioning>"
-  }},
-  "four_ps_scores": {{
-    "product_score": <0-100>,
-    "price_score": <0-100>,
-    "place_score": <0-100>,
-    "promotion_score": <0-100>
-  }},
-  "strengths": ["strength1", "strength2", "strength3", "strength4"],
-  "weaknesses": ["weakness1", "weakness2", "weakness3"],
-  "opportunities": ["opportunity1", "opportunity2", "opportunity3"],
-  "threats": ["threat1", "threat2", "threat3"],
-  "market_size_estimate": "<estimate like '$X billion' or 'Unknown'>",
+  "summary": "<3-4 sentence executive summary with key viability drivers>",
+  "market_opportunity": "<2-3 paragraphs: TAM, competitive landscape, growth drivers, barriers to entry>",
+  "value_proposition": "<2-3 paragraphs: What makes this unique? Product-market fit? Customer pain points addressed?>",
+  "revenue_model": "<2-3 paragraphs: Pricing strategy, unit economics, customer LTV, scaling implications>",
+  "execution_feasibility": "<2-3 paragraphs: Go-to-market complexity, resource requirements, timeline to breakeven>",
+  "competitive_positioning": "<2 paragraphs: Direct/indirect competitors, defensibility, sustainable advantages>",
+  "key_success_factors": ["factor1", "factor2", "factor3", "factor4", "factor5"],
+  "critical_risks": ["risk1", "risk2", "risk3", "risk4"],
+  "next_steps": ["action1", "action2", "action3"],
+  "market_size_estimate": "<estimate like '$X billion' or range like '$500M-$2B'>",
+  "tam_growth_rate": "<annual growth rate if applicable>",
   "confidence": <60-95 confidence score>,
   "recommendation": "GO" | "NO-GO" | "CONDITIONAL",
-  "key_actions": ["action1", "action2", "action3"]
+  "recommendation_rationale": "<1-2 sentences explaining the recommendation>"
 }}
 
-Be specific to the actual business idea. Frame analysis around the 4 P's.
+Provide deep, actionable insights. Be specific to the actual business idea.
 Return ONLY valid JSON, no markdown formatting."""
 
         elif task_type == AITaskType.BUSINESS_PLAN_GENERATION:

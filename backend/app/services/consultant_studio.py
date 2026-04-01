@@ -1979,7 +1979,7 @@ class ConsultantStudioService:
         data = {
             "idea": idea,
             "context": context or {},
-            "request": "Generate a comprehensive viability analysis using the 4 P's Framework (Product, Price, Place, Promotion) along with SWOT analysis.",
+            "request": "Generate a comprehensive, deeply enriched viability analysis with detailed market opportunity, value proposition, revenue model, and execution feasibility assessments.",
         }
 
         try:
@@ -1993,20 +1993,23 @@ class ConsultantStudioService:
             if isinstance(response, dict) and response:
                 return {
                     "executive_summary": response.get("summary", f"Viability analysis for: {idea[:100]}"),
-                    "four_ps_analysis": response.get("four_ps_analysis", {
-                        "product": "Analysis unavailable",
-                        "price": "Analysis unavailable",
-                        "place": "Analysis unavailable",
-                        "promotion": "Analysis unavailable"
-                    }),
-                    "four_ps_scores": response.get("four_ps_scores", {}),
+                    "market_opportunity": response.get("market_opportunity"),
+                    "value_proposition": response.get("value_proposition"),
+                    "revenue_model": response.get("revenue_model"),
+                    "execution_feasibility": response.get("execution_feasibility"),
+                    "competitive_positioning": response.get("competitive_positioning"),
+                    "key_success_factors": response.get("key_success_factors", []),
+                    "critical_risks": response.get("critical_risks", []),
+                    "next_steps": response.get("next_steps", []),
                     "strengths": response.get("strengths", []),
                     "weaknesses": response.get("weaknesses", []),
                     "opportunities": response.get("opportunities", []),
                     "threats": response.get("threats", []),
                     "market_size_estimate": response.get("market_size_estimate"),
+                    "tam_growth_rate": response.get("tam_growth_rate"),
                     "recommendation": response.get("recommendation"),
-                    "key_actions": response.get("key_actions", []),
+                    "recommendation_rationale": response.get("recommendation_rationale"),
+                    "key_actions": response.get("next_steps", response.get("key_actions", [])),
                     "ai_insights": response,
                     "confidence_score": response.get("confidence", 75),
                 }
