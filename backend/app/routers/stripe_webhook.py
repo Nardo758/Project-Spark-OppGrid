@@ -680,12 +680,10 @@ def _handle_studio_report_purchase(session: dict, db: Session):
         summary=json.dumps(report_metadata),
     )
     db.add(generated_report)
-    db.commit()
+    db.flush()  # Assign ID without committing
     report_id = generated_report.id
     
-    logger.info(f"Created pending studio report {report_id} for generation")
-    
-    # Record transaction
+    # Record transaction (atomic with report creation)
     tx = Transaction(
         user_id=int(user_id) if user_id else None,
         type=TransactionType.UNLOCK,
@@ -701,7 +699,7 @@ def _handle_studio_report_purchase(session: dict, db: Session):
         }),
     )
     db.add(tx)
-    db.commit()
+    db.commit()  # Single atomic commit for both report and transaction
     
     logger.info(f"Studio report purchase recorded: report_id={report_id}, amount={session.get('amount_total', 0)}")
 
