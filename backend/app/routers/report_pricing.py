@@ -1405,23 +1405,24 @@ class FreeReportGenerateRequest(BaseModel):
 async def generate_free_report(
     request_data: FreeReportGenerateRequest,
     request: Request,
-    current_user: User = Depends(get_current_active_user),
+    current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """Generate a report using free allocation (no payment required)"""
+    """Generate a report using free allocation (no payment required, supports guests)"""
     from app.models.generated_report import GeneratedReport, ReportType, ReportStatus
     from app.services.llm_ai_engine import llm_ai_engine_service
     import time
     import logging
     logger = logging.getLogger(__name__)
 
-    free_check = report_usage_service.check_free_available(current_user, db)
-
-    if not free_check["is_free"]:
-        raise HTTPException(
-            status_code=402,
-            detail="No free reports remaining. Please purchase this report."
-        )
+    free_check = {"is_free": True, "reason": "guest_free_report"}
+    if current_user:
+        free_check = report_usage_service.check_free_available(current_user, db)
+        if not free_check["is_free"]:
+            raise HTTPException(
+                status_code=402,
+                detail="No free reports remaining. Please purchase this report."
+            )
 
     if request_data.report_type not in REPORT_PRODUCTS:
         raise HTTPException(status_code=400, detail=f"Invalid report type: {request_data.report_type}")
@@ -1451,7 +1452,7 @@ async def generate_free_report(
     report_product = REPORT_PRODUCTS[request_data.report_type]
 
     report = GeneratedReport(
-        user_id=current_user.id,
+        user_id=current_user.id if current_user else None,
         opportunity_id=request_data.opportunity_id if opportunity else None,
         report_type=report_type_enum,
         status=ReportStatus.GENERATING,
@@ -1612,7 +1613,8 @@ Do NOT include <html>, <head>, or <body> tags - just the content HTML.
         report.generation_time_ms = generation_time_ms
         report.confidence_score = 85
 
-        report_usage_service.increment_usage(current_user.id, db)
+        if current_user:
+            report_usage_service.increment_usage(current_user.id, db)
 
         db.commit()
         db.refresh(report)
@@ -1628,7 +1630,7 @@ Do NOT include <html>, <head>, or <body> tags - just the content HTML.
         db,
         action="report_pricing.free_report_generated",
         actor=current_user,
-        actor_type="user",
+        actor_type="user" if current_user else "guest",
         request=request,
         resource_type="report",
         resource_id=report.id,
