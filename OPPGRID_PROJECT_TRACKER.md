@@ -105,70 +105,37 @@
 
 ## 🎯 CRITICAL BLOCKERS
 
-### 1. 🔴 REPLIT DEPLOYMENT BLOCKER - PostGIS Schema Sync Error
+### ✅ 1. RESOLVED - PostGIS Removed (April 1, 2026)
 
-**Issue:** PostGIS schema synchronization error on Replit platform  
-**Error:** `ALTER TABLE 'spatial_ref_sys' ADD PRIMARY KEY ('srid')`  
-**Status:** Widespread issue, Replit engineering team working on fix  
-**Timeline:** No ETA provided  
-**Impact:** ❌ **Cannot deploy to Replit** (blocking production)  
+**Original Issue:** `ALTER TABLE 'spatial_ref_sys' ADD PRIMARY KEY ('srid')` error on Replit  
+**Root Cause:** PostGIS wasn't actually needed - OppGrid uses simple lat/lng storage  
+**Solution:** Removed all PostGIS references from codebase  
 
-**Workarounds Identified:**
+**What Changed:**
+- ✅ Removed PostGIS migration hooks from `20251219_0004_bootstrap_schema.py`
+- ✅ No Geometry columns in any models (confirmed)
+- ✅ Location data stored as `latitude` + `longitude` floats
+- ✅ Updated DOT traffic service docstring (no PostGIS mention)
+- ✅ geoalchemy2 not in requirements.txt
 
-#### Workaround A: Skip PostGIS Initialization (Recommended)
+**Impact:** ✅ **OppGrid now deploys cleanly to Replit**
+
+**Distance Calculations (if needed):**
+Use simple haversine function in Python instead of PostGIS:
 ```python
-# backend/app/db/database.py
-# Add conditional PostGIS import
-try:
-    from geoalchemy2 import Geometry
-    POSTGIS_AVAILABLE = True
-except:
-    POSTGIS_AVAILABLE = False
-    
-# Only initialize PostGIS if available
-if POSTGIS_AVAILABLE and not ON_REPLIT:
-    # Initialize PostGIS
-    pass
+def haversine(lat1, lon1, lat2, lon2):
+    """Calculate miles between two points"""
+    from math import radians, cos, sin, asin, sqrt
+    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a))
+    mi = 3959 * c
+    return mi
 ```
 
-**Pros:** Keeps code structure, prevents error  
-**Cons:** Geo features disabled on Replit  
-**Effort:** 1-2 hours
-
-#### Workaround B: Use SQLite Instead (Fallback)
-```python
-# backend/.env
-DATABASE_URL=sqlite:///./oppgrid.db
-```
-
-**Pros:** No PostGIS needed, works on Replit  
-**Cons:** No spatial queries (trade-off)  
-**Effort:** 2-3 hours
-
-#### Workaround C: External PostgreSQL (Best)
-Use Render, Railway, or Supabase for PostgreSQL:
-```
-DATABASE_URL=postgresql://user:pass@external-db.com/oppgrid
-```
-
-**Pros:** Full PostGIS support, scales easily  
-**Cons:** Extra service, potential latency  
-**Effort:** 1 hour setup
-
-#### Workaround D: Disable Migrations Temporarily
-```bash
-# Skip PostGIS schema sync during deployment
-ALEMBIC_CONTEXT=skip_postgis alembic upgrade head
-```
-
-**Pros:** Minimal code changes  
-**Cons:** May cause schema inconsistencies  
-**Effort:** 30 minutes
-
-**Recommended Approach:**
-1. **Short-term:** Use SQLite (Workaround B) for development on Replit
-2. **Long-term:** Use external PostgreSQL (Workaround C) for production
-3. **Monitor:** Replit engineering fix (Workaround D as fallback)
+**Status:** 🟢 RESOLVED - Ready to deploy
 
 ---
 

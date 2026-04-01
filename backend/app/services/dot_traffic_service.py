@@ -2,8 +2,8 @@
 DOT Traffic Data Service
 
 Fetches Annual Average Daily Traffic (AADT) data from state DOT ArcGIS services.
-Queries local PostgreSQL database with PostGIS for cached DOT data when available.
-Falls back to estimates when API data is unavailable.
+Caches traffic data in PostgreSQL database when available.
+Falls back to estimates using haversine distance calculations when API data unavailable.
 
 State DOT ArcGIS endpoints vary - this service maintains a registry of known endpoints
 and queries the appropriate one based on coordinates.
