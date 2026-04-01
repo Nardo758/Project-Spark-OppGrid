@@ -147,8 +147,33 @@ class ConsultantStudioService:
     ) -> Dict[str, Any]:
         """
         Path 1: Validate Idea - Online vs Physical decision engine
-        Uses DeepSeek for pattern analysis + Claude for viability report
-        OPTIMIZED: Parallel AI calls for faster response (DeepSeek + Claude run concurrently)
+        
+        TWO-STEP AI WORKFLOW:
+        
+        Step 1 (Parallel): DeepSeek Draft Generation
+        - Uses DeepSeek v3 for fast pattern analysis
+        - Generates initial structure and analysis
+        - Runs in parallel with other tasks
+        - Output: pattern_analysis, business_type_scores
+        
+        Step 2 (Sequential): Claude Opus Polishing
+        - Uses Claude Opus for refined viability report
+        - Polishes and enhances initial analysis
+        - Ensures professional, institutional quality
+        - Output: viability_report with market insights
+        
+        Additional Tasks (Parallel):
+        - Similar opportunities lookup from database
+        - Report data enrichment
+        
+        OPTIMIZATION: All AI calls and lookups run in parallel via asyncio.gather()
+        Total time: typically 13-25 seconds
+        
+        Response includes:
+        - Business type recommendation (online/physical/hybrid)
+        - Scores (online_score, physical_score)
+        - Full report sections (market, business model, financials, risks, next steps)
+        - Confidence scoring
         """
         import time
         import asyncio

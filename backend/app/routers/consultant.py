@@ -173,7 +173,30 @@ async def validate_idea(
     - PHYSICAL: Location-based business model
     - HYBRID: Combination of both
     
-    Uses DeepSeek for pattern analysis and Claude for viability reports.
+    AI GENERATION WORKFLOW (Two-Step Process):
+    
+    Step 1: DeepSeek Draft (8-15 seconds)
+    - Generates initial content for all 6 report sections
+    - Analytical, data-driven approach
+    - Sections: Executive Summary, Market Opportunity, Business Model,
+              Financial Viability, Risk Assessment, Next Steps
+    - Calls run in parallel for speed
+    
+    Step 2: Claude Opus Polish (5-10 seconds)
+    - Refines and polishes all sections from DeepSeek
+    - Improves clarity, tone, and actionability
+    - Ensures institutional, professional quality
+    - Single sequential call with all sections
+    
+    Total Generation Time: ~15-25 seconds
+    
+    Data Sources:
+    - report_data_service: Market data, financial benchmarks
+    - detected_trends: Market trends and signals
+    - market_growth_trajectories: Growth metrics
+    - Similar opportunities lookup: Proof-of-concept examples
+    
+    Response includes 6 comprehensive report sections plus scores/metrics.
     """
     import asyncio
     service = ConsultantStudioService(db)
