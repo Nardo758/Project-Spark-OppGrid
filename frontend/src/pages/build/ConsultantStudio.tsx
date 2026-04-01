@@ -7,13 +7,10 @@ import {
   Copy,
   Loader2,
   CheckCircle,
-  TrendingUp,
   FileText,
   Sparkles,
   Map,
   AlertCircle,
-  Lock,
-  Shield,
   ChevronRight,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
@@ -22,17 +19,17 @@ import ReportSelectionPanel from '../../components/ReportSelectionPanel'
 
 function FourPsBar({ product, price, place, promotion }: { product: number; price: number; place: number; promotion: number }) {
   const bars = [
-    { label: 'Product', score: product, color: 'bg-blue-500' },
-    { label: 'Price', score: price, color: 'bg-green-500' },
-    { label: 'Place', score: place, color: 'bg-amber-500' },
-    { label: 'Promotion', score: promotion, color: 'bg-rose-500' },
+    { label: 'Product', score: product, color: '#185FA5' },
+    { label: 'Price', score: price, color: '#0F6E56' },
+    { label: 'Place', score: place, color: '#BA7517' },
+    { label: 'Promotion', score: promotion, color: '#993556' },
   ]
   return (
     <div className="flex items-center gap-1.5">
       {bars.map(b => (
         <div key={b.label} title={`${b.label}: ${b.score}/100`} className="flex flex-col items-center gap-0.5">
-          <div className="w-5 h-16 rounded-sm relative overflow-hidden bg-gray-200">
-            <div className={`absolute bottom-0 w-full rounded-sm ${b.color}`} style={{ height: `${b.score}%` }} />
+          <div className="w-5 h-16 rounded-sm relative overflow-hidden" style={{ background: '#e5e5e5' }}>
+            <div className="absolute bottom-0 w-full rounded-sm" style={{ height: `${b.score}%`, background: b.color }} />
           </div>
           <span className="text-[9px] text-gray-400">{b.label[0]}</span>
         </div>
@@ -52,24 +49,19 @@ function BlurGate({ children, title, priceLabel, subtitle, onPurchase, loading }
   return (
     <div className="relative rounded-xl overflow-hidden">
       <div className="blur-[6px] pointer-events-none opacity-50">{children}</div>
-      <div className="absolute inset-0 flex items-center justify-center bg-white/30 backdrop-blur-sm">
+      <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(250,250,249,0.3)', backdropFilter: 'blur(2px)' }}>
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-center max-w-sm shadow-sm">
-          <Lock className="w-5 h-5 text-amber-500 mx-auto mb-2" />
           <p className="font-semibold text-gray-900 text-sm mb-1">{title}</p>
           <p className="text-xs text-gray-500 mb-4">{subtitle}</p>
           <button
             onClick={onPurchase}
             disabled={loading}
-            className="px-5 py-2.5 rounded-lg text-white text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+            className="px-5 py-2.5 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition-colors"
+            style={{ background: '#D97757' }}
           >
             {loading ? 'Processing...' : priceLabel}
           </button>
           <p className="text-[10px] text-gray-400 mt-2">Consultants charge $1,500+ for this</p>
-          <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
-            <span className="flex items-center gap-0.5"><Shield className="w-3 h-3" /> Secure payment</span>
-            <span>·</span>
-            <span>Money-back guarantee</span>
-          </div>
         </div>
       </div>
     </div>
@@ -83,17 +75,17 @@ function ScoreCard({ label, value, color, suffix = '%' }: { label: string; value
       <div className="text-xs text-gray-500 mb-1">{label}</div>
       <div className="text-2xl font-medium text-gray-900">{value}{suffix}</div>
       <div className="mt-2 h-1 bg-gray-200 rounded-full">
-        <div className={`h-1 rounded-full ${color}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+        <div className="h-1 rounded-full" style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
       </div>
     </div>
   )
 }
 
-function ResultMetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
+function MetricCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
     <div className="border border-gray-100 rounded-lg p-3">
       <div className="text-xs text-gray-500">{label}</div>
-      <div className={`text-lg font-medium mt-0.5 ${color || 'text-gray-900'}`}>{value}</div>
+      <div className="text-lg font-medium mt-0.5" style={{ color: color || '#1C1917' }}>{value}</div>
     </div>
   )
 }
@@ -107,7 +99,7 @@ function OppRow({ title, category, score, to }: { title: string; category?: stri
       </div>
       {score != null && (
         <div className="text-right">
-          <div className="text-sm font-medium text-amber-500">{score}</div>
+          <div className="text-sm font-medium" style={{ color: '#D97757' }}>{score}</div>
           <div className="text-[10px] text-gray-400">score</div>
         </div>
       )}
@@ -548,13 +540,14 @@ export default function ConsultantStudio() {
 
   const getRecommendationBadge = (rec?: string) => {
     if (!rec) return null
-    const styles: Record<string, string> = {
-      online: 'bg-blue-100 text-blue-700',
-      physical: 'bg-green-100 text-green-700',
-      hybrid: 'bg-purple-100 text-purple-700',
+    const colorMap: Record<string, { bg: string; text: string }> = {
+      online: { bg: '#DBEAFE', text: '#1E40AF' },
+      physical: { bg: '#E1F5EE', text: '#085041' },
+      hybrid: { bg: '#E1F5EE', text: '#085041' },
     }
+    const colors = colorMap[rec] || { bg: '#F3F4F6', text: '#374151' }
     return (
-      <span className={`px-3 py-0.5 rounded-full text-xs font-medium ${styles[rec] || 'bg-gray-100 text-gray-700'}`}>
+      <span className="px-3 py-0.5 rounded-full text-xs font-medium" style={{ background: colors.bg, color: colors.text }}>
         {rec.charAt(0).toUpperCase() + rec.slice(1)} recommended
       </span>
     )
@@ -572,7 +565,7 @@ export default function ConsultantStudio() {
           onChange={(e) => setIdeaDescription(e.target.value)}
           placeholder="Example: A subscription service that delivers locally-roasted coffee beans to offices in downtown areas, with flexible weekly or monthly delivery options..."
           rows={5}
-          className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none"
+          className="w-full p-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757] resize-none"
         />
         <div className="mt-6 space-y-4">
           <div className="flex justify-between items-center">
@@ -580,7 +573,8 @@ export default function ConsultantStudio() {
             <button
               onClick={() => validateMutation.mutate()}
               disabled={!ideaDescription.trim() || validateMutation.isPending}
-              className="px-8 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2 transition-all"
+              className="px-8 py-3 text-white font-semibold rounded-lg disabled:cursor-not-allowed flex items-center gap-2 transition-all"
+              style={{ background: (!ideaDescription.trim() || validateMutation.isPending) ? '#D1D5DB' : '#D97757' }}
             >
               {validateMutation.isPending ? (
                 <>
@@ -633,14 +627,14 @@ export default function ConsultantStudio() {
           </div>
 
           <div className="grid grid-cols-3 gap-3">
-            <ScoreCard label="Online viability" value={validateResult.online_score || 0} color="bg-blue-500" />
-            <ScoreCard label="Physical viability" value={validateResult.physical_score || 0} color="bg-green-500" />
+            <ScoreCard label="Online viability" value={validateResult.online_score || 0} color="#185FA5" />
+            <ScoreCard label="Physical viability" value={validateResult.physical_score || 0} color="#0F6E56" />
             <ScoreCard
               label="Overall confidence"
               value={validateResult.confidence_score != null
                 ? validateResult.confidence_score
                 : Number((((validateResult.online_score || 0) + (validateResult.physical_score || 0)) / 20).toFixed(1))}
-              color="bg-amber-500"
+              color="#D97757"
               suffix={validateResult.confidence_score != null ? '%' : '/10'}
             />
           </div>
@@ -651,7 +645,7 @@ export default function ConsultantStudio() {
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm font-medium text-gray-900">4P's Market Scores</span>
                 {validateResult.data_quality?.enriched && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Real market data</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#DBEAFE', color: '#1E40AF' }}>Real market data</span>
                 )}
               </div>
               <FourPsBar
@@ -668,48 +662,48 @@ export default function ConsultantStudio() {
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm font-medium text-gray-900">4P's market intelligence</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-green-100 text-green-700">Free preview</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#E1F5EE', color: '#085041' }}>Free preview</span>
               </div>
               <div className="grid grid-cols-4 gap-3 mb-4">
-                <ResultMetricCard
+                <MetricCard
                   label="TAM"
                   value={String(validateResult.viability_report.tam || (typeof validateResult.viability_report.market_size === 'string' ? validateResult.viability_report.market_size : 'N/A'))}
                 />
-                <ResultMetricCard
+                <MetricCard
                   label="Growth"
                   value={String(validateResult.market_intelligence?.growth_trend || validateResult.viability_report.growth || 'N/A')}
                 />
-                <ResultMetricCard
+                <MetricCard
                   label="Competition"
                   value={String(validateResult.market_intelligence?.competition_level || validateResult.viability_report.competition || 'N/A')}
-                  color="text-amber-600"
+                  color="#BA7517"
                 />
-                <ResultMetricCard
+                <MetricCard
                   label="Demand signal"
                   value={String(validateResult.market_intelligence?.demand_level || validateResult.viability_report.demand_signal || 'N/A')}
-                  color="text-green-600"
+                  color="#0F6E56"
                 />
               </div>
               {/* Enriched market data from ReportDataService */}
               {validateResult.market_intelligence && (
                 <div className="grid grid-cols-4 gap-3 mb-4">
                   {validateResult.market_intelligence.population && (
-                    <ResultMetricCard label="Population" value={Number(validateResult.market_intelligence.population).toLocaleString()} />
+                    <MetricCard label="Population" value={Number(validateResult.market_intelligence.population).toLocaleString()} />
                   )}
                   {validateResult.market_intelligence.median_income && (
-                    <ResultMetricCard label="Median Income" value={`$${Number(validateResult.market_intelligence.median_income).toLocaleString()}`} />
+                    <MetricCard label="Median Income" value={`$${Number(validateResult.market_intelligence.median_income).toLocaleString()}`} />
                   )}
                   {validateResult.market_intelligence.competitor_count != null && (
-                    <ResultMetricCard label="Competitors" value={`${validateResult.market_intelligence.competitor_count} nearby`} color="text-amber-600" />
+                    <MetricCard label="Competitors" value={`${validateResult.market_intelligence.competitor_count} nearby`} color="#BA7517" />
                   )}
                   {validateResult.market_intelligence.google_trends_interest != null && (
-                    <ResultMetricCard label="Search Interest" value={`${validateResult.market_intelligence.google_trends_interest}/100`} color="text-blue-600" />
+                    <MetricCard label="Search Interest" value={`${validateResult.market_intelligence.google_trends_interest}/100`} color="#185FA5" />
                   )}
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-medium mb-2 text-green-600">Advantages</p>
+                  <p className="text-xs font-medium mb-2" style={{ color: '#0F6E56' }}>Advantages</p>
                   <div className="text-xs text-gray-500 leading-relaxed space-y-1">
                     {(validateResult.advantages || validateResult.viability_report?.advantages || validateResult.viability_report?.strengths || []).slice(0, 3).map((item: string, i: number) => (
                       <p key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</p>
@@ -720,7 +714,7 @@ export default function ConsultantStudio() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs font-medium mb-2 text-amber-600">Risks to evaluate</p>
+                  <p className="text-xs font-medium mb-2" style={{ color: '#D97757' }}>Risks to evaluate</p>
                   <div className="text-xs text-gray-500 leading-relaxed space-y-1">
                     {(validateResult.risks || validateResult.viability_report?.risks || validateResult.viability_report?.weaknesses || []).slice(0, 3).map((item: string, i: number) => (
                       <p key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</p>
@@ -757,10 +751,10 @@ export default function ConsultantStudio() {
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <p className="text-sm font-medium text-gray-900 mb-3">Full feasibility breakdown</p>
               <div className="grid grid-cols-2 gap-3 mb-3">
-                <ResultMetricCard label="Startup cost range" value={validateResult.feasibility_preview?.capital_required || '$150K - $350K'} />
-                <ResultMetricCard label="Break-even timeline" value="12-18 months" />
-                <ResultMetricCard label="Market size estimate" value={validateResult.feasibility_preview?.market_size_estimate || 'Fee-for-service'} />
-                <ResultMetricCard label="Revenue benchmark" value={validateResult.feasibility_preview?.revenue_benchmark || 'Austin, Denver, Raleigh'} />
+                <MetricCard label="Startup cost range" value={validateResult.feasibility_preview?.capital_required || '$150K - $350K'} />
+                <MetricCard label="Break-even timeline" value="12-18 months" />
+                <MetricCard label="Market size estimate" value={validateResult.feasibility_preview?.market_size_estimate || 'Fee-for-service'} />
+                <MetricCard label="Revenue benchmark" value={validateResult.feasibility_preview?.revenue_benchmark || 'Austin, Denver, Raleigh'} />
               </div>
               <p className="text-xs text-gray-500">Detailed competitive landscape with pricing benchmarks, staffing models, and 90-day launch timeline...</p>
             </div>
@@ -797,7 +791,8 @@ export default function ConsultantStudio() {
               <button
                 onClick={() => handleReportCheckout('feasibility_study')}
                 disabled={checkoutLoading}
-                className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                style={{ background: '#D97757' }}
               >
                 Get full feasibility — $25
               </button>
@@ -815,13 +810,7 @@ export default function ConsultantStudio() {
                 {saveReportMutation.isPending ? 'Saving...' : 'Save free summary'}
               </button>
             </div>
-            <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
-              <span className="flex items-center gap-0.5"><Shield className="w-3 h-3" /> Secure payment</span>
-              <span>·</span>
-              <span>Money-back guarantee</span>
-              <span>·</span>
-              <span>Powered by Stripe</span>
-            </div>
+            <p className="text-[10px] text-gray-400 text-center mt-2">Powered by DeepSeek + Claude AI · 4P's data from 6 live sources</p>
           </div>
         </div>
       )}
@@ -844,7 +833,7 @@ export default function ConsultantStudio() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="e.g., coffee, fitness, delivery..."
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
             />
           </div>
           <div>
@@ -852,7 +841,7 @@ export default function ConsultantStudio() {
             <select
               value={searchCategory}
               onChange={(e) => setSearchCategory(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757] bg-white"
             >
               <option value="">All Categories</option>
               <option value="work_productivity">💼 Work & Productivity</option>
@@ -870,7 +859,8 @@ export default function ConsultantStudio() {
         <button
           onClick={() => searchMutation.mutate()}
           disabled={searchMutation.isPending}
-          className="w-full px-6 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 flex items-center justify-center gap-2"
+          className="w-full px-6 py-3 text-white font-semibold rounded-lg flex items-center justify-center gap-2"
+          style={{ background: searchMutation.isPending ? '#D1D5DB' : '#D97757' }}
         >
           {searchMutation.isPending ? (
             <>
@@ -902,7 +892,7 @@ export default function ConsultantStudio() {
           </div>
 
           {searchResult.synthesis && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5 border-l-[3px] border-l-amber-500">
+            <div className="bg-white rounded-xl border border-gray-200 p-5" style={{ borderLeft: "3px solid #D97757" }}>
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">AI synthesis</p>
               <p className="text-sm text-gray-700 leading-relaxed">
                 {typeof searchResult.synthesis === 'string'
@@ -915,12 +905,11 @@ export default function ConsultantStudio() {
           {searchResult.trends && searchResult.trends.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <p className="text-sm font-medium text-gray-900 mb-3">
-                <TrendingUp className="w-4 h-4 inline mr-1 text-amber-500" />
-                Trending now
+                📈 Trending now
               </p>
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {searchResult.trends.map((trend) => (
-                  <div key={trend.id} className="rounded-lg p-3 border border-amber-100 bg-gradient-to-br from-amber-50 to-orange-50">
+                  <div key={trend.id} className="rounded-lg p-3 border border-amber-100" style={{ background: 'linear-gradient(135deg, #FFF7ED, #FFF1E6)' }}>
                     <div className="text-sm font-medium text-gray-900">{trend.name}</div>
                     <div className="text-xs text-gray-500 mt-1">{trend.description}</div>
                     <div className="flex items-center gap-3 mt-2 text-[10px] text-gray-400">
@@ -962,7 +951,7 @@ export default function ConsultantStudio() {
                         />
                       )}
                       <div className="text-right min-w-[40px]">
-                        <div className="text-sm font-medium text-amber-500">{opp.score}</div>
+                        <div className="text-sm font-medium" style={{ color: '#D97757' }}>{opp.score}</div>
                         <div className="text-[10px] text-gray-400">score</div>
                       </div>
                     </div>
@@ -988,7 +977,7 @@ export default function ConsultantStudio() {
                       <div className="text-xs text-gray-500">{opp.category}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm font-medium text-amber-500">{opp.score}</div>
+                      <div className="text-sm font-medium" style={{ color: '#D97757' }}>{opp.score}</div>
                       <div className="text-[10px] text-gray-400">score</div>
                     </div>
                   </div>
@@ -1008,7 +997,8 @@ export default function ConsultantStudio() {
               <button
                 onClick={() => handleReportCheckout('market_analysis')}
                 disabled={checkoutLoading}
-                className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                style={{ background: '#D97757' }}
               >
                 Generate market report — $99
               </button>
@@ -1027,13 +1017,7 @@ export default function ConsultantStudio() {
                 {saveReportMutation.isPending ? 'Saving...' : 'Export search results'}
               </button>
             </div>
-            <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
-              <span className="flex items-center gap-0.5"><Shield className="w-3 h-3" /> Secure payment</span>
-              <span>·</span>
-              <span>Money-back guarantee</span>
-              <span>·</span>
-              <span>Powered by Stripe</span>
-            </div>
+            <p className="text-[10px] text-gray-400 text-center mt-2">Powered by DeepSeek + Claude AI · 4P's data from 6 live sources</p>
           </div>
         </div>
       )}
@@ -1056,7 +1040,7 @@ export default function ConsultantStudio() {
               value={locationCity}
               onChange={(e) => setLocationCity(e.target.value)}
               placeholder="e.g., Miami, Florida"
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
             />
           </div>
           <div>
@@ -1066,7 +1050,7 @@ export default function ConsultantStudio() {
               value={locationBusiness}
               onChange={(e) => setLocationBusiness(e.target.value)}
               placeholder="e.g., Coffee shop, Fitness studio, Dog grooming..."
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
             />
           </div>
         </div>
@@ -1074,7 +1058,8 @@ export default function ConsultantStudio() {
         <button
           onClick={() => locationMutation.mutate()}
           disabled={!locationCity.trim() || !locationBusiness.trim() || locationMutation.isPending}
-          className="w-full px-6 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 flex items-center justify-center gap-2"
+          className="w-full px-6 py-3 text-white font-semibold rounded-lg flex items-center justify-center gap-2"
+          style={{ background: (!locationCity.trim() || !locationBusiness.trim() || locationMutation.isPending) ? '#D1D5DB' : '#D97757' }}
         >
           {locationMutation.isPending ? (
             <>
@@ -1097,7 +1082,7 @@ export default function ConsultantStudio() {
               <span className="text-sm font-medium text-gray-900">
                 Market analysis: {locationResult.business_description} in {locationResult.city}
               </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-100 text-green-700">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ background: '#E1F5EE', color: '#085041' }}>
                 {locationResult.geo_analysis?.market_density === 'high' ? 'Strong market' : locationResult.geo_analysis?.market_density === 'low' ? 'Emerging market' : 'Favorable'}
               </span>
             </div>
@@ -1139,8 +1124,8 @@ export default function ConsultantStudio() {
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full mb-3">
                   <div
-                    className="h-2 rounded-full bg-green-500"
-                    style={{ width: `${locationResult.geo_analysis.market_score || locationResult.geo_analysis.overall_score || 75}%` }}
+                    className="h-2 rounded-full"
+                    style={{ width: `${locationResult.geo_analysis.market_score || locationResult.geo_analysis.overall_score || 75}%`, background: '#0F6E56' }}
                   />
                 </div>
                 <div className="space-y-1 text-xs text-gray-500">
@@ -1177,7 +1162,7 @@ export default function ConsultantStudio() {
                   )}
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-gray-500">Competition level</span>
-                    <span className="font-medium text-amber-600 capitalize">
+                    <span className="font-medium capitalize" style={{ color: '#BA7517' }}>
                       {locationResult.geo_analysis.market_density || 'Moderate'} ({locationResult.geo_analysis.competitors?.length || 0})
                     </span>
                   </div>
@@ -1191,7 +1176,7 @@ export default function ConsultantStudio() {
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-medium text-gray-900">4P's intelligence</p>
                 {locationResult.data_quality?.enriched && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Real market data</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#DBEAFE', color: '#1E40AF' }}>Real market data</span>
                 )}
               </div>
               <div className="grid grid-cols-4 gap-3">
@@ -1215,7 +1200,7 @@ export default function ConsultantStudio() {
           )}
 
           {locationResult.market_report && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5 border-l-[3px] border-l-amber-500">
+            <div className="bg-white rounded-xl border border-gray-200 p-5" style={{ borderLeft: "3px solid #D97757" }}>
               <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Market intelligence</p>
               <p className="text-sm text-gray-700 leading-relaxed">
                 {typeof locationResult.market_report === 'string'
@@ -1235,7 +1220,7 @@ export default function ConsultantStudio() {
                   return (
                     <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                        priorityStr === 'High' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        priorityStr === 'High' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
                       }`}>
                         {priorityStr}
                       </span>
@@ -1280,7 +1265,8 @@ export default function ConsultantStudio() {
               <button
                 onClick={() => handleReportCheckout('feasibility_study')}
                 disabled={checkoutLoading}
-                className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                style={{ background: '#D97757' }}
               >
                 Get location report — $25
               </button>
@@ -1299,13 +1285,7 @@ export default function ConsultantStudio() {
                 {saveReportMutation.isPending ? 'Saving...' : 'Save free summary'}
               </button>
             </div>
-            <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
-              <span className="flex items-center gap-0.5"><Shield className="w-3 h-3" /> Secure payment</span>
-              <span>·</span>
-              <span>Money-back guarantee</span>
-              <span>·</span>
-              <span>Powered by Stripe</span>
-            </div>
+            <p className="text-[10px] text-gray-400 text-center mt-2">Powered by DeepSeek + Claude AI · 4P's data from 6 live sources</p>
           </div>
         </div>
       )}
@@ -1329,7 +1309,7 @@ export default function ConsultantStudio() {
                 value={cloneBusinessName}
                 onChange={(e) => setCloneBusinessName(e.target.value)}
                 placeholder="e.g., Sweetgreen, Blue Bottle Coffee..."
-                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
               />
             </div>
             <div>
@@ -1339,7 +1319,7 @@ export default function ConsultantStudio() {
                 value={cloneBusinessAddress}
                 onChange={(e) => setCloneBusinessAddress(e.target.value)}
                 placeholder="e.g., 123 Main St, San Francisco, CA"
-                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
               />
             </div>
           </div>
@@ -1354,7 +1334,7 @@ export default function ConsultantStudio() {
                 value={cloneTargetCity}
                 onChange={(e) => setCloneTargetCity(e.target.value)}
                 placeholder="e.g., Austin"
-                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
               />
             </div>
             <div>
@@ -1367,7 +1347,7 @@ export default function ConsultantStudio() {
                 onChange={(e) => setCloneTargetState(e.target.value)}
                 placeholder="e.g., TX"
                 maxLength={2}
-                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 uppercase"
+                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757] uppercase"
               />
             </div>
           </div>
@@ -1376,7 +1356,8 @@ export default function ConsultantStudio() {
         <button
           onClick={() => cloneMutation.mutate()}
           disabled={!cloneBusinessName.trim() || !cloneBusinessAddress.trim() || cloneMutation.isPending}
-          className="w-full px-6 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 flex items-center justify-center gap-2"
+          className="w-full px-6 py-3 text-white font-semibold rounded-lg flex items-center justify-center gap-2"
+          style={{ background: (!cloneBusinessName.trim() || !cloneBusinessAddress.trim() || cloneMutation.isPending) ? '#D1D5DB' : '#D97757' }}
         >
           {cloneMutation.isPending ? (
             <>
@@ -1403,7 +1384,7 @@ export default function ConsultantStudio() {
                   <p className="text-xs text-gray-500">{cloneBusinessAddress}</p>
                   <div className="flex items-center gap-2 mt-2">
                     {cloneResult.source_business.category && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-medium" style={{ background: '#DCFCE7', color: '#15803D' }}>
                         {cloneResult.source_business.category}
                       </span>
                     )}
@@ -1419,7 +1400,7 @@ export default function ConsultantStudio() {
                   <div className="text-xs font-medium text-gray-700 mb-2">Success factors</div>
                   <div className="flex flex-wrap gap-1.5">
                     {cloneResult.source_business.success_factors.map((factor, idx) => (
-                      <span key={idx} className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] rounded font-medium">
+                      <span key={idx} className="px-2 py-0.5 text-[10px] rounded font-medium" style={{ background: '#DCFCE7', color: '#15803D' }}>
                         {factor}
                       </span>
                     ))}
@@ -1428,10 +1409,10 @@ export default function ConsultantStudio() {
               )}
               {cloneResult.source_business.demographics && (
                 <div className="grid grid-cols-4 gap-3 mt-4">
-                  <ResultMetricCard label="Category" value={cloneResult.source_business.category || 'N/A'} />
-                  <ResultMetricCard label="Population" value={(cloneResult.source_business.demographics.population || 0).toLocaleString()} />
-                  <ResultMetricCard label="Median income" value={`$${(cloneResult.source_business.demographics.median_income || 0).toLocaleString()}`} />
-                  <ResultMetricCard label="Competition" value={`${cloneResult.source_business.demographics.competition_count || 0} nearby`} />
+                  <MetricCard label="Category" value={cloneResult.source_business.category || 'N/A'} />
+                  <MetricCard label="Population" value={(cloneResult.source_business.demographics.population || 0).toLocaleString()} />
+                  <MetricCard label="Median income" value={`$${(cloneResult.source_business.demographics.median_income || 0).toLocaleString()}`} />
+                  <MetricCard label="Competition" value={`${cloneResult.source_business.demographics.competition_count || 0} nearby`} />
                 </div>
               )}
             </div>
@@ -1443,7 +1424,7 @@ export default function ConsultantStudio() {
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm font-medium text-gray-900">Target Market 4P's Scores</p>
                 {cloneResult.data_quality?.enriched && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">Real market data</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#DBEAFE', color: '#1E40AF' }}>Real market data</span>
                 )}
               </div>
               <FourPsBar
@@ -1490,8 +1471,8 @@ export default function ConsultantStudio() {
                     </tr>
                     <tr>
                       <td className="py-2 pr-4 text-gray-700">Overall similarity</td>
-                      <td className="py-2 px-4 text-right font-medium text-amber-500">100%</td>
-                      <td className="py-2 pl-4 text-right font-medium text-amber-500">{cloneResult.matching_locations[0]?.similarity_score || 0}%</td>
+                      <td className="py-2 px-4 text-right font-medium" style={{ color: '#D97757' }}>100%</td>
+                      <td className="py-2 pl-4 text-right font-medium" style={{ color: '#D97757' }}>{cloneResult.matching_locations[0]?.similarity_score || 0}%</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1513,7 +1494,7 @@ export default function ConsultantStudio() {
                         <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-2xl font-bold text-amber-500">{loc.similarity_score}%</div>
+                        <div className="text-2xl font-bold" style={{ color: '#D97757' }}>{loc.similarity_score}%</div>
                         <div className="text-[10px] text-gray-400">Match</div>
                       </div>
                     </div>
@@ -1563,10 +1544,10 @@ export default function ConsultantStudio() {
               <div className="bg-white rounded-xl border border-gray-200 p-5">
                 <p className="text-sm font-medium text-gray-900 mb-3">Deep clone: {cloneResult.matching_locations[0]?.name}</p>
                 <div className="grid grid-cols-2 gap-3">
-                  <ResultMetricCard label="3-mile population" value={(cloneResult.matching_locations[0]?.population || 45200).toLocaleString()} />
-                  <ResultMetricCard label="5-mile population" value={(((cloneResult.matching_locations[0]?.population || 45200) * 2.8) | 0).toLocaleString()} />
-                  <ResultMetricCard label="Competitor density" value={`${cloneResult.matching_locations[0]?.competition_match || 0}% match`} />
-                  <ResultMetricCard label="Match confidence" value={`${cloneResult.matching_locations[0]?.similarity_score || 0}%`} />
+                  <MetricCard label="3-mile population" value={(cloneResult.matching_locations[0]?.population || 45200).toLocaleString()} />
+                  <MetricCard label="5-mile population" value={(((cloneResult.matching_locations[0]?.population || 45200) * 2.8) | 0).toLocaleString()} />
+                  <MetricCard label="Competitor density" value={`${cloneResult.matching_locations[0]?.competition_match || 0}% match`} />
+                  <MetricCard label="Match confidence" value={`${cloneResult.matching_locations[0]?.similarity_score || 0}%`} />
                 </div>
               </div>
             </BlurGate>
@@ -1577,7 +1558,8 @@ export default function ConsultantStudio() {
               <button
                 onClick={() => handleReportCheckout('strategic_assessment')}
                 disabled={checkoutLoading}
-                className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium bg-amber-500 hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                style={{ background: '#D97757' }}
               >
                 Deep clone top location — $89
               </button>
@@ -1596,13 +1578,7 @@ export default function ConsultantStudio() {
                 {saveReportMutation.isPending ? 'Saving...' : 'Save free summary'}
               </button>
             </div>
-            <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
-              <span className="flex items-center gap-0.5"><Shield className="w-3 h-3" /> Secure payment</span>
-              <span>·</span>
-              <span>Money-back guarantee</span>
-              <span>·</span>
-              <span>Powered by Stripe</span>
-            </div>
+            <p className="text-[10px] text-gray-400 text-center mt-2">Powered by DeepSeek + Claude AI · 4P's data from 6 live sources</p>
           </div>
 
           <div className="text-xs text-gray-400 text-center">
@@ -1637,9 +1613,10 @@ export default function ConsultantStudio() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
                     isActive
-                      ? 'bg-amber-500 text-white shadow-sm'
+                      ? 'text-white shadow-sm'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
+                  style={isActive ? { background: '#D97757' } : undefined}
                 >
                   <Icon className="w-5 h-5" />
                   <span className="hidden sm:inline">{tab.label}</span>

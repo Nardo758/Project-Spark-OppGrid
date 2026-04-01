@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
-import { FileText, Loader2, CheckCircle, Lock, ChevronDown, Sparkles, Download } from 'lucide-react'
+import { FileText, Loader2, CheckCircle, ChevronDown, Sparkles, Download } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
 interface ReportSelectionPanelProps {
@@ -77,7 +77,7 @@ export default function ReportSelectionPanel({
   return (
     <div className={`bg-white rounded-xl border border-gray-200 p-5 ${className}`}>
       <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="w-5 h-5 text-amber-500" />
+        <Sparkles className="w-5 h-5" style={{ color: '#D97757' }} />
         <h3 className="font-semibold text-gray-900">Generate Report</h3>
       </div>
 
@@ -89,7 +89,7 @@ export default function ReportSelectionPanel({
             setSelectedReport(e.target.value)
             setGeneratedReport(null)
           }}
-          className="w-full p-3 border border-gray-200 rounded-lg appearance-none bg-white pr-10 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm"
+          className="w-full p-3 border border-gray-200 rounded-lg appearance-none bg-white pr-10 focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757] text-sm"
         >
           <option value="">Choose a report type...</option>
           {reports.map((r) => (
@@ -118,7 +118,8 @@ export default function ReportSelectionPanel({
       <button
         onClick={() => generateMutation.mutate()}
         disabled={!selectedReport || generateMutation.isPending || !ideaDescription}
-        className="w-full px-4 py-3 bg-amber-500 text-white font-semibold rounded-lg hover:bg-amber-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+        className="w-full px-4 py-3 text-white font-semibold rounded-lg disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors"
+        style={{ background: (!selectedReport || generateMutation.isPending || !ideaDescription) ? '#D1D5DB' : '#D97757' }}
       >
         {generateMutation.isPending ? (
           <>
@@ -205,14 +206,14 @@ export default function ReportSelectionPanel({
       )}
 
       {/* Trust signals */}
-      <div className="mt-4 pt-3 border-t border-gray-100 space-y-2">
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <Lock className="w-3 h-3" />
-          <span>Secure checkout via Stripe</span>
+      <div className="flex flex-col items-center gap-1 mt-4">
+        <div className="flex items-center gap-3 text-[11px] text-gray-400">
+          <span>○ Secure payment</span>
+          <span>☑ Money-back guarantee</span>
         </div>
-        <div className="flex items-center gap-2 text-xs text-gray-400">
-          <FileText className="w-3 h-3" />
-          <span>PDF + Word export included</span>
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
+          <span className="font-bold tracking-tight" style={{ color: '#635BFF' }}>stripe</span>
+          <span>Powered by Stripe</span>
         </div>
       </div>
     </div>
