@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Lightbulb,
   Search,
@@ -8,15 +8,10 @@ import {
   Loader2,
   CheckCircle,
   TrendingUp,
-  Building2,
-  Globe,
-  Store,
   FileText,
-  Download,
   ChevronRight,
   Sparkles,
   Target,
-  BarChart3,
   Map,
   Users,
   DollarSign,
@@ -24,6 +19,8 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { Link } from 'react-router-dom'
+import { VerdictBanner, ScoreCards, MarketIntelligence, FeasibilityPreview, ActionBar } from '../../components/ConsultantResults'
+import ReportSelectionPanel from '../../components/ReportSelectionPanel'
 
 type TabId = 'validate' | 'search' | 'location' | 'clone'
 
@@ -73,6 +70,16 @@ interface ValidateIdeaResult {
   similar_opportunities?: Array<{ id: number; title: string; score: number }>
   processing_time_ms?: number
   error?: string
+  // Enriched fields
+  confidence_score?: number
+  verdict_summary?: string
+  verdict_detail?: string
+  market_intelligence?: Record<string, any>
+  advantages?: string[]
+  risks?: string[]
+  four_ps_scores?: Record<string, number>
+  feasibility_preview?: Record<string, any>
+  data_quality?: Record<string, any>
 }
 
 interface SearchIdeasResult {
@@ -116,6 +123,10 @@ interface IdentifyLocationResult {
   from_cache?: boolean
   processing_time_ms?: number
   error?: string
+  // Enriched fields
+  four_ps_scores?: Record<string, number>
+  four_ps_details?: Record<string, any>
+  data_quality?: Record<string, any>
 }
 
 interface CloneSuccessResult {
@@ -137,6 +148,9 @@ interface CloneSuccessResult {
   analysis_radius_miles?: number
   processing_time_ms?: number
   error?: string
+  // Enriched fields
+  target_four_ps?: Record<string, number>
+  data_quality?: Record<string, any>
 }
 
 interface SavedReport {
@@ -313,7 +327,7 @@ export default function ConsultantStudio() {
   const saveReportMutation = useMutation({
     mutationFn: async ({
       reportType,
-      title,
+      title: _title,
       content,
     }: {
       reportType: string
@@ -346,26 +360,6 @@ export default function ConsultantStudio() {
       setReportError(err.message)
     },
   })
-
-  const getRecommendationBadge = (rec?: string) => {
-    if (!rec) return null
-    const styles: Record<string, string> = {
-      online: 'bg-blue-100 text-blue-700',
-      physical: 'bg-green-100 text-green-700',
-      hybrid: 'bg-purple-100 text-purple-700',
-    }
-    const icons: Record<string, React.ReactNode> = {
-      online: <Globe className="w-4 h-4" />,
-      physical: <Store className="w-4 h-4" />,
-      hybrid: <Building2 className="w-4 h-4" />,
-    }
-    return (
-      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${styles[rec] || 'bg-gray-100 text-gray-700'}`}>
-        {icons[rec]}
-        {rec.charAt(0).toUpperCase() + rec.slice(1)}
-      </span>
-    )
-  }
 
   const renderValidateTab = () => (
     <div className="space-y-6">
@@ -409,41 +403,67 @@ export default function ConsultantStudio() {
       </div>
 
       {validateResult?.success && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 animate-fade-in">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Validation Results</h3>
-            {getRecommendationBadge(validateResult.recommendation)}
-          </div>
+        <div className="space-y-4 animate-fade-in">
+          {/* Verdict Banner */}
+          <VerdictBanner
+            recommendation={validateResult.recommendation || 'hybrid'}
+            confidenceScore={validateResult.confidence_score}
+            verdictSummary={validateResult.verdict_summary}
+            verdictDetail={validateResult.verdict_detail}
+          />
 
-          <div className="grid md:grid-cols-2 gap-4 mb-6">
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Globe className="w-5 h-5 text-blue-600" />
-                <span className="font-medium text-blue-900">Online Score</span>
-              </div>
-              <div className="text-3xl font-bold text-blue-700">{validateResult.online_score}%</div>
-            </div>
-            <div className="bg-green-50 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Store className="w-5 h-5 text-green-600" />
-                <span className="font-medium text-green-900">Physical Score</span>
-              </div>
-              <div className="text-3xl font-bold text-green-700">{validateResult.physical_score}%</div>
-            </div>
-          </div>
+          {/* Score Cards (Online / Physical / Confidence + 4P's) */}
+          <ScoreCards
+            onlineScore={validateResult.online_score}
+            physicalScore={validateResult.physical_score}
+            confidenceScore={validateResult.confidence_score}
+            fourPsScores={validateResult.four_ps_scores as any}
+          />
 
+          {/* Market Intelligence + Advantages/Risks */}
+          <MarketIntelligence
+            marketIntelligence={validateResult.market_intelligence as any}
+            advantages={validateResult.advantages}
+            risks={validateResult.risks}
+          />
+
+          {/* Viability Analysis (from AI) */}
           {validateResult.viability_report && (
-            <div className="mb-6">
-              <h4 className="font-medium text-gray-900 mb-3">Viability Analysis</h4>
-              <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700">
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h4 className="font-semibold text-gray-900 mb-3">Viability Analysis</h4>
+              <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 leading-relaxed">
                 {validateResult.viability_report.summary || JSON.stringify(validateResult.viability_report, null, 2)}
               </div>
+              {validateResult.viability_report.key_actions && (
+                <div className="mt-3">
+                  <h5 className="text-sm font-medium text-gray-700 mb-2">Key Actions</h5>
+                  <ul className="space-y-1">
+                    {(validateResult.viability_report.key_actions as string[]).map((action: string, i: number) => (
+                      <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                        <ChevronRight className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                        {action}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
+          {/* Feasibility Preview (blurred paywall) */}
+          <FeasibilityPreview
+            feasibilityPreview={validateResult.feasibility_preview as any}
+            onUnlock={() => {
+              window.location.href = token
+                ? '/build/reports?tab=generate'
+                : '/signin?next=/build/reports'
+            }}
+          />
+
+          {/* Similar Opportunities */}
           {validateResult.similar_opportunities && validateResult.similar_opportunities.length > 0 && (
-            <div className="mb-6">
-              <h4 className="font-medium text-gray-900 mb-3">Similar Opportunities</h4>
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h4 className="font-semibold text-gray-900 mb-3">Similar Opportunities</h4>
               <div className="space-y-2">
                 {validateResult.similar_opportunities.map((opp) => (
                   <Link
@@ -462,53 +482,74 @@ export default function ConsultantStudio() {
             </div>
           )}
 
+          {/* Error/Success messages */}
           {reportError && (
-            <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
+            <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
               <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
               <span className="text-sm text-red-800">{reportError}</span>
               <button onClick={() => setReportError(null)} className="ml-auto text-red-400 hover:text-red-600 text-sm font-medium">Dismiss</button>
             </div>
           )}
           {reportSuccess && (
-            <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg mb-4">
+            <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
               <CheckCircle className="w-5 h-5 text-green-600 shrink-0" />
-              <span className="text-sm text-green-800">✅ Report saved to your account!</span>
+              <span className="text-sm text-green-800">Report saved to your account!</span>
             </div>
           )}
-          <div className="flex flex-col sm:flex-row gap-3">
-            {token ? (
-              <>
-                <button
-                  disabled={saveReportMutation.isPending}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  <FileText className="w-5 h-5" />
-                  {saveReportMutation.isPending ? 'Saving Report...' : 'Report Saved ✓'}
-                </button>
-                <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border-2 border-blue-500 text-blue-600 rounded-lg hover:bg-blue-50 font-semibold transition-all">
-                  <Download className="w-5 h-5" />
-                  Download PDF
-                </button>
-              </>
-            ) : (
-              <>
-                <button className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-semibold transition-all">
-                  <Download className="w-5 h-5" />
-                  Download as PDF
-                </button>
-                <button 
-                  onClick={() => window.location.href = '/signin'}
-                  className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border-2 border-amber-500 text-amber-600 rounded-lg hover:bg-amber-50 font-semibold transition-all"
-                >
-                  <FileText className="w-5 h-5" />
-                  Sign in to Save
-                </button>
-              </>
-            )}
-          </div>
 
-          <div className="mt-4 text-xs text-gray-400">
-            Processed in {validateResult.processing_time_ms}ms
+          {/* Action Bar */}
+          <ActionBar
+            onSaveReport={() =>
+              saveReportMutation.mutate({
+                reportType: 'feasibility_study',
+                title: `Idea Validation: ${ideaDescription.slice(0, 50)}...`,
+                content: JSON.stringify(validateResult, null, 2),
+              })
+            }
+            onExportPdf={async () => {
+              const htmlContent = Object.entries(validateResult!)
+                .filter(([, v]) => v != null && typeof v !== 'boolean')
+                .map(([k, v]) => `<p><strong>${k.replace(/_/g, ' ')}:</strong> ${typeof v === 'object' ? JSON.stringify(v) : v}</p>`)
+                .join('')
+              const res = await fetch('/api/v1/reports/export/pdf', {
+                method: 'POST',
+                headers: headers(),
+                body: JSON.stringify({ content: htmlContent, title: `Idea Validation: ${ideaDescription.slice(0, 50)}`, report_type: 'Feasibility Study' }),
+              })
+              if (!res.ok) throw new Error('Export failed')
+              const blob = await res.blob()
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
+              a.download = `OppGrid - Idea Validation.pdf`
+              document.body.appendChild(a)
+              a.click()
+              document.body.removeChild(a)
+              URL.revokeObjectURL(url)
+            }}
+            onPrint={() => {
+              const w = window.open('', '_blank')
+              if (!w) return
+              w.document.write(`<html><head><title>OppGrid - Idea Validation</title></head><body>
+                <h1>OppGrid - Idea Validation</h1>
+                <pre>${JSON.stringify(validateResult, null, 2)}</pre>
+              </body></html>`)
+              w.document.close()
+              w.print()
+            }}
+            isSaving={saveReportMutation.isPending}
+            reportSaved={reportSuccess}
+          />
+
+          {/* Data quality + timing footer */}
+          <div className="flex items-center justify-between text-xs text-gray-400">
+            <span>Processed in {validateResult.processing_time_ms}ms</span>
+            {validateResult.data_quality && (
+              <span>
+                Data: {Math.round((validateResult.data_quality.completeness || 0) * 100)}% complete
+                {validateResult.data_quality.enriched ? ' (enriched)' : ''}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -768,6 +809,13 @@ export default function ConsultantStudio() {
               </div>
             )}
 
+            {/* 4P's Market Intelligence Scores */}
+            {locationResult.four_ps_scores && (
+              <div className="mb-6">
+                <ScoreCards fourPsScores={locationResult.four_ps_scores as any} />
+              </div>
+            )}
+
             {locationResult.market_report && (
               <div className="bg-gray-50 rounded-lg p-4 mb-6">
                 <h4 className="font-medium text-gray-900 mb-2">Market Report</h4>
@@ -796,8 +844,11 @@ export default function ConsultantStudio() {
               </div>
             )}
 
-            <div className="mt-4 text-xs text-gray-400">
-              Processed in {locationResult.processing_time_ms}ms
+            <div className="mt-4 flex items-center justify-between text-xs text-gray-400">
+              <span>Processed in {locationResult.processing_time_ms}ms</span>
+              {locationResult.data_quality && (
+                <span>Data: {Math.round((locationResult.data_quality.completeness || 0) * 100)}% complete</span>
+              )}
             </div>
           </div>
         </div>
@@ -987,8 +1038,16 @@ export default function ConsultantStudio() {
             </div>
           )}
 
+          {/* Target Market 4P's Scores */}
+          {cloneResult.target_four_ps && (
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Target Market Intelligence</h3>
+              <ScoreCards fourPsScores={cloneResult.target_four_ps as any} />
+            </div>
+          )}
+
           <div className="text-xs text-gray-400 text-center">
-            Analysis radius: {cloneResult.analysis_radius_miles} miles • 
+            Analysis radius: {cloneResult.analysis_radius_miles} miles •
             Processed in {cloneResult.processing_time_ms}ms
           </div>
         </div>
@@ -1036,11 +1095,36 @@ export default function ConsultantStudio() {
           {TABS.find((t) => t.id === activeTab)?.description}
         </div>
 
-        {/* Tab Content */}
-        {activeTab === 'validate' && renderValidateTab()}
-        {activeTab === 'search' && renderSearchTab()}
-        {activeTab === 'location' && renderLocationTab()}
-        {activeTab === 'clone' && renderCloneTab()}
+        {/* Unified Layout: Content (left) + Report Selection (right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Left: Analysis Content */}
+          <div className="lg:col-span-3">
+            {activeTab === 'validate' && renderValidateTab()}
+            {activeTab === 'search' && renderSearchTab()}
+            {activeTab === 'location' && renderLocationTab()}
+            {activeTab === 'clone' && renderCloneTab()}
+          </div>
+
+          {/* Right: Report Selection Panel */}
+          <div className="lg:col-span-2">
+            <div className="sticky top-8">
+              <ReportSelectionPanel
+                ideaDescription={
+                  activeTab === 'validate' ? ideaDescription :
+                  activeTab === 'search' ? searchQuery :
+                  activeTab === 'location' ? `${locationBusiness} in ${locationCity}` :
+                  activeTab === 'clone' ? `Clone ${cloneBusinessName}` : ''
+                }
+                consultantResult={
+                  activeTab === 'validate' ? validateResult :
+                  activeTab === 'search' ? searchResult :
+                  activeTab === 'location' ? locationResult :
+                  activeTab === 'clone' ? cloneResult : null
+                }
+              />
+            </div>
+          </div>
+        </div>
 
         {/* Saved Reports Sidebar */}
         {savedReports.length > 0 && (
