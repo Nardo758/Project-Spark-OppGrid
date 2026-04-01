@@ -1,9 +1,9 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Table, func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from datetime import datetime
 from app.db.database import Base
+from app.models.watchlist import OpportunityNote
 
-# Junction table for opportunities in collections
 opportunity_in_collection = Table(
     'opportunity_in_collection',
     Base.metadata,
@@ -13,7 +13,6 @@ opportunity_in_collection = Table(
     Column('added_at', DateTime, default=datetime.utcnow),
 )
 
-# Junction table for tags on opportunities
 opportunity_has_tag = Table(
     'opportunity_has_tag',
     Base.metadata,
@@ -34,8 +33,8 @@ class OpportunityCollection(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    user = relationship('User', back_populates='opportunity_collections')
-    opportunities = relationship('Opportunity', secondary=opportunity_in_collection, back_populates='collections')
+    user = relationship('User', backref=backref('opportunity_collections', lazy='dynamic'))
+    opportunities = relationship('Opportunity', secondary=opportunity_in_collection, backref=backref('collections', lazy='dynamic'))
 
     def to_dict(self):
         return {
@@ -57,8 +56,8 @@ class OpportunityTag(Base):
     color = Column(String(7), default='#6366f1')
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    user = relationship('User', back_populates='opportunity_tags')
-    opportunities = relationship('Opportunity', secondary=opportunity_has_tag, back_populates='tags')
+    user = relationship('User', backref=backref('opportunity_tags', lazy='dynamic'))
+    opportunities = relationship('Opportunity', secondary=opportunity_has_tag, backref=backref('tags', lazy='dynamic'))
 
     def to_dict(self):
         return {
@@ -68,40 +67,18 @@ class OpportunityTag(Base):
         }
 
 
-class OpportunityNote(Base):
-    __tablename__ = 'opportunity_notes'
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
-    opportunity_id = Column(Integer, ForeignKey('opportunities.id'), nullable=False)
-    content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    user = relationship('User', back_populates='opportunity_notes')
-    opportunity = relationship('Opportunity', back_populates='notes')
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'content': self.content,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
-        }
-
-
 class UserSavedOpportunity(Base):
     __tablename__ = 'user_saved_opportunities'
 
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     opportunity_id = Column(Integer, ForeignKey('opportunities.id'), nullable=False)
-    priority = Column(Integer, default=3)  # 1-5 stars
+    priority = Column(Integer, default=3)
     saved_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    user = relationship('User', back_populates='saved_opportunities')
-    opportunity = relationship('Opportunity', back_populates='saved_by_users')
+    user = relationship('User', backref=backref('saved_opportunities', lazy='dynamic'))
+    opportunity = relationship('Opportunity', backref=backref('saved_by_users', lazy='dynamic'))
 
     def to_dict(self):
         return {

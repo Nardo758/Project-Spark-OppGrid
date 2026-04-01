@@ -98,6 +98,15 @@ class OpportunityNote(Base):
         UniqueConstraint("user_id", "opportunity_id", name="unique_user_opportunity_note"),
     )
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'content': self.content,
+            'is_pinned': self.is_pinned,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
 
 class WatchlistItem(Base):
     __tablename__ = "watchlist_items"

@@ -338,10 +338,21 @@ def create_note(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
-    """Create a note for an opportunity"""
+    """Create or update a note for an opportunity (one note per user per opportunity)"""
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
     if not opportunity:
         raise HTTPException(status_code=404, detail="Opportunity not found")
+
+    existing = db.query(OpportunityNote).filter(
+        OpportunityNote.user_id == current_user.id,
+        OpportunityNote.opportunity_id == opportunity_id,
+    ).first()
+
+    if existing:
+        existing.content = data.content
+        db.commit()
+        db.refresh(existing)
+        return existing.to_dict()
 
     note = OpportunityNote(
         user_id=current_user.id,

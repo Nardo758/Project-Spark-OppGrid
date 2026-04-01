@@ -1,20 +1,19 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Enum as SQLEnum, func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from datetime import datetime
 from enum import Enum
 from app.db.database import Base
 
 
 class LifecycleState(str, Enum):
-    """8 opportunity lifecycle states"""
-    DISCOVERED = "discovered"      # Initial browse/preview
-    SAVED = "saved"               # Added to collections
-    ANALYZING = "analyzing"        # Market research, AI analysis
-    PLANNING = "planning"          # Business plan, strategy
-    EXECUTING = "executing"        # Active development, team
-    LAUNCHED = "launched"          # Live, customers
-    PAUSED = "paused"             # Temporarily paused
-    ARCHIVED = "archived"          # Complete, lessons learned
+    DISCOVERED = "discovered"
+    SAVED = "saved"
+    ANALYZING = "analyzing"
+    PLANNING = "planning"
+    EXECUTING = "executing"
+    LAUNCHED = "launched"
+    PAUSED = "paused"
+    ARCHIVED = "archived"
 
 
 class OpportunityLifecycle(Base):
@@ -24,8 +23,7 @@ class OpportunityLifecycle(Base):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     opportunity_id = Column(Integer, ForeignKey('opportunities.id'), nullable=False)
     current_state = Column(String(50), default=LifecycleState.DISCOVERED.value, nullable=False)
-    
-    # Timestamp tracking for each state
+
     discovered_at = Column(DateTime, default=datetime.utcnow)
     saved_at = Column(DateTime)
     analyzing_at = Column(DateTime)
@@ -34,15 +32,13 @@ class OpportunityLifecycle(Base):
     launched_at = Column(DateTime)
     paused_at = Column(DateTime)
     archived_at = Column(DateTime)
-    
-    # Progress & metadata
-    progress_percent = Column(Integer, default=0)  # 0-100%
-    notes = Column(Text)  # User notes about this opportunity's journey
+
+    progress_percent = Column(Integer, default=0)
+    notes = Column(Text)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    # Relationships
-    user = relationship('User', back_populates='opportunity_lifecycles')
-    opportunity = relationship('Opportunity', back_populates='lifecycle')
+    user = relationship('User', backref=backref('opportunity_lifecycles', lazy='dynamic'))
+    opportunity = relationship('Opportunity', backref=backref('lifecycle', uselist=False))
     transitions = relationship('LifecycleStateTransition', back_populates='lifecycle', cascade='all, delete-orphan')
     milestones = relationship('LifecycleMilestone', back_populates='lifecycle', cascade='all, delete-orphan')
 
@@ -66,10 +62,8 @@ class OpportunityLifecycle(Base):
         }
 
     def can_transition_to(self, target_state: str) -> bool:
-        """Check if transition from current state to target is valid"""
         current = self.current_state
-        
-        # Define valid transitions (state machine)
+
         valid_transitions = {
             LifecycleState.DISCOVERED.value: [
                 LifecycleState.SAVED.value,
@@ -78,21 +72,21 @@ class OpportunityLifecycle(Base):
             LifecycleState.SAVED.value: [
                 LifecycleState.ANALYZING.value,
                 LifecycleState.ARCHIVED.value,
-                LifecycleState.DISCOVERED.value,  # Can go back
+                LifecycleState.DISCOVERED.value,
             ],
             LifecycleState.ANALYZING.value: [
                 LifecycleState.PLANNING.value,
-                LifecycleState.SAVED.value,  # Go back
+                LifecycleState.SAVED.value,
                 LifecycleState.PAUSED.value,
             ],
             LifecycleState.PLANNING.value: [
                 LifecycleState.EXECUTING.value,
-                LifecycleState.ANALYZING.value,  # Go back
+                LifecycleState.ANALYZING.value,
                 LifecycleState.PAUSED.value,
             ],
             LifecycleState.EXECUTING.value: [
                 LifecycleState.LAUNCHED.value,
-                LifecycleState.PLANNING.value,  # Go back
+                LifecycleState.PLANNING.value,
                 LifecycleState.PAUSED.value,
             ],
             LifecycleState.LAUNCHED.value: [
@@ -100,15 +94,15 @@ class OpportunityLifecycle(Base):
                 LifecycleState.ARCHIVED.value,
             ],
             LifecycleState.PAUSED.value: [
-                LifecycleState.ANALYZING.value,  # Resume at analysis
-                LifecycleState.EXECUTING.value,  # Resume at execution
+                LifecycleState.ANALYZING.value,
+                LifecycleState.EXECUTING.value,
                 LifecycleState.ARCHIVED.value,
             ],
             LifecycleState.ARCHIVED.value: [
-                LifecycleState.SAVED.value,  # Can restore
+                LifecycleState.SAVED.value,
             ],
         }
-        
+
         return target_state in valid_transitions.get(current, [])
 
 
@@ -119,7 +113,7 @@ class LifecycleStateTransition(Base):
     lifecycle_id = Column(Integer, ForeignKey('opportunity_lifecycle.id'), nullable=False)
     from_state = Column(String(50), nullable=False)
     to_state = Column(String(50), nullable=False)
-    reason = Column(Text)  # Why the transition happened
+    reason = Column(Text)
     transitioned_at = Column(DateTime, default=datetime.utcnow)
 
     lifecycle = relationship('OpportunityLifecycle', back_populates='transitions')
@@ -140,11 +134,11 @@ class LifecycleMilestone(Base):
 
     id = Column(Integer, primary_key=True)
     lifecycle_id = Column(Integer, ForeignKey('opportunity_lifecycle.id'), nullable=False)
-    state = Column(String(50), nullable=False)  # Which state this milestone belongs to
+    state = Column(String(50), nullable=False)
     title = Column(String(255), nullable=False)
     description = Column(Text)
     is_completed = Column(Boolean, default=False)
-    order = Column(Integer, default=0)  # Display order
+    order = Column(Integer, default=0)
     completed_at = Column(DateTime)
 
     lifecycle = relationship('OpportunityLifecycle', back_populates='milestones')

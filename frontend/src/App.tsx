@@ -50,6 +50,8 @@ import AdminAffiliateTools from './pages/AdminAffiliateTools'
 import StripeArchitecture from './pages/StripeArchitecture'
 import BillingReturn from './pages/BillingReturn'
 import MapWorkspace from './pages/MapWorkspace'
+import MyIdeas from './pages/MyIdeas'
+import LifecycleDashboard from './pages/LifecycleDashboard'
 
 function AdminRedirect() {
   window.location.href = '/admin.html';
@@ -238,6 +240,22 @@ function App() {
         <Route path="admin/experts" element={<AdminExperts />} />
         <Route path="admin/affiliate-tools" element={<AdminAffiliateTools />} />
         <Route path="architecture/stripe" element={<StripeArchitecture />} />
+        <Route
+          path="my-ideas"
+          element={
+            <RequireAuth>
+              <MyIdeas />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="lifecycle"
+          element={
+            <RequireAuth>
+              <LifecycleDashboard />
+            </RequireAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/" />} />
       </Route>
     </Routes>
