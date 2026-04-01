@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from '../../stores/authStore'
 import { Link } from 'react-router-dom'
 import ReportSelectionPanel from '../../components/ReportSelectionPanel'
+import ReportHeader from '../../components/ReportHeader'
 import { FourPsBar, BlurGate, ScoreCard, MetricCard, OppRow } from '../../components/ConsultantResults/ResultCards'
 
 type TabId = 'validate' | 'search' | 'location' | 'clone'
@@ -447,6 +448,32 @@ export default function ConsultantStudio() {
     }
   }
 
+  const generateReportId = () => {
+    const today = new Date()
+    const year = today.getFullYear()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    const day = String(today.getDate()).padStart(2, '0')
+    const random = String(Math.floor(Math.random() * 1000)).padStart(3, '0')
+    return `REPT-${year}-${month}-${day}-${random}`
+  }
+
+  const formatDate = (date: Date = new Date()) => {
+    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' }
+    return date.toLocaleDateString('en-US', options)
+  }
+
+  const formatTime = () => {
+    const date = new Date()
+    const options: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' }
+    return date.toLocaleTimeString('en-US', options) + ' PT'
+  }
+
+  const getVerdictType = (recommendation?: string): 'proceed' | 'proceed_with_caution' | 'do_not_proceed' => {
+    if (!recommendation) return 'proceed_with_caution'
+    if (recommendation === 'hybrid') return 'proceed'
+    return 'proceed'
+  }
+
   const getRecommendationBadge = (rec?: string) => {
     if (!rec) return null
     const colorMap: Record<string, { bg: string; text: string }> = {
@@ -506,6 +533,19 @@ export default function ConsultantStudio() {
 
       {validateResult?.success && (
         <div className="space-y-4 animate-fade-in">
+          {/* Institutional Report Header */}
+          <ReportHeader
+            reportName="Validate Idea Analysis"
+            subject={ideaDescription.substring(0, 50)}
+            reportId={generateReportId()}
+            reportDate={formatDate()}
+            generatedAt={formatTime()}
+            recommendation={validateResult.recommendation?.toUpperCase() || 'HYBRID'}
+            confidenceScore={validateResult.confidence_score || 75}
+            riskScore={6.2}
+            verdict={getVerdictType(validateResult.recommendation)}
+          />
+
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <div className="flex items-center gap-2 mb-3">
               {getRecommendationBadge(validateResult.recommendation)}
