@@ -1415,8 +1415,16 @@ async def generate_free_report(
     import logging
     logger = logging.getLogger(__name__)
 
-    free_check = {"is_free": True, "reason": "guest_free_report"}
-    if current_user:
+    GUEST_FREE_REPORT_TYPES = {"feasibility_study"}
+
+    if not current_user:
+        if request_data.report_type not in GUEST_FREE_REPORT_TYPES:
+            raise HTTPException(
+                status_code=403,
+                detail="Authentication required for this report type. Only feasibility studies are available for guest users."
+            )
+        free_check = {"is_free": True, "reason": "guest_free_report"}
+    else:
         free_check = report_usage_service.check_free_available(current_user, db)
         if not free_check["is_free"]:
             raise HTTPException(
