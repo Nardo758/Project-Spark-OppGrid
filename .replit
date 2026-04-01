@@ -82,6 +82,10 @@ externalPort = 8000
 localPort = 23636
 externalPort = 3001
 
+[[ports]]
+localPort = 23637
+externalPort = 3003
+
 [deployment]
 run = ["bash", "-c", "cd backend && PYTHONPATH=. python -m uvicorn app.main:app --host 0.0.0.0 --port 5000"]
 deploymentTarget = "autoscale"

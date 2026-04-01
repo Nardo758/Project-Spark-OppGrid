@@ -64,17 +64,21 @@ class CategoryWithTemplates(BaseModel):
 def get_user_tier(user: User, db: Session) -> str:
     subscription = db.query(Subscription).filter(
         Subscription.user_id == user.id,
-        Subscription.status == "active"
+        Subscription.status == "ACTIVE"
     ).first()
     if subscription:
-        return subscription.tier.lower()
+        tier_val = subscription.tier.value if hasattr(subscription.tier, 'value') else str(subscription.tier)
+        return tier_val.lower()
     return "explorer"
 
 
 def tier_has_access(user_tier: str, required_tier: str) -> bool:
-    tier_order = ["explorer", "builder", "pro", "business", "enterprise"]
+    tier_order = ["free", "explorer", "starter", "builder", "growth", "pro", "business", "team", "enterprise"]
     user_level = tier_order.index(user_tier) if user_tier in tier_order else 0
-    required_level = tier_order.index(required_tier) if required_tier in tier_order else 0
+    if required_tier not in tier_order:
+        logger.warning(f"Unknown required_tier '{required_tier}', denying access")
+        return False
+    required_level = tier_order.index(required_tier)
     return user_level >= required_level
 
 
@@ -344,33 +348,6 @@ async def get_my_reports(
         created_at=r.created_at,
         completed_at=r.completed_at
     ) for r in reports]
-
-
-@router.get("/{report_id}", response_model=GeneratedReportResponse)
-async def get_report(
-    report_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    report = db.query(GeneratedReport).filter(
-        GeneratedReport.id == report_id,
-        GeneratedReport.user_id == current_user.id
-    ).first()
-    
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-    
-    return GeneratedReportResponse(
-        id=report.id,
-        report_type=report.report_type.value,
-        status=report.status.value,
-        title=report.title,
-        summary=report.summary,
-        content=report.content,
-        confidence_score=report.confidence_score,
-        created_at=report.created_at,
-        completed_at=report.completed_at
-    )
 
 
 @router.post("/check-access")

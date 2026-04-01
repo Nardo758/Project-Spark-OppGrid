@@ -15,7 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
-AI_CALL_TIMEOUT_SECONDS = 30
+AI_CALL_TIMEOUT_SECONDS = 90
 
 from app.models.opportunity import Opportunity
 from app.models.user import User
