@@ -17,6 +17,8 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { Link } from 'react-router-dom'
+import { VerdictBanner, ScoreCards, MarketIntelligence, FeasibilityPreview, ActionBar } from '../../components/ConsultantResults'
+import ReportSelectionPanel from '../../components/ReportSelectionPanel'
 
 function FourPsBar({ product, price, place, promotion }: { product: number; price: number; place: number; promotion: number }) {
   const bars = [
@@ -177,6 +179,16 @@ interface ValidateIdeaResult {
   similar_opportunities?: Array<{ id: number; title: string; score: number }>
   processing_time_ms?: number
   error?: string
+  // Enriched fields
+  confidence_score?: number
+  verdict_summary?: string
+  verdict_detail?: string
+  market_intelligence?: Record<string, any>
+  advantages?: string[]
+  risks?: string[]
+  four_ps_scores?: Record<string, number>
+  feasibility_preview?: Record<string, any>
+  data_quality?: Record<string, any>
 }
 
 interface SearchOpportunity {
@@ -253,6 +265,10 @@ interface IdentifyLocationResult {
   from_cache?: boolean
   processing_time_ms?: number
   error?: string
+  // Enriched fields
+  four_ps_scores?: Record<string, number>
+  four_ps_details?: Record<string, any>
+  data_quality?: Record<string, any>
 }
 
 interface SourceBusiness {
@@ -287,6 +303,9 @@ interface CloneSuccessResult {
   analysis_radius_miles?: number
   processing_time_ms?: number
   error?: string
+  // Enriched fields
+  target_four_ps?: Record<string, number>
+  data_quality?: Record<string, any>
 }
 
 interface SavedReport {
@@ -463,7 +482,7 @@ export default function ConsultantStudio() {
   const saveReportMutation = useMutation({
     mutationFn: async ({
       reportType,
-      title,
+      title: _title,
       content,
     }: {
       reportType: string
@@ -619,6 +638,7 @@ export default function ConsultantStudio() {
             />
           </div>
 
+          {/* Viability Analysis (from AI) */}
           {validateResult.viability_report && (
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
@@ -669,6 +689,19 @@ export default function ConsultantStudio() {
                   </div>
                 </div>
               </div>
+              {validateResult.viability_report.key_actions && (
+                <div className="mt-3">
+                  <h5 className="text-sm font-medium text-gray-700 mb-2">Key Actions</h5>
+                  <ul className="space-y-1">
+                    {(validateResult.viability_report.key_actions as string[]).map((action: string, i: number) => (
+                      <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                        <ChevronRight className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                        {action}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
 
@@ -702,6 +735,7 @@ export default function ConsultantStudio() {
             </div>
           )}
 
+          {/* Error/Success messages */}
           {reportError && (
             <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
               <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
@@ -1555,11 +1589,36 @@ export default function ConsultantStudio() {
           {TABS.find((t) => t.id === activeTab)?.description}
         </div>
 
-        {/* Tab Content */}
-        {activeTab === 'validate' && renderValidateTab()}
-        {activeTab === 'search' && renderSearchTab()}
-        {activeTab === 'location' && renderLocationTab()}
-        {activeTab === 'clone' && renderCloneTab()}
+        {/* Unified Layout: Content (left) + Report Selection (right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          {/* Left: Analysis Content */}
+          <div className="lg:col-span-3">
+            {activeTab === 'validate' && renderValidateTab()}
+            {activeTab === 'search' && renderSearchTab()}
+            {activeTab === 'location' && renderLocationTab()}
+            {activeTab === 'clone' && renderCloneTab()}
+          </div>
+
+          {/* Right: Report Selection Panel */}
+          <div className="lg:col-span-2">
+            <div className="sticky top-8">
+              <ReportSelectionPanel
+                ideaDescription={
+                  activeTab === 'validate' ? ideaDescription :
+                  activeTab === 'search' ? searchQuery :
+                  activeTab === 'location' ? `${locationBusiness} in ${locationCity}` :
+                  activeTab === 'clone' ? `Clone ${cloneBusinessName}` : ''
+                }
+                consultantResult={
+                  activeTab === 'validate' ? validateResult :
+                  activeTab === 'search' ? searchResult :
+                  activeTab === 'location' ? locationResult :
+                  activeTab === 'clone' ? cloneResult : null
+                }
+              />
+            </div>
+          </div>
+        </div>
 
         {/* Saved Reports Sidebar */}
         {savedReports.length > 0 && (

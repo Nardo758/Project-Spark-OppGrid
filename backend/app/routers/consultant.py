@@ -32,6 +32,16 @@ class ValidateIdeaResponse(BaseModel):
     similar_opportunities: Optional[List[Dict[str, Any]]] = None
     processing_time_ms: Optional[int] = None
     error: Optional[str] = None
+    # Enriched fields from ReportDataService
+    confidence_score: Optional[int] = None
+    verdict_summary: Optional[str] = None
+    verdict_detail: Optional[str] = None
+    market_intelligence: Optional[Dict[str, Any]] = None
+    advantages: Optional[List[str]] = None
+    risks: Optional[List[str]] = None
+    four_ps_scores: Optional[Dict[str, Any]] = None
+    feasibility_preview: Optional[Dict[str, Any]] = None
+    data_quality: Optional[Dict[str, Any]] = None
 
 
 class SearchIdeasRequest(BaseModel):
@@ -51,6 +61,9 @@ class SearchIdeasResponse(BaseModel):
     total_count: Optional[int] = None
     processing_time_ms: Optional[int] = None
     error: Optional[str] = None
+    # Enriched fields
+    ai_synthesis: Optional[str] = None
+    opportunity_four_ps: Optional[Dict[str, Any]] = None
 
 
 class IdentifyLocationRequest(BaseModel):
@@ -73,6 +86,10 @@ class IdentifyLocationResponse(BaseModel):
     cache_hit_count: Optional[int] = None
     processing_time_ms: Optional[int] = None
     error: Optional[str] = None
+    # Enriched fields
+    four_ps_scores: Optional[Dict[str, Any]] = None
+    four_ps_details: Optional[Dict[str, Any]] = None
+    data_quality: Optional[Dict[str, Any]] = None
 
 
 class CloneSuccessRequest(BaseModel):
@@ -107,6 +124,9 @@ class CloneSuccessResponse(BaseModel):
     analysis_radius_miles: int = 3
     processing_time_ms: Optional[int] = None
     error: Optional[str] = None
+    # Enriched fields
+    target_four_ps: Optional[Dict[str, Any]] = None
+    data_quality: Optional[Dict[str, Any]] = None
 
 
 class DeepCloneRequest(BaseModel):

@@ -196,14 +196,29 @@ class ConsultantStudioService:
                 pattern_analysis,
                 business_context
             )
-            
+
             if viability_report and online_score and physical_score:
                 viability_report["confidence_score"] = min(95, max(60, (online_score + physical_score) // 2 + 20))
-            
+
             recommendation = self._determine_recommendation(online_score, physical_score)
-            
+
+            # Enrich with ReportDataService if location context is available
+            enrichment = self._enrich_with_report_data(idea_description, business_context)
+
             processing_time = int((time.time() - start_time) * 1000)
-            
+
+            # Build enriched verdict
+            confidence_score = viability_report.get("confidence_score", 70) if viability_report else 70
+            verdict_summary = viability_report.get("recommendation", recommendation.upper()) if viability_report else recommendation.upper()
+            verdict_detail = viability_report.get("summary", "") if viability_report else ""
+
+            # Extract advantages and risks from viability report
+            advantages = []
+            risks = []
+            if viability_report:
+                advantages = viability_report.get("strengths", []) + viability_report.get("opportunities", [])
+                risks = viability_report.get("weaknesses", []) + viability_report.get("threats", [])
+
             result = {
                 "success": True,
                 "idea_description": idea_description,
@@ -218,6 +233,16 @@ class ConsultantStudioService:
                 ],
                 "processing_time_ms": processing_time,
                 "from_cache": False,
+                # Enriched fields
+                "confidence_score": confidence_score,
+                "verdict_summary": verdict_summary,
+                "verdict_detail": verdict_detail,
+                "market_intelligence": enrichment.get("market_intelligence") if enrichment else None,
+                "advantages": advantages[:6] if advantages else None,
+                "risks": risks[:6] if risks else None,
+                "four_ps_scores": enrichment.get("four_ps_scores") if enrichment else None,
+                "feasibility_preview": enrichment.get("feasibility_preview") if enrichment else None,
+                "data_quality": enrichment.get("data_quality") if enrichment else None,
             }
             
             self._cache_validation(cache_key, idea_description, business_context, result)
@@ -386,6 +411,9 @@ class ConsultantStudioService:
                 "totalFeatures": len(pins),
             }
             
+            # Enrich with 4P's data from ReportDataService
+            location_enrichment = self._enrich_location_with_report_data(city, inferred_category)
+
             result = {
                 "success": True,
                 "city": city,
@@ -397,6 +425,10 @@ class ConsultantStudioService:
                 "map_data": map_data,
                 "from_cache": False,
                 "processing_time_ms": processing_time,
+                # Enriched fields
+                "four_ps_scores": location_enrichment.get("four_ps_scores") if location_enrichment else None,
+                "four_ps_details": location_enrichment.get("four_ps_details") if location_enrichment else None,
+                "data_quality": location_enrichment.get("data_quality") if location_enrichment else None,
             }
             
             await self._cache_analysis(
@@ -456,12 +488,22 @@ class ConsultantStudioService:
             
             processing_time = int((time.time() - start_time) * 1000)
             
+            # Enrich with 4P's data for target city
+            clone_enrichment = None
+            if target_city and target_state:
+                clone_enrichment = self._enrich_location_with_report_data(
+                    target_city, source_analysis.get("category", "retail"), target_state
+                )
+
             result = {
                 "success": True,
                 "source_business": source_analysis,
                 "matching_locations": matching_locations,
                 "analysis_radius_miles": radius_miles,
                 "processing_time_ms": processing_time,
+                # Enriched fields
+                "target_four_ps": clone_enrichment.get("four_ps_scores") if clone_enrichment else None,
+                "data_quality": clone_enrichment.get("data_quality") if clone_enrichment else None,
             }
             
             await self._log_activity(
@@ -1617,6 +1659,148 @@ class ConsultantStudioService:
             return "ONLINE"
         else:
             return "PHYSICAL"
+
+    def _enrich_with_report_data(
+        self,
+        idea_description: str,
+        business_context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Enrich validation results with real market data from ReportDataService.
+        Requires city/state in business_context. Returns None if unavailable.
+        """
+        from dataclasses import asdict
+
+        if not business_context:
+            return None
+
+        # Extract city/state from business_context or idea
+        location = business_context.get("location", business_context.get("city", ""))
+        if not location:
+            return None
+
+        city, state = parse_city_state(location)
+        if not city or not state:
+            return None
+
+        business_type = business_context.get("business_type", idea_description[:100])
+
+        try:
+            from app.services.report_data_service import ReportDataService
+            service = ReportDataService(self.db)
+            context = service.get_report_data(
+                city=city,
+                state=state,
+                business_type=business_type,
+                report_type="market_analysis",
+            )
+
+            four_ps_scores = service.get_pillar_scores(context)
+
+            market_intelligence = {
+                "demand_level": "high" if (context.product.opportunity_score or 0) > 70 else "medium" if (context.product.opportunity_score or 0) > 40 else "low",
+                "competition_level": context.promotion.competition_level or "unknown",
+                "growth_trend": context.product.google_trends_direction or "stable",
+                "population": context.place.population,
+                "median_income": context.price.median_income,
+                "competitor_count": context.promotion.competitor_count,
+                "google_trends_interest": context.product.google_trends_interest,
+                "job_market_growth": context.place.job_market_growth,
+            }
+
+            feasibility_preview = {
+                "market_size_estimate": context.price.market_size_estimate,
+                "capital_required": context.price.capital_required,
+                "revenue_benchmark": context.price.revenue_benchmark,
+                "time_to_breakeven": None,  # Gated behind paywall
+                "monthly_revenue_projection": None,  # Gated behind paywall
+            }
+
+            data_quality_dict = {
+                "enriched": True,
+                "completeness": context.data_quality.completeness,
+                "confidence": context.data_quality.confidence,
+                "weakest_pillar": context.data_quality.weakest_pillar,
+                "recommended_actions": context.data_quality.recommended_actions[:3] if context.data_quality.recommended_actions else [],
+            }
+
+            return {
+                "four_ps_scores": four_ps_scores,
+                "market_intelligence": market_intelligence,
+                "feasibility_preview": feasibility_preview,
+                "data_quality": data_quality_dict,
+            }
+        except Exception as e:
+            logger.warning(f"ReportDataService enrichment failed: {e}")
+            return {"data_quality": {"enriched": False, "error": str(e)}}
+
+    def _enrich_location_with_report_data(
+        self,
+        city: str,
+        business_type: str,
+        state: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Enrich location/clone results with 4P's data.
+        Parses city for state if not provided separately.
+        """
+        parsed_city, parsed_state = parse_city_state(city)
+        final_state = state or parsed_state
+        if not parsed_city or not final_state:
+            return None
+
+        try:
+            from app.services.report_data_service import ReportDataService
+            service = ReportDataService(self.db)
+            context = service.get_report_data(
+                city=parsed_city,
+                state=final_state,
+                business_type=business_type,
+                report_type="market_analysis",
+            )
+
+            four_ps_scores = service.get_pillar_scores(context)
+
+            four_ps_details = {
+                "product": {
+                    "opportunity_score": context.product.opportunity_score,
+                    "trend_strength": context.product.trend_strength,
+                    "google_trends_interest": context.product.google_trends_interest,
+                    "google_trends_direction": context.product.google_trends_direction,
+                },
+                "price": {
+                    "median_income": context.price.median_income,
+                    "market_size_estimate": context.price.market_size_estimate,
+                    "zillow_home_value": context.price.zillow_home_value,
+                },
+                "place": {
+                    "growth_score": context.place.growth_score,
+                    "population": context.place.population,
+                    "population_growth_rate": context.place.population_growth_rate,
+                    "job_market_growth": context.place.job_market_growth,
+                },
+                "promotion": {
+                    "competition_level": context.promotion.competition_level,
+                    "competitor_count": context.promotion.competitor_count,
+                    "google_avg_rating": context.promotion.google_avg_rating,
+                },
+            }
+
+            data_quality_dict = {
+                "enriched": True,
+                "completeness": context.data_quality.completeness,
+                "confidence": context.data_quality.confidence,
+                "weakest_pillar": context.data_quality.weakest_pillar,
+            }
+
+            return {
+                "four_ps_scores": four_ps_scores,
+                "four_ps_details": four_ps_details,
+                "data_quality": data_quality_dict,
+            }
+        except Exception as e:
+            logger.warning(f"Location enrichment failed: {e}")
+            return {"data_quality": {"enriched": False, "error": str(e)}}
 
     def _parse_address_components(self, address: str) -> tuple[str, Optional[str]]:
         """
