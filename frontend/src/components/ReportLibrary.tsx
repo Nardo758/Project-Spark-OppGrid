@@ -538,10 +538,8 @@ export default function ReportLibrary({
       return
     }
 
-    if (!isAuthenticated || !token) {
-      setGenerateError('Please sign in to generate reports.')
-      return
-    }
+    // Allow guests to generate reports - no authentication required for free reports
+    // Guests will see a "Sign in to Save" prompt after generation
     
     // For templates, check if purchase is required
     if (selectedReport.type === 'template') {
