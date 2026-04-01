@@ -1,0 +1,103 @@
+un in Replit to verify everything is connected:
+
+shell
+
+#!/bin/bash
+echo "🔍 Verifying OppGrid Integration..."
+echo ""
+
+# Check git status
+echo "1️⃣ Git Status:"
+cd /home/replit/Project-Spark-OppGrid
+git status --short | wc -l
+echo "   Files changed: $(git status --short | wc -l)"
+echo ""
+
+# Check backend files exist
+echo "2️⃣ Backend Files:"
+ls -1 backend/alembic/versions/202604* 2>/dev/null | wc -l
+echo "   Migrations created: $(ls -1 backend/alembic/versions/202604* 2>/dev/null | wc -l)"
+ls -1 backend/app/models/opportunity_*.py 2>/dev/null | wc -l
+echo "   Models created: $(ls -1 backend/app/models/opportunity_*.py 2>/dev/null | wc -l)"
+ls -1 backend/app/routers/opportunity_*.py 2>/dev/null | wc -l
+echo "   Routers created: $(ls -1 backend/app/routers/opportunity_*.py 2>/dev/null | wc -l)"
+echo ""
+
+# Check frontend files exist
+echo "3️⃣ Frontend Files:"
+ls -1 frontend/src/hooks/use*.ts 2>/dev/null | wc -l
+echo "   Hooks created: $(ls -1 frontend/src/hooks/use*.ts 2>/dev/null | wc -l)"
+ls -1 frontend/src/components/{Lifecycle,Report,Save}*.tsx 2>/dev/null | wc -l
+echo "   Components created: $(ls -1 frontend/src/components/{Lifecycle,Report,Save}*.tsx 2>/dev/null | wc -l)"
+ls -1 frontend/src/pages/{MyIdeas,Lifecycle}*.tsx 2>/dev/null | wc -l
+echo "   Pages created: $(ls -1 frontend/src/pages/{MyIdeas,Lifecycle}*.tsx 2>/dev/null | wc -l)"
+echo ""
+
+# Check git remote
+echo "4️⃣ GitHub Remote:"
+git remote -v | grep origin | head -1
+echo ""
+
+# Check latest commit
+echo "5️⃣ Latest Commit:"
+git log -1 --oneline
+echo ""
+
+echo "✅ All files verified!"
+Save as /home/replit/verify-integration.sh and run:
+
+shell
+
+bash /home/replit/verify-integration.sh
+
+Expected Output
+
+🔍 Verifying OppGrid Integration...
+
+1️⃣ Git Status:
+   Files changed: 0 (clean)
+
+2️⃣ Backend Files:
+   Migrations created: 2
+   Models created: 2
+   Routers created: 2
+
+3️⃣ Frontend Files:
+   Hooks created: 4
+   Components created: 4
+   Pages created: 2
+
+4️⃣ GitHub Remote:
+   origin https://github.com/Nardo758/Project-Spark-OppGrid.git (fetch)
+
+5️⃣ Latest Commit:
+   c02f548 🚀 FEATURE: Phase 2B/3/1/2 - Stripe...
+
+✅ All files verified!
+
+Next Steps in Replit
+
+After pull + verify:
+
+shell
+
+# 1. Run migrations
+cd /home/replit/Project-Spark-OppGrid/backend
+alembic upgrade head
+
+# 2. Update app/main.py (add 2 imports for collections & lifecycle routers)
+
+# 3. Restart backend
+# (Replit will auto-restart on file changes, or manually restart)
+
+# 4. Update frontend App.tsx (add 2 routes)
+
+# 5. Test
+# - Navigate to /my-ideas
+# - Navigate to /lifecycle
+
+One-Liner for Replit Shell
+
+shell
+
+cd /home/replit/Project-Spark-OppGrid && git pull origin main && bash /home/replit/verify-integration.sh
