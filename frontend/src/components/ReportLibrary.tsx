@@ -178,6 +178,8 @@ export default function ReportLibrary({
   const [purchaseLoading, setPurchaseLoading] = useState(false)
   const [generatingReport, setGeneratingReport] = useState<string | null>(null)
   const [exportingFormat, setExportingFormat] = useState<string | null>(null)
+  const [sidebarReport, setSidebarReport] = useState('business_plan')
+  const [sidebarEmail, setSidebarEmail] = useState('')
 
   const isGuest = !isAuthenticated
 
@@ -412,27 +414,79 @@ export default function ReportLibrary({
     }
   }
 
+  const allReports = REPORT_CATEGORIES.flatMap(cat => cat.reports)
+  const selectedSidebarReport = allReports.find(r => r.slug === sidebarReport)
+
   const sidebarCard = (
     <div className="lg:sticky lg:top-8">
       <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-[#D97757]" />
-          <h3 className="text-sm font-bold text-gray-900">Report Pricing</h3>
+          <h3 className="text-sm font-bold text-gray-900">Generate Report</h3>
         </div>
-        <div className="bg-gray-50 rounded-xl p-4 space-y-2.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">Traditional Consultant</span>
-            <span className="text-gray-400 line-through font-medium">$1,500 – $15,000</span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-700 font-semibold">OppGrid AI Reports</span>
-            <span className="text-[#0F6E56] font-bold">$49 – $169</span>
-          </div>
-          <div className="border-t border-gray-200 pt-2 flex items-center justify-center">
-            <span className="text-[10px] font-semibold text-[#0F6E56] bg-[#0F6E56]/10 px-2.5 py-1 rounded-full">Save 90%+ vs consultants</span>
-          </div>
+
+        <div>
+          <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">Report Type</label>
+          <select
+            value={sidebarReport}
+            onChange={(e) => setSidebarReport(e.target.value)}
+            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757] transition-all"
+          >
+            {REPORT_CATEGORIES.map(cat => (
+              <optgroup key={cat.id} label={cat.label}>
+                {cat.reports.map(r => (
+                  <option key={r.slug} value={r.slug}>{r.title} — {r.price}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
         </div>
-        <div className="space-y-2 text-[11px] text-gray-500">
+
+        {selectedSidebarReport && (
+          <div className="bg-gray-50 rounded-xl p-3.5 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-700 font-semibold">OppGrid Price</span>
+              <span className="text-[#0F6E56] font-bold text-base">{selectedSidebarReport.price}</span>
+            </div>
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-gray-400">Consultant equivalent</span>
+              <span className="text-gray-400 line-through">{selectedSidebarReport.consultantPrice}</span>
+            </div>
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-gray-400">Delivery time</span>
+              <span className="text-gray-500 font-medium">{selectedSidebarReport.deliveryTime}</span>
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">Email for delivery</label>
+          <input
+            type="email"
+            value={sidebarEmail}
+            onChange={(e) => setSidebarEmail(e.target.value)}
+            placeholder="your@email.com"
+            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757] transition-all placeholder:text-gray-400"
+          />
+        </div>
+
+        <button
+          onClick={() => {
+            const report = allReports.find(r => r.slug === sidebarReport)
+            if (report) handleReportAction(report)
+          }}
+          disabled={purchaseLoading || !!generatingReport}
+          className="w-full py-3 text-white rounded-xl text-sm font-semibold transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+          style={{ background: 'linear-gradient(135deg, #D97757, #BA7517)' }}
+        >
+          {purchaseLoading || generatingReport ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+          ) : (
+            <><ShoppingCart className="w-4 h-4" /> Get Report</>
+          )}
+        </button>
+
+        <div className="border-t border-gray-100 pt-3 space-y-2 text-[11px] text-gray-500">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56] shrink-0" />
             <span>AI-powered analysis in minutes</span>
@@ -443,13 +497,10 @@ export default function ReportLibrary({
           </div>
           <div className="flex items-center gap-2">
             <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56] shrink-0" />
-            <span>27 specialized report types</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56] shrink-0" />
             <span>Free validation + feasibility included</span>
           </div>
         </div>
+
         {isGuest && (
           <Link
             to="/login"
