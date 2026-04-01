@@ -38,7 +38,7 @@ import {
   TrendingDown,
   Gift,
 } from 'lucide-react'
-import { VerdictBanner, ScoreCards, MarketIntelligence, FeasibilityPreview } from './ConsultantResults'
+import { FourPsBar, BlurGate, ScoreCard, MetricCard, OppRow } from './ConsultantResults/ResultCards'
 import { useAuthStore } from '../stores/authStore'
 
 type ReportTemplate = {
@@ -1095,8 +1095,8 @@ export default function ReportLibrary({
 
       {/* Consultant Analysis Results */}
       {consultantResult && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 animate-fade-in">
-          <div className="flex items-center justify-between mb-4">
+        <div className="space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between">
             <h3 className="font-semibold text-gray-900">
               {INPUT_MODES.find(m => m.id === inputMode)?.label} Results
             </h3>
@@ -1107,48 +1107,206 @@ export default function ReportLibrary({
 
           {inputMode === 'validate' && consultantResult.success && (
             <div className="space-y-4">
-              <VerdictBanner
-                recommendation={consultantResult.recommendation || 'hybrid'}
-                confidenceScore={consultantResult.confidence_score}
-                verdictSummary={consultantResult.verdict_summary}
-                verdictDetail={consultantResult.verdict_detail}
-              />
-              <ScoreCards
-                onlineScore={consultantResult.online_score}
-                physicalScore={consultantResult.physical_score}
-                confidenceScore={consultantResult.confidence_score}
-                fourPsScores={consultantResult.four_ps_scores}
-              />
-              <MarketIntelligence
-                marketIntelligence={consultantResult.market_intelligence}
-                advantages={consultantResult.advantages || consultantResult.viability_report?.advantages || consultantResult.viability_report?.strengths}
-                risks={consultantResult.risks || consultantResult.viability_report?.risks || consultantResult.viability_report?.weaknesses}
-              />
-              <FeasibilityPreview
-                feasibilityPreview={consultantResult.feasibility_preview}
-                onUnlock={() => {
-                  window.location.href = '/build'
-                }}
-              />
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  {(() => {
+                    const rec = consultantResult.recommendation
+                    if (!rec) return null
+                    const colorMap: Record<string, { bg: string; text: string }> = {
+                      online: { bg: '#DBEAFE', text: '#1E40AF' },
+                      physical: { bg: '#E1F5EE', text: '#085041' },
+                      hybrid: { bg: '#E1F5EE', text: '#085041' },
+                    }
+                    const colors = colorMap[rec] || { bg: '#F3F4F6', text: '#374151' }
+                    return (
+                      <span className="px-3 py-0.5 rounded-full text-xs font-medium" style={{ background: colors.bg, color: colors.text }}>
+                        {rec.charAt(0).toUpperCase() + rec.slice(1)} recommended
+                      </span>
+                    )
+                  })()}
+                  <span className="text-xs text-gray-400">{((consultantResult.processing_time_ms || 0) / 1000).toFixed(1)}s</span>
+                </div>
+                {(consultantResult.viability_report || consultantResult.verdict_summary) && (
+                  <>
+                    <p className="text-sm font-medium text-gray-900 mb-1">
+                      {consultantResult.verdict_summary
+                        || (consultantResult.viability_report?.summary
+                          ? (typeof consultantResult.viability_report.summary === 'string'
+                            ? consultantResult.viability_report.summary.split('.').slice(0, 2).join('.') + '.'
+                            : 'Analysis complete.')
+                          : 'Analysis complete for your business idea.')}
+                    </p>
+                    {consultantResult.verdict_detail && (
+                      <p className="text-xs text-gray-600 mb-1">{consultantResult.verdict_detail}</p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <ScoreCard label="Online viability" value={consultantResult.online_score || 0} color="#185FA5" />
+                <ScoreCard label="Physical viability" value={consultantResult.physical_score || 0} color="#0F6E56" />
+                <ScoreCard
+                  label="Overall confidence"
+                  value={consultantResult.confidence_score != null
+                    ? consultantResult.confidence_score
+                    : Number((((consultantResult.online_score || 0) + (consultantResult.physical_score || 0)) / 20).toFixed(1))}
+                  color="#D97757"
+                  suffix={consultantResult.confidence_score != null ? '%' : '/10'}
+                />
+              </div>
+
+              {consultantResult.four_ps_scores && (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-gray-900">4P's Market Scores</span>
+                    {consultantResult.data_quality?.enriched && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#DBEAFE', color: '#1E40AF' }}>Real market data</span>
+                    )}
+                  </div>
+                  <FourPsBar
+                    product={consultantResult.four_ps_scores.product || 0}
+                    price={consultantResult.four_ps_scores.price || 0}
+                    place={consultantResult.four_ps_scores.place || 0}
+                    promotion={consultantResult.four_ps_scores.promotion || 0}
+                  />
+                </div>
+              )}
+
+              {consultantResult.viability_report && (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm font-medium text-gray-900">4P's market intelligence</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: '#E1F5EE', color: '#085041' }}>Free preview</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3 mb-4">
+                    <MetricCard
+                      label="TAM"
+                      value={String(consultantResult.viability_report.tam || (typeof consultantResult.viability_report.market_size === 'string' ? consultantResult.viability_report.market_size : 'N/A'))}
+                    />
+                    <MetricCard
+                      label="Growth"
+                      value={String(consultantResult.market_intelligence?.growth_trend || consultantResult.viability_report.growth || 'N/A')}
+                    />
+                    <MetricCard
+                      label="Competition"
+                      value={String(consultantResult.market_intelligence?.competition_level || consultantResult.viability_report.competition || 'N/A')}
+                      color="#BA7517"
+                    />
+                    <MetricCard
+                      label="Demand signal"
+                      value={String(consultantResult.market_intelligence?.demand_level || consultantResult.viability_report.demand_signal || 'N/A')}
+                      color="#0F6E56"
+                    />
+                  </div>
+                  {consultantResult.market_intelligence && (
+                    <div className="grid grid-cols-4 gap-3 mb-4">
+                      {consultantResult.market_intelligence.population && (
+                        <MetricCard label="Population" value={Number(consultantResult.market_intelligence.population).toLocaleString()} />
+                      )}
+                      {consultantResult.market_intelligence.median_income && (
+                        <MetricCard label="Median Income" value={`$${Number(consultantResult.market_intelligence.median_income).toLocaleString()}`} />
+                      )}
+                      {consultantResult.market_intelligence.competitor_count != null && (
+                        <MetricCard label="Competitors" value={`${consultantResult.market_intelligence.competitor_count} nearby`} color="#BA7517" />
+                      )}
+                      {consultantResult.market_intelligence.google_trends_interest != null && (
+                        <MetricCard label="Search Interest" value={`${consultantResult.market_intelligence.google_trends_interest}/100`} color="#185FA5" />
+                      )}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs font-medium mb-2" style={{ color: '#0F6E56' }}>Advantages</p>
+                      <div className="text-xs text-gray-500 leading-relaxed space-y-1">
+                        {(consultantResult.advantages || consultantResult.viability_report?.advantages || consultantResult.viability_report?.strengths || []).slice(0, 3).map((item: string, i: number) => (
+                          <p key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</p>
+                        ))}
+                        {!(consultantResult.advantages || consultantResult.viability_report?.advantages || consultantResult.viability_report?.strengths || []).length && (
+                          <p className="text-gray-400">Analysis data available in full report</p>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium mb-2" style={{ color: '#D97757' }}>Risks to evaluate</p>
+                      <div className="text-xs text-gray-500 leading-relaxed space-y-1">
+                        {(consultantResult.risks || consultantResult.viability_report?.risks || consultantResult.viability_report?.weaknesses || []).slice(0, 3).map((item: string, i: number) => (
+                          <p key={i}>{typeof item === 'string' ? item : JSON.stringify(item)}</p>
+                        ))}
+                        {!(consultantResult.risks || consultantResult.viability_report?.risks || consultantResult.viability_report?.weaknesses || []).length && (
+                          <p className="text-gray-400">Risk analysis available in full report</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <BlurGate
+                title="Unlock full feasibility study"
+                priceLabel="Get report — $25"
+                subtitle="Startup costs, revenue projections, competitive landscape, top locations, and 90-day launch plan."
+                onPurchase={() => handleTemplateCheckout('feasibility_study')}
+                loading={purchaseLoading}
+              >
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <p className="text-sm font-medium text-gray-900 mb-3">Full feasibility breakdown</p>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <MetricCard label="Startup cost range" value={consultantResult.feasibility_preview?.capital_required || '$150K - $350K'} />
+                    <MetricCard label="Break-even timeline" value="12-18 months" />
+                    <MetricCard label="Market size estimate" value={consultantResult.feasibility_preview?.market_size_estimate || 'Fee-for-service'} />
+                    <MetricCard label="Revenue benchmark" value={consultantResult.feasibility_preview?.revenue_benchmark || 'Austin, Denver, Raleigh'} />
+                  </div>
+                  <p className="text-xs text-gray-500">Detailed competitive landscape with pricing benchmarks, staffing models, and 90-day launch timeline...</p>
+                </div>
+              </BlurGate>
+
+              {consultantResult.similar_opportunities && consultantResult.similar_opportunities.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <p className="text-sm font-medium text-gray-900 mb-3">Related opportunities</p>
+                  <div className="space-y-2">
+                    {consultantResult.similar_opportunities.map((opp: { id: number; title: string; score?: number }) => (
+                      <OppRow key={opp.id} title={opp.title} score={opp.score} to={`/opportunity/${opp.id}`} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleTemplateCheckout('feasibility_study')}
+                    disabled={purchaseLoading}
+                    className="flex-1 min-w-[140px] py-3 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition-colors"
+                    style={{ background: '#D97757' }}
+                  >
+                    Get full feasibility — $25
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!token) { window.location.href = '/login'; return }
+                      setConsultantResult(null)
+                    }}
+                    className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Save free summary
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-400 text-center mt-2">Powered by DeepSeek + Claude AI · 4P's data from 6 live sources</p>
+              </div>
             </div>
           )}
 
           {inputMode === 'search' && consultantResult.success && (
             <div className="space-y-3">
               {consultantResult.ai_synthesis && (
-                <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 mb-3">
-                  <p className="text-sm text-amber-900 leading-relaxed">{consultantResult.ai_synthesis}</p>
+                <div className="rounded-lg p-4 mb-3" style={{ borderLeft: '3px solid #D97757', background: '#FFF7ED' }}>
+                  <p className="text-sm text-gray-700 leading-relaxed">{consultantResult.ai_synthesis}</p>
                 </div>
               )}
               <div className="text-sm text-gray-600">Found {consultantResult.total_count || 0} opportunities</div>
               {consultantResult.opportunities?.slice(0, 5).map((opp: { id: number; title: string; score?: number; category?: string }) => (
-                <Link key={opp.id} to={`/opportunity/${opp.id}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div>
-                    <div className="font-medium text-gray-900">{opp.title}</div>
-                    {opp.category && <div className="text-xs text-gray-500">{opp.category}</div>}
-                  </div>
-                  {opp.score && <div className="text-sm font-medium text-amber-500">{opp.score}</div>}
-                </Link>
+                <OppRow key={opp.id} title={opp.title} category={opp.category} score={opp.score} to={`/opportunity/${opp.id}`} />
               ))}
             </div>
           )}
@@ -1156,39 +1314,41 @@ export default function ReportLibrary({
           {inputMode === 'location' && consultantResult.success && (
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-500">Competition</div>
-                  <div className="text-lg font-bold">{consultantResult.geo_analysis?.competitors?.length || 0}</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-500">Density</div>
-                  <div className="text-lg font-bold capitalize">{consultantResult.geo_analysis?.market_density || 'N/A'}</div>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                  <div className="text-xs text-gray-500">Category</div>
-                  <div className="text-lg font-bold">{consultantResult.inferred_category || 'N/A'}</div>
-                </div>
+                <MetricCard label="Competition" value={String(consultantResult.geo_analysis?.competitors?.length || 0)} color="#BA7517" />
+                <MetricCard label="Density" value={String(consultantResult.geo_analysis?.market_density || 'N/A')} color="#185FA5" />
+                <MetricCard label="Category" value={String(consultantResult.inferred_category || 'N/A')} color="#0F6E56" />
               </div>
               {consultantResult.four_ps_scores && (
-                <ScoreCards fourPsScores={consultantResult.four_ps_scores} />
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <span className="text-sm font-medium text-gray-900 mb-3 block">4P's Market Scores</span>
+                  <FourPsBar
+                    product={consultantResult.four_ps_scores.product || 0}
+                    price={consultantResult.four_ps_scores.price || 0}
+                    place={consultantResult.four_ps_scores.place || 0}
+                    promotion={consultantResult.four_ps_scores.promotion || 0}
+                  />
+                </div>
               )}
               {consultantResult.site_recommendations && consultantResult.site_recommendations.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-gray-900">Site recommendations</p>
-                  {consultantResult.site_recommendations.map((site: { name?: string; area?: string; priority?: string; score?: number; reason?: string }, idx: number) => {
-                    const priority = site.priority || (site.score && site.score >= 80 ? 'High' : 'Medium') || (idx < 2 ? 'High' : 'Medium')
-                    return (
-                      <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                          priority === 'High' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                        }`}>{priority}</span>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{site.name || site.area || `Site ${idx + 1}`}</div>
-                          {site.reason && <div className="text-xs text-gray-500">{site.reason}</div>}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <p className="text-sm font-medium text-gray-900 mb-3">Site recommendations</p>
+                  <div className="space-y-2">
+                    {consultantResult.site_recommendations.map((site: { name?: string; area?: string; priority?: string; score?: number; reason?: string }, idx: number) => {
+                      const priority = site.priority || (site.score && site.score >= 80 ? 'High' : 'Medium') || (idx < 2 ? 'High' : 'Medium')
+                      return (
+                        <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium" style={{
+                            background: priority === 'High' ? '#E1F5EE' : '#FFF7ED',
+                            color: priority === 'High' ? '#085041' : '#BA7517',
+                          }}>{priority}</span>
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">{site.name || site.area || `Site ${idx + 1}`}</div>
+                            {site.reason && <div className="text-xs text-gray-500">{site.reason}</div>}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -1197,11 +1357,11 @@ export default function ReportLibrary({
           {inputMode === 'clone' && consultantResult.success && (
             <div className="space-y-4">
               {consultantResult.source_business && (
-                <div className="bg-gray-50 rounded-lg p-4">
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Source business</p>
                   <p className="font-medium text-gray-900">{consultantResult.source_business.name}</p>
                   {consultantResult.source_business.category && (
-                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium" style={{ background: '#E1F5EE', color: '#085041' }}>
                       {consultantResult.source_business.category}
                     </span>
                   )}
@@ -1211,14 +1371,14 @@ export default function ReportLibrary({
                 Found {consultantResult.matching_locations?.length || 0} matching locations
               </div>
               {consultantResult.matching_locations?.slice(0, 3).map((loc: { name: string; city: string; state: string; similarity_score: number; demographics_match?: number; competition_match?: number }, idx: number) => (
-                <div key={idx} className="p-4 bg-gray-50 rounded-lg">
+                <div key={idx} className="p-4 bg-white rounded-xl border border-gray-200">
                   <div className="flex justify-between mb-2">
                     <div>
                       <div className="font-medium text-gray-900">{loc.name}</div>
                       <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-amber-500">{loc.similarity_score}%</div>
+                      <div className="text-2xl font-bold" style={{ color: '#D97757' }}>{loc.similarity_score}%</div>
                       <div className="text-[10px] text-gray-400">Match</div>
                     </div>
                   </div>
@@ -1243,8 +1403,8 @@ export default function ReportLibrary({
             </div>
           )}
 
-          <div className="mt-3 text-xs text-gray-400">
-            Processed in {consultantResult.processing_time_ms}ms
+          <div className="text-xs text-gray-400 mt-2">
+            Processed in {((consultantResult.processing_time_ms || 0) / 1000).toFixed(1)}s
           </div>
         </div>
       )}
