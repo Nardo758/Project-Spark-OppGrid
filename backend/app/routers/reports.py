@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List, Optional
+from typing import List, Optional, Tuple, Any
 from pydantic import BaseModel
 from datetime import datetime
 import logging
+import re
 import time
 
 from app.db.database import get_db
@@ -18,6 +19,181 @@ from app.data.report_templates_seed import REPORT_TEMPLATES
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
 logger = logging.getLogger(__name__)
+
+US_STATES = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia",
+}
+STATE_NAME_TO_CODE = {v.lower(): k for k, v in US_STATES.items()}
+
+
+def normalize_state(state_input: Optional[str]) -> Optional[str]:
+    """Normalize a state value to a 2-letter code. Handles full names, codes, and mixed casing."""
+    if not state_input:
+        return None
+    cleaned = state_input.strip()
+    upper = cleaned.upper()
+    if upper in US_STATES:
+        return upper
+    lower = cleaned.lower()
+    if lower in STATE_NAME_TO_CODE:
+        return STATE_NAME_TO_CODE[lower]
+    return cleaned
+
+
+def extract_location_from_text(text: str) -> Tuple[Optional[str], Optional[str]]:
+    """Extract city, state from free-form text. Returns (city, state_code) or (None, None)."""
+    if not text:
+        return None, None
+
+    pattern = r'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),\s*([A-Z]{2})\b'
+    m = re.search(pattern, text)
+    if m and m.group(2) in US_STATES:
+        return m.group(1).strip(), m.group(2)
+
+    for code, name in US_STATES.items():
+        pattern = rf'([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),?\s+{re.escape(name)}\b'
+        m = re.search(pattern, text)
+        if m:
+            return m.group(1).strip(), code
+
+    for code, name in US_STATES.items():
+        pattern = rf'(?:in|near|around)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*),?\s+{re.escape(code)}\b'
+        m = re.search(pattern, text)
+        if m:
+            return m.group(1).strip(), code
+
+    return None, None
+
+
+def extract_business_type(text: str) -> Optional[str]:
+    """Extract a business type/category from free-form text."""
+    if not text:
+        return None
+    text_lower = text.lower()
+    for keyword in [
+        "restaurant", "cafe", "coffee shop", "bakery", "gym", "fitness center",
+        "salon", "barbershop", "clinic", "dental", "medical", "pharmacy",
+        "daycare", "tutoring", "yoga studio", "pilates", "spa", "hotel", "motel",
+        "brewery", "laundromat", "car wash", "pet grooming",
+        "auto repair", "real estate", "coworking", "mental health",
+        "therapy", "counseling", "consulting", "ecommerce", "saas",
+        "retail", "grocery", "convenience store", "gas station",
+        "bar and grill", "fitness",
+    ]:
+        if keyword in text_lower:
+            return keyword
+    return None
+
+
+def serialize_report_data_for_prompt(report_data: Any) -> str:
+    """Serialize a ReportDataContext into structured prompt text for AI consumption."""
+    if not report_data:
+        return ""
+
+    lines = ["\n--- OppGrid Market Intelligence Data ---"]
+
+    if report_data.product:
+        p = report_data.product
+        lines.append("\nPRODUCT (Demand Validation):")
+        if p.opportunity_score is not None:
+            lines.append(f"- Opportunity Score: {p.opportunity_score:.0f}/100")
+        if p.pain_intensity is not None:
+            lines.append(f"- Pain Intensity: {p.pain_intensity:.1f}/10")
+        if p.urgency_level:
+            lines.append(f"- Urgency Level: {p.urgency_level}")
+        if p.trend_strength is not None:
+            lines.append(f"- Trend Strength: {p.trend_strength:.0f}/100")
+        if p.signal_density is not None:
+            lines.append(f"- Signal Density: {p.signal_density:.0%}")
+        if p.validation_confidence is not None:
+            lines.append(f"- Validation Confidence: {p.validation_confidence:.0%}")
+        if p.google_trends_interest is not None:
+            lines.append(f"- Google Trends Interest: {p.google_trends_interest}/100 ({p.google_trends_direction or 'N/A'})")
+        if p.amenity_demand:
+            lines.append("- Top Consumer Demands:")
+            for sig in p.amenity_demand[:5]:
+                lines.append(f"  * {sig.get('amenity_type', '').replace('_', ' ').title()}: {sig.get('demand_pct', 0)}%")
+
+    if report_data.price:
+        pr = report_data.price
+        lines.append("\nPRICE (Economics):")
+        if pr.market_size_estimate:
+            lines.append(f"- Market Size: {pr.market_size_estimate}")
+        if pr.addressable_market_value:
+            lines.append(f"- Addressable Market: ${pr.addressable_market_value:,.0f}")
+        if pr.median_income:
+            lines.append(f"- Median Income: ${pr.median_income:,}")
+        if pr.revenue_benchmark:
+            lines.append(f"- Revenue Benchmark: ${pr.revenue_benchmark:,.0f}/year")
+        if pr.capital_required:
+            lines.append(f"- Capital Required: ${pr.capital_required:,.0f}")
+        if pr.median_rent:
+            lines.append(f"- Median Rent: ${pr.median_rent}/month")
+        if pr.spending_power_index:
+            lines.append(f"- Spending Power Index: {pr.spending_power_index}/100")
+        if pr.income_growth_rate:
+            lines.append(f"- Income Growth Rate: {pr.income_growth_rate}%")
+
+    if report_data.place:
+        pl = report_data.place
+        lines.append("\nPLACE (Location Intelligence):")
+        if pl.growth_score is not None:
+            lines.append(f"- Market Growth Score: {pl.growth_score:.0f}/100")
+        if pl.growth_category:
+            lines.append(f"- Growth Category: {pl.growth_category}")
+        if pl.population:
+            lines.append(f"- Population: {pl.population:,}")
+        if pl.population_growth_rate is not None:
+            lines.append(f"- Population Growth: {pl.population_growth_rate}%")
+        if pl.job_growth_rate is not None:
+            lines.append(f"- Job Growth: {pl.job_growth_rate}%")
+        if pl.business_formation_rate is not None:
+            lines.append(f"- Business Formation Rate: {pl.business_formation_rate}%")
+        if pl.traffic_aadt:
+            lines.append(f"- Traffic AADT: {pl.traffic_aadt:,}")
+        if pl.vacancy_rate is not None:
+            lines.append(f"- Vacancy Rate: {pl.vacancy_rate}%")
+        if pl.unemployment_rate is not None:
+            lines.append(f"- Unemployment Rate: {pl.unemployment_rate}%")
+        if pl.job_postings_count:
+            lines.append(f"- Active Job Postings: {pl.job_postings_count:,}")
+
+    if report_data.promotion:
+        pm = report_data.promotion
+        lines.append("\nPROMOTION (Competition):")
+        if pm.competition_level:
+            lines.append(f"- Competition Level: {pm.competition_level}")
+        if pm.competitor_count:
+            lines.append(f"- Competitors Found: {pm.competitor_count}")
+        if pm.avg_competitor_rating:
+            lines.append(f"- Avg Competitor Rating: {pm.avg_competitor_rating:.1f}/5.0")
+        if pm.success_factors:
+            lines.append(f"- Success Factors: {', '.join(pm.success_factors[:3])}")
+        if pm.key_risks:
+            lines.append(f"- Key Risks: {', '.join(pm.key_risks[:3])}")
+        if pm.competitive_advantages:
+            lines.append(f"- Competitive Advantages: {', '.join(pm.competitive_advantages[:3])}")
+
+    if report_data.data_quality:
+        dq = report_data.data_quality
+        lines.append(f"\nData Quality: {dq.completeness:.0%} complete, {dq.confidence:.0%} confidence")
+        if dq.weakest_pillar:
+            lines.append(f"Weakest Pillar: {dq.weakest_pillar}")
+
+    lines.append("--- End Market Intelligence Data ---\n")
+    return "\n".join(lines)
 
 
 class ReportTemplateResponse(BaseModel):
@@ -201,6 +377,10 @@ async def generate_report(
         )
     
     context_parts = []
+    city = None
+    state = None
+    business_type = None
+    opportunity = None
     
     if request.opportunity_id:
         opportunity = db.query(Opportunity).filter(Opportunity.id == request.opportunity_id).first()
@@ -210,6 +390,9 @@ async def generate_report(
             context_parts.append(f"Category: {opportunity.category}")
             if opportunity.market_size:
                 context_parts.append(f"Market Size: {opportunity.market_size}")
+            city = opportunity.city
+            state = normalize_state(opportunity.region)
+            business_type = opportunity.category
     
     if request.workspace_id:
         workspace = db.query(UserWorkspace).filter(UserWorkspace.id == request.workspace_id).first()
@@ -220,6 +403,13 @@ async def generate_report(
     
     if request.custom_context:
         context_parts.append(f"Additional Context: {request.custom_context}")
+        if not city or not state:
+            text_city, text_state = extract_location_from_text(request.custom_context)
+            if text_city and text_state:
+                city = text_city
+                state = text_state
+        if not business_type:
+            business_type = extract_business_type(request.custom_context)
     
     if not context_parts:
         raise HTTPException(
@@ -228,7 +418,36 @@ async def generate_report(
         )
     
     context = "\n".join(context_parts)
-    prompt = template.ai_prompt.replace("{context}", context)
+    
+    report_data = None
+    report_data_text = ""
+    if city and state:
+        try:
+            from app.services.report_data_service import ReportDataService
+            data_service = ReportDataService(db)
+            report_data = data_service.get_report_data(
+                city=city,
+                state=state,
+                business_type=business_type,
+                report_type=template.slug,
+                opportunity_id=request.opportunity_id
+            )
+            report_data_text = serialize_report_data_for_prompt(report_data)
+            logger.info(
+                f"[ReportGenerate] 4P's data fetched for {city}, {state}: "
+                f"{report_data.data_quality.completeness:.0%} complete, "
+                f"{report_data.data_quality.confidence:.0%} confidence"
+            )
+        except Exception as data_err:
+            logger.warning(f"[ReportGenerate] Could not fetch market data for {city}, {state}: {data_err}")
+    else:
+        logger.info("[ReportGenerate] No city/state available, skipping market data enrichment")
+    
+    enriched_context = context
+    if report_data_text:
+        enriched_context = f"{context}\n{report_data_text}"
+    
+    prompt = template.ai_prompt.replace("{context}", enriched_context)
     
     report_type_map = {
         "ad_creatives": ReportType.AD_CREATIVES,
@@ -251,7 +470,6 @@ async def generate_report(
         "pricing_strategy": ReportType.PRICING_STRATEGY,
         "competitive_analysis": ReportType.COMPETITIVE_ANALYSIS,
         "customer_interview": ReportType.CUSTOMER_INTERVIEW,
-        # Analysis Reports
         "feasibility_study": ReportType.FEASIBILITY_STUDY,
         "business_plan": ReportType.BUSINESS_PLAN,
         "financial_model": ReportType.FINANCIAL_MODEL,
@@ -278,12 +496,15 @@ async def generate_report(
     
     start_time = time.time()
     try:
-        full_prompt = f"""You are a business strategy expert creating professional reports. Provide actionable, specific, and well-structured content.
+        data_instruction = ""
+        if report_data_text:
+            data_instruction = " Use the OppGrid Market Intelligence Data provided to ground your analysis in real data points. Cite specific metrics where relevant."
+        
+        full_prompt = f"""You are a business strategy expert creating professional reports. Provide actionable, specific, and well-structured content.{data_instruction}
 
 {prompt}"""
         result = await llm_ai_engine_service.generate_response(full_prompt, model="claude")
         
-        # Check for AI errors
         if result.get("error"):
             logger.error(f"AI service error: {result.get('error_message', result.get('error'))}")
             raise Exception(f"AI service unavailable: {result.get('error_message', 'Unknown error')}")
@@ -297,12 +518,17 @@ async def generate_report(
         lines = content.split('\n')
         summary = lines[0][:500] if lines else "Report generated successfully"
         
+        confidence = 85
+        if report_data and report_data.data_quality:
+            confidence = int(report_data.data_quality.confidence * 100)
+            confidence = max(10, min(100, confidence))
+        
         generated_report.content = content
         generated_report.summary = summary
         generated_report.status = ReportStatus.COMPLETED
         generated_report.completed_at = datetime.utcnow()
         generated_report.generation_time_ms = generation_time_ms
-        generated_report.confidence_score = 85
+        generated_report.confidence_score = confidence
         
         db.commit()
         db.refresh(generated_report)
