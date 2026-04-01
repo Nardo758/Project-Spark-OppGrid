@@ -460,7 +460,7 @@ export default function ReportLibrary({
         )}
 
         <div>
-          <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">Email for delivery</label>
+          <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">Email for delivery <span className="text-gray-300 font-normal">(optional)</span></label>
           <input
             type="email"
             value={sidebarEmail}
@@ -468,6 +468,7 @@ export default function ReportLibrary({
             placeholder="your@email.com"
             className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757] transition-all placeholder:text-gray-400"
           />
+          <p className="text-[10px] text-gray-400 mt-1">Reports are also available in your dashboard</p>
         </div>
 
         <button
