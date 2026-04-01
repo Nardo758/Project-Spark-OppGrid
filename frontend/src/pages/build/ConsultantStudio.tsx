@@ -18,6 +18,15 @@ import { Link } from 'react-router-dom'
 import ReportSelectionPanel from '../../components/ReportSelectionPanel'
 import ReportHeader from '../../components/ReportHeader'
 import { FourPsBar, BlurGate, ScoreCard, MetricCard, OppRow } from '../../components/ConsultantResults/ResultCards'
+import {
+  ExecutiveSummary,
+  MarketOpportunity,
+  BusinessModel,
+  FinancialViability,
+  RiskAssessment,
+  NextSteps,
+  SimilarOpportunities,
+} from '../../components/ReportSections'
 
 type TabId = 'validate' | 'search' | 'location' | 'clone'
 
@@ -688,6 +697,39 @@ export default function ConsultantStudio() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* 6 Report Sections - Phase 1 Implementation */}
+          {validateResult?.success && (
+            <>
+              <ExecutiveSummary
+                verdict_summary={validateResult.verdict_summary}
+                verdict_detail={validateResult.verdict_detail}
+                recommendation={validateResult.recommendation}
+                confidence_score={validateResult.confidence_score}
+                viability_report={validateResult.viability_report}
+              />
+
+              <MarketOpportunity
+                market_intelligence={validateResult.market_intelligence}
+                viability_report={validateResult.viability_report}
+              />
+
+              <BusinessModel
+                recommendation={validateResult.recommendation}
+                advantages={validateResult.advantages}
+                risks={validateResult.risks}
+                viability_report={validateResult.viability_report}
+              />
+
+              <FinancialViability viability_report={validateResult.viability_report} />
+
+              <RiskAssessment viability_report={validateResult.viability_report} />
+
+              <NextSteps viability_report={validateResult.viability_report} />
+
+              <SimilarOpportunities similar_opportunities={validateResult.similar_opportunities} />
+            </>
           )}
 
           <BlurGate
