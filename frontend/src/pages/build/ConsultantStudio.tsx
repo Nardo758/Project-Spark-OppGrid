@@ -736,7 +736,7 @@ export default function ConsultantStudio() {
                 }}
                 className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                {saveReportMutation.isPending ? 'Saving...' : 'Download free summary'}
+                {saveReportMutation.isPending ? 'Saving...' : 'Save free summary'}
               </button>
             </div>
             <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
@@ -1215,7 +1215,7 @@ export default function ConsultantStudio() {
                 disabled={saveReportMutation.isPending}
                 className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                {saveReportMutation.isPending ? 'Saving...' : 'Download free summary'}
+                {saveReportMutation.isPending ? 'Saving...' : 'Save free summary'}
               </button>
             </div>
             <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
@@ -1494,7 +1494,7 @@ export default function ConsultantStudio() {
                 disabled={saveReportMutation.isPending}
                 className="flex-1 min-w-[140px] py-3 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                {saveReportMutation.isPending ? 'Saving...' : 'Download free summary'}
+                {saveReportMutation.isPending ? 'Saving...' : 'Save free summary'}
               </button>
             </div>
             <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
