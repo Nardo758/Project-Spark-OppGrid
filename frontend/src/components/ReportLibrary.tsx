@@ -44,7 +44,7 @@ import {
   LogIn,
 } from 'lucide-react'
 import DOMPurify from 'dompurify'
-import { FourPsHorizontalBar, ScoreRing, OppRow, BlurGate } from './ConsultantResults/ResultCards'
+import { FourPsHorizontalBar, ScoreRing, OppRow } from './ConsultantResults/ResultCards'
 import { useAuthStore } from '../stores/authStore'
 
 type InputMode = 'validate' | 'search' | 'location' | 'clone'
@@ -180,6 +180,7 @@ export default function ReportLibrary({
   const [exportingFormat, setExportingFormat] = useState<string | null>(null)
   const [sidebarReport, setSidebarReport] = useState('business_plan')
   const [sidebarEmail, setSidebarEmail] = useState('')
+  const [sidebarEmailError, setSidebarEmailError] = useState<string | null>(null)
 
   const isGuest = !isAuthenticated
 
@@ -270,7 +271,6 @@ export default function ReportLibrary({
   }
 
   const generateFreeReports = async (analysisResult: any) => {
-    if (!isAuthenticated) return
     const context = `Idea: ${ideaDescription}\n\nAnalysis: ${JSON.stringify(analysisResult, null, 2)}`
     const reportTypes = ['feasibility_study']
 
@@ -297,22 +297,29 @@ export default function ReportLibrary({
   }
 
   const handleReportAction = async (report: ReportItem) => {
-    if (!isAuthenticated) {
-      setGenerateError('Please sign in to purchase or generate reports.')
+    if (isGuest && !sidebarEmail.trim()) {
+      setSidebarEmailError('Please enter your email to purchase reports.')
       return
     }
+    if (isGuest && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sidebarEmail.trim())) {
+      setSidebarEmailError('Please enter a valid email address.')
+      return
+    }
+    setSidebarEmailError(null)
     setPurchaseLoading(true)
     setGenerateError(null)
     try {
-      const accessRes = await fetch(`/api/v1/reports/check-access?template_slug=${encodeURIComponent(report.slug)}`, {
-        method: 'POST',
-        headers: headers(),
-      })
-      if (accessRes.ok) {
-        const accessData = await accessRes.json()
-        if (accessData.has_access) {
-          await handleGenerateReport(report)
-          return
+      if (isAuthenticated) {
+        const accessRes = await fetch(`/api/v1/reports/check-access?template_slug=${encodeURIComponent(report.slug)}`, {
+          method: 'POST',
+          headers: headers(),
+        })
+        if (accessRes.ok) {
+          const accessData = await accessRes.json()
+          if (accessData.has_access) {
+            await handleGenerateReport(report)
+            return
+          }
         }
       }
       const baseUrl = window.location.origin
@@ -320,14 +327,20 @@ export default function ReportLibrary({
       const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}`
       const cancelUrl = `${baseUrl}/billing/return?status=canceled&return_to=${encodeURIComponent(returnPath)}`
 
-      const res = await fetch('/api/v1/report-pricing/template-checkout', {
+      const checkoutBody: Record<string, any> = {
+        report_type: report.slug,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      }
+      if (isGuest || sidebarEmail.trim()) {
+        checkoutBody.email = sidebarEmail.trim()
+      }
+      checkoutBody.report_context = { idea_description: ideaDescription }
+
+      const res = await fetch('/api/v1/report-pricing/studio-report-checkout', {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({
-          template_slug: report.slug,
-          success_url: successUrl,
-          cancel_url: cancelUrl,
-        }),
+        body: JSON.stringify(checkoutBody),
       })
 
       const data = await res.json()
@@ -393,11 +406,13 @@ export default function ReportLibrary({
   }
 
   const handleExport = async (format: string) => {
-    if (!viewingReport || !token) return
+    if (!viewingReport) return
     setExportingFormat(format)
     try {
+      const exportHeaders: Record<string, string> = {}
+      if (token) exportHeaders['Authorization'] = `Bearer ${token}`
       const res = await fetch(`/api/v1/reports/${viewingReport.id}/export/${format}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: exportHeaders,
       })
       if (!res.ok) throw new Error('Export failed')
       const blob = await res.blob()
@@ -460,15 +475,18 @@ export default function ReportLibrary({
         )}
 
         <div>
-          <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">Email for delivery <span className="text-gray-300 font-normal">(optional)</span></label>
+          <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">Email for delivery {isGuest ? <span className="text-red-400 font-normal">(required)</span> : <span className="text-gray-300 font-normal">(optional)</span>}</label>
           <input
             type="email"
             value={sidebarEmail}
-            onChange={(e) => setSidebarEmail(e.target.value)}
+            onChange={(e) => { setSidebarEmail(e.target.value); setSidebarEmailError(null) }}
             placeholder="your@email.com"
             className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757] transition-all placeholder:text-gray-400"
           />
           <p className="text-[10px] text-gray-400 mt-1">Reports are also available in your dashboard</p>
+          {sidebarEmailError && (
+            <p className="text-[10px] text-red-500 mt-1 font-medium">{sidebarEmailError}</p>
+          )}
         </div>
 
         <button
@@ -502,14 +520,6 @@ export default function ReportLibrary({
           </div>
         </div>
 
-        {isGuest && (
-          <Link
-            to="/login"
-            className="block w-full text-center py-2.5 bg-gray-900 text-white rounded-xl text-xs font-semibold hover:bg-gray-800 transition-all"
-          >
-            Sign in to get started
-          </Link>
-        )}
       </div>
     </div>
   )
@@ -857,14 +867,6 @@ export default function ReportLibrary({
                 <h3 className="text-base font-semibold text-gray-900">Just Generated</h3>
                 <span className="text-[10px] text-gray-400">Free with your analysis</span>
               </div>
-              {isGuest && (
-                <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-2">
-                  <LogIn className="w-4 h-4 text-amber-600 shrink-0" />
-                  <p className="text-xs text-amber-700">
-                    <Link to="/login" className="font-semibold underline hover:text-amber-900">Sign in</Link> to unlock free AI-generated reports with your analysis.
-                  </p>
-                </div>
-              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   onClick={() => {
@@ -897,34 +899,7 @@ export default function ReportLibrary({
                   </div>
                 </button>
 
-                {isGuest ? (
-                  <BlurGate
-                    title="Feasibility Study"
-                    subtitle="Sign in to unlock your free AI-generated feasibility study with detailed market analysis."
-                    priceLabel="Sign in to unlock"
-                    onPurchase={() => window.location.href = '/login'}
-                  >
-                    <div className="p-4 bg-white border-2 border-gray-100 rounded-xl text-left">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#0F6E56]/10">
-                          <FileText className="w-4 h-4 text-[#0F6E56]" />
-                        </div>
-                        <div>
-                          <span className="text-sm font-semibold text-gray-900">Feasibility Study</span>
-                          <span className="text-[9px] ml-2 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 font-medium">FREE</span>
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-gray-500">Market opportunity and risk assessment</p>
-                      <div className="space-y-1.5 mt-3">
-                        <div className="h-2.5 bg-gray-200 rounded w-full" />
-                        <div className="h-2.5 bg-gray-200 rounded w-3/4" />
-                        <div className="h-2.5 bg-gray-200 rounded w-5/6" />
-                        <div className="h-2.5 bg-gray-200 rounded w-2/3" />
-                      </div>
-                    </div>
-                  </BlurGate>
-                ) : (
-                  <button
+                <button
                     onClick={() => {
                       if (freeReports.feasibility_study) {
                         setViewingReport(freeReports.feasibility_study)
@@ -953,7 +928,6 @@ export default function ReportLibrary({
                       ) : 'Pending...'}
                     </div>
                   </button>
-                )}
               </div>
             </div>
           )}
@@ -1169,7 +1143,7 @@ export default function ReportLibrary({
 
             <div className="border-b border-gray-200 px-5 sm:px-6 py-3 flex items-center justify-between bg-gray-50/80 backdrop-blur-sm shrink-0 sticky top-0 z-10">
               <div className="flex gap-2">
-                {isAuthenticated && viewingReport.id > 0 && (
+                {viewingReport.id > 0 && (
                   <>
                     <button
                       onClick={() => handleExport('pdf')}
@@ -1192,14 +1166,6 @@ export default function ReportLibrary({
                       <Printer className="w-3.5 h-3.5" /> Print
                     </button>
                   </>
-                )}
-                {!isAuthenticated && (
-                  <Link
-                    to="/login"
-                    className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-all"
-                  >
-                    <LogIn className="w-3.5 h-3.5" /> Sign in to export
-                  </Link>
                 )}
               </div>
               <button
