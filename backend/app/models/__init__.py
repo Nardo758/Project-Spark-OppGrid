@@ -69,6 +69,7 @@ from .team import (
     TeamRole, InviteStatus
 )
 from .monthly_report_usage import MonthlyReportUsage
+from .ai_usage import UserAIUsage, UserAIUsageSummary, AIUsageQuota, AIUsageEventType
 
 __all__ = [
     "User",
@@ -203,4 +204,8 @@ __all__ = [
     "TeamRole",
     "InviteStatus",
     "MonthlyReportUsage",
+    "UserAIUsage",
+    "UserAIUsageSummary",
+    "AIUsageQuota",
+    "AIUsageEventType",
 ]

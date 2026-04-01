@@ -62,10 +62,12 @@ def get_database_url():
     """
     # First check DATABASE_URL (set by Replit database provisioning)
     database_url = os.getenv("DATABASE_URL")
-    if database_url:
+    if database_url and database_url.startswith(("postgresql://", "postgres://")):
         url = _prepare_postgres_url(database_url)
         logger.info("Using DATABASE_URL for PostgreSQL connection")
         return url
+    elif database_url:
+        logger.warning(f"DATABASE_URL is not a PostgreSQL URL (scheme: {database_url.split('://')[0]}), falling back to PG* variables")
     
     # Fallback to PG* variables
     pg_host = os.getenv("PGHOST")

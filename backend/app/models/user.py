@@ -94,6 +94,7 @@ class User(Base):
     copilot_messages = relationship("GlobalChatMessage", back_populates="user", cascade="all, delete-orphan", order_by="GlobalChatMessage.created_at")
     monthly_report_usage = relationship("MonthlyReportUsage", back_populates="user", cascade="all, delete-orphan")
     ai_preference = relationship("UserAIPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    ai_usage = relationship("UserAIUsage", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserAIPreference(Base):
