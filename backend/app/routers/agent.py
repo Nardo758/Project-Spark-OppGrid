@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 import os
 import logging
+import json
 
 from app.db.database import get_db
 from app.models.opportunity import Opportunity
@@ -658,4 +659,272 @@ async def get_ai_usage_summary(
         return {
             "period": period,
             "error": "usage_table_not_initialized"
+        }
+
+
+# --- Moderation & User Management ---
+
+@router.get("/users/flagged")
+async def get_flagged_users(
+    reason: Optional[str] = None,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key)
+):
+    """Get users flagged for review (banned, suspicious, etc)."""
+    from app.models.user import User
+    
+    query = db.query(User)
+    
+    # Banned users
+    if reason is None or reason == "banned":
+        banned = query.filter(User.is_banned == True).all()
+        return {
+            "users": [{
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "status": "banned",
+                "reason": u.ban_reason or "No reason provided",
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+                "updated_at": u.updated_at.isoformat() if u.updated_at else None
+            } for u in banned[:limit]],
+            "total_flagged": len(banned),
+            "reason_filter": "banned"
+        }
+    
+    # Inactive users (no activity in 90 days)
+    if reason == "inactive":
+        ninety_days_ago = datetime.utcnow() - timedelta(days=90)
+        inactive = query.filter(
+            User.is_active == True,
+            User.updated_at < ninety_days_ago
+        ).all()
+        return {
+            "users": [{
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "status": "inactive",
+                "reason": f"No activity since {u.updated_at.strftime('%Y-%m-%d')}",
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+                "updated_at": u.updated_at.isoformat() if u.updated_at else None
+            } for u in inactive[:limit]],
+            "total_flagged": len(inactive),
+            "reason_filter": "inactive"
+        }
+    
+    # Recently created (possible spam)
+    if reason == "new_suspicious":
+        one_day_ago = datetime.utcnow() - timedelta(days=1)
+        new_users = query.filter(User.created_at >= one_day_ago).all()
+        return {
+            "users": [{
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "status": "new_account",
+                "reason": "Created in last 24 hours - monitor for spam",
+                "created_at": u.created_at.isoformat() if u.created_at else None,
+                "updated_at": u.updated_at.isoformat() if u.updated_at else None
+            } for u in new_users[:limit]],
+            "total_flagged": len(new_users),
+            "reason_filter": "new_suspicious"
+        }
+    
+    return {"users": [], "total_flagged": 0, "reason_filter": reason}
+
+
+@router.post("/users/{user_id}/ban")
+async def ban_user_by_agent(
+    user_id: int,
+    reason: str = "Flagged by automated agent",
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key)
+):
+    """Ban a user account (automated moderation)."""
+    from app.models.user import User
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return {"success": False, "message": "User not found"}
+    
+    if user.is_admin:
+        return {"success": False, "message": "Cannot ban admin users"}
+    
+    user.is_banned = True
+    user.ban_reason = reason
+    user.is_active = False
+    db.commit()
+    
+    logger.info(f"Agent banned user {user_id}: {reason}")
+    
+    return {
+        "success": True,
+        "message": f"User {user.email} banned",
+        "user_id": user_id,
+        "email": user.email,
+        "ban_reason": reason
+    }
+
+
+class ModerationUpdatePayload(BaseModel):
+    moderation_status: str  # 'approved', 'rejected', 'needs_edit'
+    edit_title: Optional[str] = None
+    edit_description: Optional[str] = None
+    edit_category: Optional[str] = None
+    mod_notes: Optional[str] = None
+
+
+@router.post("/opportunities/{opportunity_id}/moderate")
+async def moderate_opportunity_by_agent(
+    opportunity_id: int,
+    payload: ModerationUpdatePayload,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key)
+):
+    """Moderate (approve/reject/edit) an opportunity."""
+    opp = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+    if not opp:
+        return {"success": False, "message": "Opportunity not found"}
+    
+    valid_statuses = ['approved', 'rejected', 'needs_edit']
+    if payload.moderation_status not in valid_statuses:
+        return {"success": False, "message": f"Invalid status. Must be: {', '.join(valid_statuses)}"}
+    
+    # Update status
+    opp.moderation_status = payload.moderation_status
+    
+    # Apply edits if provided
+    if payload.edit_title:
+        opp.title = payload.edit_title[:500]
+    if payload.edit_description:
+        opp.description = payload.edit_description[:5000]
+    if payload.edit_category:
+        opp.category = payload.edit_category[:100]
+    
+    opp.updated_at = datetime.utcnow()
+    db.commit()
+    
+    logger.info(f"Agent moderated opportunity {opportunity_id}: {payload.moderation_status}")
+    
+    return {
+        "success": True,
+        "message": f"Opportunity {opportunity_id} marked as {payload.moderation_status}",
+        "opportunity_id": opportunity_id,
+        "title": opp.title,
+        "new_status": payload.moderation_status,
+        "edited_fields": [
+            f for f in ['title', 'description', 'category']
+            if getattr(payload, f'edit_{f}', None)
+        ]
+    }
+
+
+@router.get("/payments/failed")
+async def get_failed_payments(
+    days: int = 7,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key)
+):
+    """Get failed payment attempts (charges, subscription renewals, etc)."""
+    from app.models.stripe_event import StripeWebhookEvent
+    
+    cutoff = datetime.utcnow() - timedelta(days=days)
+    
+    # Query failed charge events
+    failed_charges = db.query(StripeWebhookEvent).filter(
+        StripeWebhookEvent.event_type.in_(['charge.failed', 'invoice.payment_failed']),
+        StripeWebhookEvent.received_at >= cutoff
+    ).order_by(StripeWebhookEvent.received_at.desc()).limit(limit).all()
+    
+    failures = []
+    for event in failed_charges:
+        try:
+            data = json.loads(event.event_data) if isinstance(event.event_data, str) else event.event_data or {}
+            failure_dict = {
+                "event_id": event.stripe_event_id,
+                "event_type": event.event_type,
+                "received_at": event.received_at.isoformat() if event.received_at else None,
+                "livemode": event.livemode,
+                "amount_cents": data.get('data', {}).get('object', {}).get('amount', 0),
+                "currency": data.get('data', {}).get('object', {}).get('currency', 'usd'),
+                "customer_id": data.get('data', {}).get('object', {}).get('customer', ''),
+                "description": data.get('data', {}).get('object', {}).get('description', ''),
+                "failure_reason": data.get('data', {}).get('object', {}).get('failure_message', 'Unknown')
+            }
+            failures.append(failure_dict)
+        except Exception as e:
+            logger.error(f"Error parsing failure event {event.id}: {e}")
+    
+    return {
+        "failed_payments": failures,
+        "total_failures": len(failures),
+        "days_lookback": days,
+        "recommendation": "Review these failures and contact customers if needed"
+    }
+
+
+@router.post("/payments/{stripe_event_id}/refund")
+async def issue_refund_by_agent(
+    stripe_event_id: str,
+    reason: str = "Issued by automated agent",
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key)
+):
+    """Issue a refund for a failed payment (creates Stripe refund request)."""
+    import os
+    import httpx
+    
+    stripe_key = os.environ.get("STRIPE_SECRET_KEY")
+    if not stripe_key:
+        return {"success": False, "message": "Stripe key not configured"}
+    
+    # Look up the event
+    from app.models.stripe_event import StripeWebhookEvent
+    event = db.query(StripeWebhookEvent).filter(
+        StripeWebhookEvent.stripe_event_id == stripe_event_id
+    ).first()
+    
+    if not event:
+        return {"success": False, "message": "Event not found"}
+    
+    try:
+        event_data = json.loads(event.event_data) if isinstance(event.event_data, str) else event.event_data or {}
+        charge_id = event_data.get('data', {}).get('object', {}).get('id', '')
+        amount_cents = event_data.get('data', {}).get('object', {}).get('amount', 0)
+        
+        if not charge_id:
+            return {"success": False, "message": "No charge ID found in event"}
+        
+        # Create refund via Stripe API
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://api.stripe.com/v1/charges/{charge_id}/refunds",
+                auth=("Bearer", stripe_key),
+                data={"reason": reason}
+            )
+        
+        if response.status_code in [200, 201]:
+            refund_data = response.json()
+            logger.info(f"Refund issued: {refund_data.get('id')}")
+            return {
+                "success": True,
+                "message": f"Refund issued for charge {charge_id}",
+                "refund_id": refund_data.get('id'),
+                "amount_cents": amount_cents,
+                "reason": reason
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Stripe API error: {response.text}"
+            }
+    
+    except Exception as e:
+        logger.error(f"Refund failed for event {stripe_event_id}: {e}")
+        return {
+            "success": False,
+            "message": str(e)
         }
