@@ -38,6 +38,7 @@ import {
   TrendingDown,
   Gift,
 } from 'lucide-react'
+import { VerdictBanner, ScoreCards, MarketIntelligence, FeasibilityPreview } from './ConsultantResults'
 import { useAuthStore } from '../stores/authStore'
 
 type ReportTemplate = {
@@ -1106,72 +1107,137 @@ export default function ReportLibrary({
 
           {inputMode === 'validate' && consultantResult.success && (
             <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-600">Recommendation:</span>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold ${
-                  consultantResult.recommendation === 'online' ? 'bg-blue-100 text-blue-700' :
-                  consultantResult.recommendation === 'physical' ? 'bg-green-100 text-green-700' :
-                  'bg-purple-100 text-purple-700'
-                }`}>
-                  {consultantResult.recommendation === 'online' && <Globe className="w-4 h-4" />}
-                  {consultantResult.recommendation === 'physical' && <Store className="w-4 h-4" />}
-                  {consultantResult.recommendation === 'hybrid' && <Building2 className="w-4 h-4" />}
-                  {consultantResult.recommendation?.charAt(0).toUpperCase() + consultantResult.recommendation?.slice(1)}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-blue-50 rounded-lg p-3">
-                  <div className="text-xs text-blue-600 mb-1">Online Score</div>
-                  <div className="text-2xl font-bold text-blue-700">{consultantResult.online_score}%</div>
-                </div>
-                <div className="bg-green-50 rounded-lg p-3">
-                  <div className="text-xs text-green-600 mb-1">Physical Score</div>
-                  <div className="text-2xl font-bold text-green-700">{consultantResult.physical_score}%</div>
-                </div>
-              </div>
+              <VerdictBanner
+                recommendation={consultantResult.recommendation || 'hybrid'}
+                confidenceScore={consultantResult.confidence_score}
+                verdictSummary={consultantResult.verdict_summary}
+                verdictDetail={consultantResult.verdict_detail}
+              />
+              <ScoreCards
+                onlineScore={consultantResult.online_score}
+                physicalScore={consultantResult.physical_score}
+                confidenceScore={consultantResult.confidence_score}
+                fourPsScores={consultantResult.four_ps_scores}
+              />
+              <MarketIntelligence
+                marketIntelligence={consultantResult.market_intelligence}
+                advantages={consultantResult.advantages || consultantResult.viability_report?.advantages || consultantResult.viability_report?.strengths}
+                risks={consultantResult.risks || consultantResult.viability_report?.risks || consultantResult.viability_report?.weaknesses}
+              />
+              <FeasibilityPreview
+                feasibilityPreview={consultantResult.feasibility_preview}
+                onUnlock={() => {
+                  window.location.href = '/build'
+                }}
+              />
             </div>
           )}
 
           {inputMode === 'search' && consultantResult.success && (
             <div className="space-y-3">
-              <div className="text-sm text-gray-600">Found {consultantResult.total_count || 0} opportunities</div>
-              {consultantResult.opportunities?.slice(0, 5).map((opp: any) => (
-                <div key={opp.id} className="p-3 bg-gray-50 rounded-lg">
-                  <div className="font-medium text-gray-900">{opp.title}</div>
+              {consultantResult.ai_synthesis && (
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-4 mb-3">
+                  <p className="text-sm text-amber-900 leading-relaxed">{consultantResult.ai_synthesis}</p>
                 </div>
+              )}
+              <div className="text-sm text-gray-600">Found {consultantResult.total_count || 0} opportunities</div>
+              {consultantResult.opportunities?.slice(0, 5).map((opp: { id: number; title: string; score?: number; category?: string }) => (
+                <Link key={opp.id} to={`/opportunity/${opp.id}`} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                  <div>
+                    <div className="font-medium text-gray-900">{opp.title}</div>
+                    {opp.category && <div className="text-xs text-gray-500">{opp.category}</div>}
+                  </div>
+                  {opp.score && <div className="text-sm font-medium text-amber-500">{opp.score}</div>}
+                </Link>
               ))}
             </div>
           )}
 
           {inputMode === 'location' && consultantResult.success && (
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className="text-xs text-gray-500">Competition</div>
-                <div className="text-lg font-bold">{consultantResult.geo_analysis?.competitors?.length || 0}</div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-500">Competition</div>
+                  <div className="text-lg font-bold">{consultantResult.geo_analysis?.competitors?.length || 0}</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-500">Density</div>
+                  <div className="text-lg font-bold capitalize">{consultantResult.geo_analysis?.market_density || 'N/A'}</div>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-500">Category</div>
+                  <div className="text-lg font-bold">{consultantResult.inferred_category || 'N/A'}</div>
+                </div>
               </div>
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className="text-xs text-gray-500">Density</div>
-                <div className="text-lg font-bold capitalize">{consultantResult.geo_analysis?.market_density || 'N/A'}</div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <div className="text-xs text-gray-500">Category</div>
-                <div className="text-lg font-bold">{consultantResult.inferred_category || 'N/A'}</div>
-              </div>
+              {consultantResult.four_ps_scores && (
+                <ScoreCards fourPsScores={consultantResult.four_ps_scores} />
+              )}
+              {consultantResult.site_recommendations && consultantResult.site_recommendations.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-gray-900">Site recommendations</p>
+                  {consultantResult.site_recommendations.map((site: { name?: string; area?: string; priority?: string; score?: number; reason?: string }, idx: number) => {
+                    const priority = site.priority || (site.score && site.score >= 80 ? 'High' : 'Medium') || (idx < 2 ? 'High' : 'Medium')
+                    return (
+                      <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                          priority === 'High' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                        }`}>{priority}</span>
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{site.name || site.area || `Site ${idx + 1}`}</div>
+                          {site.reason && <div className="text-xs text-gray-500">{site.reason}</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
           {inputMode === 'clone' && consultantResult.success && (
-            <div className="space-y-3">
+            <div className="space-y-4">
+              {consultantResult.source_business && (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Source business</p>
+                  <p className="font-medium text-gray-900">{consultantResult.source_business.name}</p>
+                  {consultantResult.source_business.category && (
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-700">
+                      {consultantResult.source_business.category}
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="text-sm text-gray-600">
                 Found {consultantResult.matching_locations?.length || 0} matching locations
               </div>
-              {consultantResult.matching_locations?.slice(0, 3).map((loc: any, idx: number) => (
-                <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between">
-                  <div>
-                    <div className="font-medium">{loc.name}</div>
-                    <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
+              {consultantResult.matching_locations?.slice(0, 3).map((loc: { name: string; city: string; state: string; similarity_score: number; demographics_match?: number; competition_match?: number }, idx: number) => (
+                <div key={idx} className="p-4 bg-gray-50 rounded-lg">
+                  <div className="flex justify-between mb-2">
+                    <div>
+                      <div className="font-medium text-gray-900">{loc.name}</div>
+                      <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-2xl font-bold text-amber-500">{loc.similarity_score}%</div>
+                      <div className="text-[10px] text-gray-400">Match</div>
+                    </div>
                   </div>
-                  <div className="text-lg font-bold text-amber-600">{loc.similarity_score}%</div>
+                  {(loc.demographics_match || loc.competition_match) && (
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      {loc.demographics_match && (
+                        <div>
+                          <span className="text-gray-500">Demographics: </span>
+                          <span className="font-medium text-gray-900">{loc.demographics_match}%</span>
+                        </div>
+                      )}
+                      {loc.competition_match && (
+                        <div>
+                          <span className="text-gray-500">Competition: </span>
+                          <span className="font-medium text-gray-900">{loc.competition_match}%</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
