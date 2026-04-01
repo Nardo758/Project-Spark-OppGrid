@@ -1025,6 +1025,49 @@ export default function ReportLibrary({
               </button>
             </div>
 
+            <div className="border-b border-gray-200 px-5 sm:px-6 py-3 flex items-center justify-between bg-gray-50/80 backdrop-blur-sm shrink-0 sticky top-0 z-10">
+              <div className="flex gap-2">
+                {isAuthenticated && viewingReport.id > 0 && (
+                  <>
+                    <button
+                      onClick={() => handleExport('pdf')}
+                      disabled={!!exportingFormat}
+                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-all"
+                    >
+                      {exportingFormat === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
+                    </button>
+                    <button
+                      onClick={() => handleExport('docx')}
+                      disabled={!!exportingFormat}
+                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-all"
+                    >
+                      {exportingFormat === 'docx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Word
+                    </button>
+                    <button
+                      onClick={() => window.print()}
+                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-all"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> Print
+                    </button>
+                  </>
+                )}
+                {!isAuthenticated && (
+                  <Link
+                    to="/login"
+                    className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-all"
+                  >
+                    <LogIn className="w-3.5 h-3.5" /> Sign in to export
+                  </Link>
+                )}
+              </div>
+              <button
+                onClick={() => setViewingReport(null)}
+                className="px-5 py-2 bg-[#0F6E56] text-white rounded-xl text-xs font-semibold hover:bg-[#0a5a46] transition-all"
+              >
+                Close
+              </button>
+            </div>
+
             <div className="p-5 sm:p-6 overflow-y-auto flex-1">
               {viewingReport.summary && (
                 <div className="mb-5 p-4 bg-[#0F6E56]/5 rounded-xl border border-[#0F6E56]/15">
@@ -1111,48 +1154,6 @@ export default function ReportLibrary({
               )}
             </div>
 
-            <div className="border-t border-gray-200 p-4 flex items-center justify-between bg-gray-50/80 backdrop-blur-sm shrink-0">
-              <div className="flex gap-2">
-                {isAuthenticated && viewingReport.id > 0 && (
-                  <>
-                    <button
-                      onClick={() => handleExport('pdf')}
-                      disabled={!!exportingFormat}
-                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-all"
-                    >
-                      {exportingFormat === 'pdf' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} PDF
-                    </button>
-                    <button
-                      onClick={() => handleExport('docx')}
-                      disabled={!!exportingFormat}
-                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-all"
-                    >
-                      {exportingFormat === 'docx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Word
-                    </button>
-                    <button
-                      onClick={() => window.print()}
-                      className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-all"
-                    >
-                      <Printer className="w-3.5 h-3.5" /> Print
-                    </button>
-                  </>
-                )}
-                {!isAuthenticated && (
-                  <Link
-                    to="/login"
-                    className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-all"
-                  >
-                    <LogIn className="w-3.5 h-3.5" /> Sign in to export
-                  </Link>
-                )}
-              </div>
-              <button
-                onClick={() => setViewingReport(null)}
-                className="px-5 py-2 bg-[#0F6E56] text-white rounded-xl text-xs font-semibold hover:bg-[#0a5a46] transition-all"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}

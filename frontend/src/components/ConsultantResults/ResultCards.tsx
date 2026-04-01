@@ -56,21 +56,27 @@ export function BlurGate({ children, title, priceLabel, subtitle, onPurchase, lo
   loading?: boolean
 }) {
   return (
-    <div className="relative rounded-xl overflow-hidden">
-      <div className="blur-[6px] pointer-events-none opacity-50">{children}</div>
-      <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(250,250,249,0.3)', backdropFilter: 'blur(2px)' }}>
-        <div className="bg-white border border-gray-200 rounded-xl p-6 text-center max-w-sm shadow-sm">
-          <p className="font-semibold text-gray-900 text-sm mb-1">{title}</p>
-          <p className="text-xs text-gray-500 mb-4">{subtitle}</p>
+    <div className="relative rounded-2xl overflow-hidden border border-gray-200">
+      <div className="blur-[8px] pointer-events-none opacity-40 select-none">{children}</div>
+      <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, rgba(255,255,255,0.85), rgba(250,248,245,0.9))', backdropFilter: 'blur(4px)' }}>
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 text-center max-w-sm shadow-lg">
+          <div className="w-12 h-12 rounded-2xl bg-[#D97757]/10 flex items-center justify-center mx-auto mb-4">
+            <svg className="w-6 h-6 text-[#D97757]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+          </div>
+          <p className="font-bold text-gray-900 text-base mb-1">{title}</p>
+          <p className="text-xs text-gray-500 mb-5 leading-relaxed">{subtitle}</p>
           <button
             onClick={onPurchase}
             disabled={loading}
-            className="px-5 py-2.5 rounded-lg text-white text-sm font-medium disabled:opacity-50 transition-colors"
-            style={{ background: '#D97757' }}
+            className="w-full px-6 py-3 rounded-xl text-white text-sm font-semibold disabled:opacity-50 transition-all hover:shadow-md active:scale-[0.98]"
+            style={{ background: 'linear-gradient(135deg, #D97757, #BA7517)' }}
           >
             {loading ? 'Processing...' : priceLabel}
           </button>
-          <p className="text-[10px] text-gray-400 mt-2">Consultants charge $1,500+ for this</p>
+          <div className="flex items-center justify-center gap-4 mt-4 text-[10px] text-gray-400">
+            <span>Consultants charge <span className="line-through font-medium">$1,500+</span></span>
+            <span className="text-[#0F6E56] font-semibold">Save 90%+</span>
+          </div>
         </div>
       </div>
     </div>
