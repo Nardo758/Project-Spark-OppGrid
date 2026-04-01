@@ -21,7 +21,7 @@ class UserReportQuota(Base):
     __tablename__ = "user_report_quotas"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("user.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     
     # Report tier: "layer_1", "layer_2", "layer_3"
     report_tier = Column(String(20), nullable=False, index=True)
@@ -83,7 +83,7 @@ class ReportPurchaseLog(Base):
     __tablename__ = "report_purchase_logs"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("user.id"), nullable=True, index=True)  # Null for guest
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # Null for guest
     guest_email = Column(String(255), nullable=True, index=True)  # For guest checkouts
     opportunity_id = Column(Integer, nullable=True)
     
@@ -103,7 +103,7 @@ class ReportPurchaseLog(Base):
     report_id = Column(Integer, nullable=True)
     
     # Track if guest later created account
-    guest_converted_to_user_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    guest_converted_to_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
     
