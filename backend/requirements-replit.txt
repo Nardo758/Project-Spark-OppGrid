@@ -29,8 +29,6 @@ stripe>=8.0.0
 
 # Database & ORM
 sqlalchemy-utils>=0.41.0
-geoalchemy2>=0.14.0
-shapely>=2.0.0
 
 # Utilities
 qrcode[pil]>=7.4.0

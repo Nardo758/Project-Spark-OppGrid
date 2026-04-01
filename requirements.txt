@@ -101,6 +101,4 @@ resend
 stripe==14.1.0
 openai
 cachetools
-geoalchemy2
-shapely
 google-generativeai
