@@ -1,0 +1,1436 @@
+# OppGrid Enhanced UI Implementation Plan
+## Idea Card & Consultant Studio Analysis Results
+
+**Version:** 1.0  
+**Date:** April 2026  
+**Target:** Replit Agent Implementation
+
+---
+
+## Executive Summary
+
+This document provides implementation instructions for enhancing two critical UI components:
+
+1. **Consultant Studio Analysis Results** — The initial free assessment for all 4 input modes (Validate Idea, Search Ideas, Identify Location, Clone Success)
+2. **Idea Card (Opportunity Card)** — The full opportunity detail view with tiered layer disclosure
+
+The goal is to replace sparse placeholder content with rich, institutionally-backed data that demonstrates research depth while maintaining clear upgrade pathways.
+
+---
+
+## Part 1: Consultant Studio Analysis Results
+
+### Current State (Problem)
+The Analysis Results panel shows minimal data:
+- "Competitors: 0" / "Density: low"
+- Generic site cards with vague labels
+- No data source attribution
+- No clear conversion path to paid reports
+
+### Target State
+Each of the 4 modes should display a rich but concise preview with:
+- 3-4 key metrics with real numbers
+- 1-2 actionable insights with specific data
+- Source attribution footer
+- Clear CTA tied to relevant paid report
+
+---
+
+### Implementation: Types & Interfaces
+
+Create or update the following TypeScript interfaces:
+
+```typescript
+// frontend/src/types/analysis.ts
+
+export interface AnalysisVerdict {
+  icon: string;  // emoji: 📊, 🔥, 📍, 🎯
+  label: string;  // "OppGrid verdict", "Category outlook", "Location intelligence", "Clone assessment"
+  signal: 'green' | 'yellow' | 'red';
+  signalText: string;  // "Worth exploring", "Proceed with targeting", "High risk", etc.
+  summary: string;  // 2-3 sentence synthesis (supports HTML for <strong> emphasis)
+}
+
+export interface AnalysisMetric {
+  label: string;
+  value: string | number;
+  subtext?: string;
+  trend?: 'up' | 'down' | 'neutral';
+  color?: 'success' | 'warning' | 'danger' | 'info';
+}
+
+export interface AnalysisInsight {
+  type: 'positive' | 'caution' | 'info';
+  label: string;
+  text: string;
+}
+
+export interface SiteRecommendation {
+  name: string;
+  score: number; // 0-100
+  scoreLabel: 'high' | 'medium' | 'low';
+  description: string;
+}
+
+export interface AnalysisResult {
+  mode: 'validate_idea' | 'search_ideas' | 'identify_location' | 'clone_success';
+  verdict: AnalysisVerdict;  // THE KEY ADDITION - synthesis paragraph
+  metrics: AnalysisMetric[];
+  insights: AnalysisInsight[];
+  sites?: SiteRecommendation[]; // For Identify Location mode
+  tags?: string[]; // Data source tags
+  cta: {
+    text: string;
+    reportType: string;
+    price: number;
+  };
+  lastUpdated: string;
+  processingTime: number; // in seconds
+}
+```
+
+---
+
+### Implementation: API Endpoint
+
+Create or update the analysis endpoint to return richer data:
+
+```python
+# backend/app/api/routes/consultant_studio.py
+
+from fastapi import APIRouter, Depends
+from app.services.analysis_service import AnalysisService
+
+router = APIRouter()
+
+@router.post("/analyze")
+async def analyze(
+    request: AnalysisRequest,
+    user_id: int = Depends(get_current_user_id)  # FIX: Remove hardcoded user_id = 1
+) -> AnalysisResult:
+    """
+    Returns rich analysis results for Consultant Studio.
+    
+    Mode-specific returns:
+    - validate_idea: validation_score, market_signals, competition, demand_insight, risk_insight
+    - search_ideas: opportunity_count, trending_pct, avg_score, top_signals
+    - identify_location: competitors, density, avg_rating, foot_traffic, demographics, sites
+    - clone_success: viability, startup_cost, market_gap, why_works, differentiation
+    """
+    service = AnalysisService()
+    return await service.analyze(request, user_id)
+```
+
+---
+
+### Implementation: Analysis Service
+
+```python
+# backend/app/services/analysis_service.py
+
+class AnalysisService:
+    
+    async def analyze_location(self, location: str, business_type: str) -> dict:
+        """
+        Identify Location mode analysis.
+        
+        Data sources to query:
+        1. Google Places API → competitor count, avg rating
+        2. Census Bureau API → demographics (median income, age bands, pop growth)
+        3. Walk Score API → walkability score
+        4. Internal PostGIS → geographic density calculation
+        5. Foot traffic estimates (derived from Google Popular Times if available)
+        """
+        
+        # Query competitor data
+        competitors = await self.google_places.search_nearby(
+            location=location,
+            business_type=business_type,
+            radius_miles=5
+        )
+        
+        # Calculate density ratio
+        population = await self.census.get_population(location)
+        density_ratio = len(competitors) / (population / 1000) if population else 0
+        density_label = self._calculate_density_label(density_ratio, business_type)
+        
+        # Get demographics
+        demographics = await self.census.get_demographics(location)
+        
+        # Score micro-markets
+        sites = await self._score_micro_markets(location, business_type, competitors)
+        
+        # Generate verdict using Claude
+        verdict = await self._generate_verdict(
+            mode="identify_location",
+            data={
+                "location": location,
+                "business_type": business_type,
+                "competitor_count": len(competitors),
+                "density_label": density_label,
+                "density_ratio": f"1 per {int(population / len(competitors))} residents" if competitors else "N/A",
+                "foot_traffic_yoy": demographics.get('foot_traffic_yoy', 0),
+                "age_25_44_pct": demographics.get('age_25_44_pct', 0),
+                "top_sites": [s['name'] for s in sites[:2]],
+                "avoid_site": sites[-1]['name'] if len(sites) > 2 else None
+            }
+        )
+        
+        return {
+            "mode": "identify_location",
+            "verdict": verdict,
+            "metrics": [
+                {
+                    "label": "Competitors",
+                    "value": len(competitors),
+                    "subtext": "within 5 mi"
+                },
+                {
+                    "label": "Density",
+                    "value": density_label,
+                    "subtext": f"1 per {int(population / len(competitors))} residents" if competitors else "N/A",
+                    "color": "danger" if density_label == "High" else "warning" if density_label == "Medium" else "success"
+                },
+                {
+                    "label": "Avg. rating",
+                    "value": f"{self._avg_rating(competitors):.1f}★",
+                    "subtext": "area benchmark"
+                },
+                {
+                    "label": "Foot traffic",
+                    "value": f"+{demographics.get('foot_traffic_yoy', 0)}%",
+                    "subtext": "YoY growth",
+                    "trend": "up" if demographics.get('foot_traffic_yoy', 0) > 0 else "down"
+                }
+            ],
+            "demographics": {
+                "median_income": demographics.get("median_income"),
+                "age_25_44_pct": demographics.get("age_25_44_pct"),
+                "pop_growth": demographics.get("pop_growth_pct"),
+                "walk_score": demographics.get("walk_score")
+            },
+            "sites": sites[:3],  # Top 3 micro-markets
+            "tags": ["Census Bureau", "Google Places", "Walk Score", "PostGIS analytics"],
+            "cta": {
+                "text": "Full location analysis with Census data, heat maps & lease intel",
+                "reportType": "Business Plan",
+                "price": 149
+            }
+        }
+    
+    async def analyze_idea(self, idea: str) -> dict:
+        """
+        Validate Idea mode analysis.
+        
+        Data sources:
+        1. Internal opportunity database (DeepSeek search)
+        2. Reddit API (related discussions)
+        3. Google Trends (search interest)
+        4. Competitive analysis (existing players)
+        """
+        
+        # Search internal opportunities
+        related_opportunities = await self.deepseek.search_opportunities(idea)
+        
+        # Calculate validation score
+        validation_score = self._calculate_validation_score(related_opportunities)
+        
+        # Get market signals
+        signals = await self.scraper_aggregator.get_signal_count(idea, days=90)
+        
+        # Analyze competition
+        competition = await self._analyze_competition(idea)
+        
+        # Extract key demand signal
+        demand_signal = self._extract_top_demand_signal(related_opportunities)
+        
+        return {
+            "mode": "validate_idea",
+            "metrics": [
+                {
+                    "label": "Validation score",
+                    "value": f"{validation_score}/100",
+                    "subtext": self._score_label(validation_score),
+                    "color": "success" if validation_score >= 70 else "warning" if validation_score >= 50 else "danger"
+                },
+                {
+                    "label": "Market signals",
+                    "value": signals["count"],
+                    "subtext": "Last 90 days"
+                },
+                {
+                    "label": "Competition",
+                    "value": competition["level"],
+                    "subtext": f"{competition['count']} active players",
+                    "color": "success" if competition["level"] == "Low" else "warning"
+                }
+            ],
+            "insights": [
+                {
+                    "type": "positive",
+                    "label": "Key demand signal",
+                    "text": demand_signal
+                },
+                {
+                    "type": "caution",
+                    "label": "Market risk",
+                    "text": competition["risk_summary"]
+                }
+            ],
+            "tags": ["Reddit r/entrepreneur", "Google Trends", "Crunchbase", "+4 sources"],
+            "cta": {
+                "text": "Full competitive analysis, TAM/SAM, and execution playbook",
+                "reportType": "Feasibility Study",
+                "price": 25
+            }
+        }
+    
+    async def _generate_verdict(self, mode: str, data: dict) -> dict:
+        """
+        Generate the OppGrid Verdict synthesis using Claude.
+        
+        The verdict should:
+        1. Reference specific metrics from the analysis
+        2. Give a clear recommendation (proceed, proceed with caution, pivot, etc.)
+        3. Highlight the key insight or differentiator
+        4. Be 2-3 sentences max
+        """
+        
+        prompts = {
+            "validate_idea": f"""
+                Based on this analysis:
+                - Validation score: {data['score']}/100
+                - Market signals: {data['signal_count']} in last 90 days
+                - Competition: {data['competition_level']} ({data['competitor_count']} players)
+                - Key demand signal: {data['demand_signal']}
+                - Risk: {data['risk_summary']}
+                
+                Write a 2-3 sentence verdict. Reference the specific metrics. 
+                If score >= 70, recommend proceeding. If 50-69, proceed with caution.
+                Always highlight the key opportunity or differentiation angle.
+                Use <strong> tags for emphasis on 1-2 key phrases.
+            """,
+            
+            "identify_location": f"""
+                Based on this location analysis for {data['business_type']} in {data['location']}:
+                - Competitors: {data['competitor_count']}
+                - Market density: {data['density_label']} ({data['density_ratio']})
+                - Foot traffic trend: +{data['foot_traffic_yoy']}% YoY
+                - Target demographic (25-44): {data['age_25_44_pct']}%
+                - Best micro-markets: {', '.join(data['top_sites'])}
+                - Caution area: {data['avoid_site']}
+                
+                Write a 2-3 sentence verdict. Be specific about WHERE to open.
+                If high density, recommend specific neighborhoods with lower saturation.
+                Use <strong> tags for emphasis on recommended areas.
+            """,
+            
+            "clone_success": f"""
+                Based on this clone analysis for {data['model_name']}:
+                - Model viability: {data['viability']}
+                - Estimated startup cost: ${data['startup_cost']}
+                - Market gap: {data['market_gap']}% underserved metros
+                - Success factors: {', '.join(data['success_factors'])}
+                - Differentiation needed: {data['differentiation']}
+                
+                Write a 2-3 sentence verdict. Reference why this model works.
+                Highlight the lean/modified approach vs. the original format.
+                Use <strong> tags for emphasis on key numbers.
+            """,
+            
+            "search_ideas": f"""
+                Based on this category analysis for {data['category']}:
+                - Total opportunities: {data['opportunity_count']}
+                - Trending: {data['trending_pct']}% vs last month
+                - Average viability score: {data['avg_score']}
+                - Top signals: {', '.join(data['top_signals'])}
+                
+                Write a 2-3 sentence verdict about the category outlook.
+                Reference the trending signals and overall category health.
+                Use <strong> tags for emphasis.
+            """
+        }
+        
+        # Call Claude to generate the verdict
+        response = await self.claude.generate(
+            system="You are an expert market analyst. Write concise, data-driven verdicts.",
+            prompt=prompts[mode]
+        )
+        
+        # Determine signal color based on mode-specific logic
+        signal = self._determine_signal_color(mode, data)
+        
+        return {
+            "icon": self._get_verdict_icon(mode),
+            "label": self._get_verdict_label(mode),
+            "signal": signal["color"],
+            "signalText": signal["text"],
+            "summary": response.text
+        }
+    
+    def _get_verdict_icon(self, mode: str) -> str:
+        return {
+            "validate_idea": "📊",
+            "search_ideas": "🔥",
+            "identify_location": "📍",
+            "clone_success": "🎯"
+        }.get(mode, "📊")
+    
+    def _get_verdict_label(self, mode: str) -> str:
+        return {
+            "validate_idea": "OppGrid verdict",
+            "search_ideas": "Category outlook",
+            "identify_location": "Location intelligence",
+            "clone_success": "Clone assessment"
+        }.get(mode, "Analysis")
+    
+    def _determine_signal_color(self, mode: str, data: dict) -> dict:
+        """Determine green/yellow/red signal based on mode-specific thresholds."""
+        
+        if mode == "validate_idea":
+            score = data.get("score", 0)
+            if score >= 70:
+                return {"color": "green", "text": "Worth exploring"}
+            elif score >= 50:
+                return {"color": "yellow", "text": "Proceed with caution"}
+            else:
+                return {"color": "red", "text": "High risk"}
+        
+        elif mode == "identify_location":
+            density = data.get("density_label", "")
+            if density == "Low":
+                return {"color": "green", "text": "Strong opportunity"}
+            elif density == "Medium":
+                return {"color": "green", "text": "Proceed with targeting"}
+            else:
+                return {"color": "yellow", "text": "Proceed with targeting"}
+        
+        elif mode == "clone_success":
+            viability = data.get("viability", "")
+            if viability == "High":
+                return {"color": "green", "text": "High replicability"}
+            elif viability == "Medium":
+                return {"color": "yellow", "text": "Moderate replicability"}
+            else:
+                return {"color": "red", "text": "Low replicability"}
+        
+        elif mode == "search_ideas":
+            trending = data.get("trending_pct", 0)
+            if trending > 10:
+                return {"color": "green", "text": "High activity"}
+            elif trending > 0:
+                return {"color": "yellow", "text": "Stable"}
+            else:
+                return {"color": "red", "text": "Declining"}
+        
+        return {"color": "yellow", "text": "Review data"}
+```
+
+---
+
+### Implementation: VerdictBox React Component
+
+```tsx
+// frontend/src/components/ConsultantStudio/VerdictBox.tsx
+
+import React from 'react';
+import { AnalysisVerdict } from '@/types/analysis';
+
+interface VerdictBoxProps {
+  verdict: AnalysisVerdict;
+}
+
+export const VerdictBox: React.FC<VerdictBoxProps> = ({ verdict }) => {
+  return (
+    <div className="verdict-box">
+      <div className="verdict-header">
+        <span className="verdict-icon">{verdict.icon}</span>
+        <span className="verdict-label">{verdict.label}</span>
+        <span className={`verdict-signal ${verdict.signal}`}>
+          {verdict.signalText}
+        </span>
+      </div>
+      <p 
+        className="verdict-text"
+        dangerouslySetInnerHTML={{ __html: verdict.summary }}
+      />
+    </div>
+  );
+};
+```
+
+### VerdictBox Styles
+
+```css
+/* frontend/src/styles/verdict-box.css */
+
+.verdict-box { 
+  background: linear-gradient(135deg, #f8faf9 0%, #e8f4f0 100%); 
+  border-left: 4px solid var(--accent-primary); 
+  padding: 14px 16px; 
+  margin-bottom: 16px; 
+  border-radius: 0 var(--border-radius-md) var(--border-radius-md) 0;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .verdict-box {
+    background: linear-gradient(135deg, rgba(26, 127, 100, 0.1) 0%, rgba(26, 127, 100, 0.05) 100%);
+  }
+}
+
+.verdict-header { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  margin-bottom: 8px; 
+}
+
+.verdict-icon { 
+  font-size: 16px; 
+}
+
+.verdict-label { 
+  font-size: 11px; 
+  font-weight: 600; 
+  text-transform: uppercase; 
+  letter-spacing: 0.5px; 
+  color: var(--accent-primary); 
+}
+
+.verdict-signal { 
+  font-size: 10px; 
+  padding: 3px 8px; 
+  border-radius: 4px; 
+  font-weight: 500; 
+  margin-left: auto; 
+}
+
+.verdict-signal.green { 
+  background: #E1F5EE; 
+  color: #0F6E56; 
+}
+
+.verdict-signal.yellow { 
+  background: #FAEEDA; 
+  color: #854F0B; 
+}
+
+.verdict-signal.red { 
+  background: #FCEBEB; 
+  color: #A32D2D; 
+}
+
+.verdict-text { 
+  font-size: 14px; 
+  color: var(--text-primary); 
+  line-height: 1.6; 
+  margin: 0;
+}
+
+.verdict-text strong { 
+  color: var(--accent-primary); 
+}
+```
+```
+
+---
+
+### Implementation: React Component
+
+```tsx
+// frontend/src/components/ConsultantStudio/AnalysisResults.tsx
+
+import React from 'react';
+import { AnalysisResult, AnalysisMetric, AnalysisInsight, SiteRecommendation } from '@/types/analysis';
+
+interface AnalysisResultsProps {
+  result: AnalysisResult | null;
+  isLoading: boolean;
+}
+
+export const AnalysisResults: React.FC<AnalysisResultsProps> = ({ result, isLoading }) => {
+  if (isLoading) {
+    return <AnalysisResultsSkeleton />;
+  }
+  
+  if (!result) {
+    return null;
+  }
+  
+  return (
+    <div className="analysis-results">
+      <div className="results-header">
+        <div className="results-title">
+          <span className="indicator" />
+          <span>Analysis Results</span>
+        </div>
+        <button className="close-btn" aria-label="Close">×</button>
+      </div>
+      
+      {/* VERDICT BOX - The key synthesis paragraph */}
+      <VerdictBox verdict={result.verdict} />
+      
+      {/* Metrics Grid */}
+      <div className={`metrics-grid metrics-${result.metrics.length}`}>
+        {result.metrics.map((metric, idx) => (
+          <MetricCard key={idx} metric={metric} />
+        ))}
+      </div>
+      
+      {/* Demographics (Location mode only) */}
+      {result.mode === 'identify_location' && result.demographics && (
+        <DemographicsSnapshot demographics={result.demographics} />
+      )}
+      
+      {/* Insights */}
+      {result.insights && result.insights.length > 0 && (
+        <div className="insights-section">
+          {result.insights.map((insight, idx) => (
+            <InsightRow key={idx} insight={insight} />
+          ))}
+        </div>
+      )}
+      
+      {/* Site Recommendations (Location mode only) */}
+      {result.sites && result.sites.length > 0 && (
+        <div className="sites-section">
+          <div className="section-label">Recommended micro-markets</div>
+          {result.sites.map((site, idx) => (
+            <SiteCard key={idx} site={site} />
+          ))}
+        </div>
+      )}
+      
+      {/* Source Tags */}
+      {result.tags && (
+        <div className="source-tags">
+          {result.tags.map((tag, idx) => (
+            <span key={idx} className="tag">{tag}</span>
+          ))}
+        </div>
+      )}
+      
+      {/* CTA */}
+      <div className="cta-row">
+        <span className="cta-text">{result.cta.text}</span>
+        <button className="cta-btn">
+          Get {result.cta.reportType} → ${result.cta.price}
+        </button>
+      </div>
+      
+      {/* Footer */}
+      <div className="results-footer">
+        Powered by DeepSeek + Claude AI · {result.processingTime}s
+      </div>
+    </div>
+  );
+};
+
+// Sub-components
+const MetricCard: React.FC<{ metric: AnalysisMetric }> = ({ metric }) => (
+  <div className="metric-card">
+    <div className="metric-label">{metric.label}</div>
+    <div className={`metric-value ${metric.color || ''}`}>
+      {metric.trend === 'up' && <span className="trend-arrow">↑</span>}
+      {metric.trend === 'down' && <span className="trend-arrow">↓</span>}
+      {metric.value}
+    </div>
+    {metric.subtext && <div className="metric-sub">{metric.subtext}</div>}
+  </div>
+);
+
+const InsightRow: React.FC<{ insight: AnalysisInsight }> = ({ insight }) => (
+  <div className="insight-row">
+    <div className={`insight-icon ${insight.type}`}>
+      {insight.type === 'positive' && '✓'}
+      {insight.type === 'caution' && '!'}
+      {insight.type === 'info' && '→'}
+    </div>
+    <div className="insight-content">
+      <span className="insight-label">{insight.label}</span>
+      <span className="insight-text">{insight.text}</span>
+    </div>
+  </div>
+);
+
+const SiteCard: React.FC<{ site: SiteRecommendation }> = ({ site }) => (
+  <div className="site-card">
+    <div className={`site-score ${site.scoreLabel}`}>{site.score}</div>
+    <div className="site-details">
+      <div className="site-name">{site.name}</div>
+      <div className="site-meta">{site.description}</div>
+    </div>
+  </div>
+);
+```
+
+---
+
+### Implementation: Styles
+
+```css
+/* frontend/src/styles/analysis-results.css */
+
+.analysis-results {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-tertiary);
+  border-radius: 12px;
+  padding: 1.25rem;
+  border-left: 4px solid var(--accent-primary);
+}
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.results-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 15px;
+}
+
+.indicator {
+  width: 4px;
+  height: 20px;
+  background: var(--accent-primary);
+  border-radius: 2px;
+}
+
+/* Metrics Grid */
+.metrics-grid {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 1rem;
+}
+
+.metrics-3 { grid-template-columns: repeat(3, 1fr); }
+.metrics-4 { grid-template-columns: repeat(4, 1fr); }
+
+.metric-card {
+  background: var(--bg-secondary);
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.metric-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 4px;
+}
+
+.metric-value {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.metric-value.success { color: var(--color-success); }
+.metric-value.warning { color: var(--color-warning); }
+.metric-value.danger { color: var(--color-danger); }
+
+.metric-sub {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+/* Demographics */
+.demographics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 1rem;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Insights */
+.insight-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-tertiary);
+}
+
+.insight-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.insight-icon.positive { background: var(--bg-success); color: var(--text-success); }
+.insight-icon.caution { background: var(--bg-warning); color: var(--text-warning); }
+.insight-icon.info { background: var(--bg-info); color: var(--text-info); }
+
+.insight-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.insight-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+/* Site Cards */
+.site-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.site-score {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.site-score.high { background: #E1F5EE; color: #0F6E56; }
+.site-score.medium { background: #FAEEDA; color: #854F0B; }
+.site-score.low { background: #FCEBEB; color: #A32D2D; }
+
+.site-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.site-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Source Tags */
+.source-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.tag {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
+/* CTA */
+.cta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-tertiary);
+}
+
+.cta-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.cta-btn {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.results-footer {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-align: center;
+  margin-top: 12px;
+}
+```
+
+---
+
+## Part 2: Idea Card (Full Opportunity View)
+
+### Current State (Problem)
+The Research Dashboard section shows:
+- "0 signals" for Demand Signals
+- "—" placeholders for Competitors and Avg Rating
+- Generic differentiation bullets
+- Empty expert cards with "?" avatars
+
+### Target State
+- Real metrics with actual data
+- Partial source disclosure (top 3 visible, rest gated)
+- Named competitors with funding info
+- Clear layer gating with blur overlay + unlock CTAs
+- Named experts with match percentages
+- Data source footer showing API attributions
+
+---
+
+### Implementation: Types & Interfaces
+
+```typescript
+// frontend/src/types/opportunity.ts
+
+export interface OpportunityCard {
+  id: string;
+  title: string;
+  description: string;
+  score: number;
+  category: string;
+  status: 'hot' | 'trending' | 'archive' | 'unlocked';
+  ageInDays: number;
+  
+  // Problem Statement (always visible)
+  problemStatement: {
+    text: string;
+    painLevel: number;
+    marketSize: string;
+    competition: 'Low' | 'Medium' | 'High';
+    sourceCount: number;
+  };
+  
+  // Problem Detail (FREE tier)
+  problemDetail: {
+    geographicMarkets: GeographicMarket[];
+    selectedMarket: string;
+    marketMetrics: {
+      marketSize: string;
+      signalCount: number;
+      signalGrowth: number;
+    };
+    validationMetrics: {
+      urgency: 'Low' | 'Medium' | 'High';
+      competition: 'Low' | 'Medium' | 'High';
+      targetAudience: string;
+      feasibility: number;
+    };
+    painPoints: PainPoint[];
+  };
+  
+  // Research Dashboard (Layer 2)
+  researchDashboard: {
+    currentLayer: 1 | 2 | 3;
+    demandSignals: {
+      searchInterest: number;
+      trendDirection: number;
+      painIntensity: number;
+      willingnessToPay: string;
+    };
+    sources: Source[];
+    sourcesTotal: number;
+    competitors: Competitor[];
+    competitorsTotal: number;
+    differentiationInsights: Insight[];
+    experts: Expert[];
+    dataSources: string[];
+    lastUpdated: string;
+  };
+}
+
+export interface Source {
+  platform: 'reddit' | 'youtube' | 'twitter' | 'nextdoor' | 'yelp' | 'gmaps';
+  subreddit?: string;
+  title: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  engagement: string;
+  date: string;
+  quote: string;
+  isGated: boolean;
+}
+
+export interface Competitor {
+  name: string;
+  logo?: string;
+  description: string;
+  funding: string;
+  isGated: boolean;
+}
+
+export interface Expert {
+  initials: string;
+  name: string;
+  role: string;
+  matchScore: number;
+  rating: number;
+}
+
+export interface PainPoint {
+  severity: 'critical' | 'high' | 'medium';
+  quote: string;
+  source: string;
+  engagement: string;
+}
+```
+
+---
+
+### Implementation: API Endpoint
+
+```python
+# backend/app/api/routes/opportunities.py
+
+@router.get("/{opportunity_id}")
+async def get_opportunity(
+    opportunity_id: str,
+    user_id: int = Depends(get_current_user_id)  # FIX: Remove hardcoded user_id = 1
+) -> OpportunityCard:
+    """
+    Returns full opportunity card with layer-based access control.
+    
+    Layer 1 (FREE/$15): Problem statement, problem detail, basic validation
+    Layer 2 ($99+): Full sources, competitors, differentiation insights
+    Layer 3 ($499+): Solution pathways, execution playbook, 90-day timeline
+    """
+    
+    opportunity = await opportunity_service.get(opportunity_id)
+    user_tier = await subscription_service.get_tier(user_id)
+    
+    # Determine layer access
+    layer_access = calculate_layer_access(user_tier, opportunity.age_in_days)
+    
+    # Build response with gating
+    return build_opportunity_response(opportunity, layer_access)
+
+
+def build_opportunity_response(opportunity, layer_access: int) -> dict:
+    """
+    Build response with appropriate gating.
+    
+    - Sources: Show top 3, gate rest if layer < 2
+    - Competitors: Show top 2, gate rest if layer < 2
+    - Solution pathways: Fully gated if layer < 3
+    """
+    
+    sources = opportunity.sources[:3]  # Always show top 3
+    if layer_access >= 2:
+        sources = opportunity.sources  # Show all
+    else:
+        # Add gated placeholders
+        for i in range(3, min(6, opportunity.sources_total)):
+            sources.append({
+                "isGated": True,
+                "platform": "unknown",
+                "title": f"+{opportunity.sources_total - 3} more sources"
+            })
+    
+    # Similar logic for competitors
+    competitors = opportunity.competitors[:2]
+    if layer_access < 2:
+        competitors.append({
+            "isGated": True,
+            "name": f"+{opportunity.competitors_total - 2} more competitors",
+            "description": "Full SWOT analysis available"
+        })
+    
+    return {
+        # ... full response structure
+        "researchDashboard": {
+            "currentLayer": layer_access,
+            "sources": sources,
+            "sourcesTotal": opportunity.sources_total,
+            "competitors": competitors,
+            "competitorsTotal": opportunity.competitors_total,
+            # ...
+        }
+    }
+```
+
+---
+
+### Implementation: React Components
+
+```tsx
+// frontend/src/components/OpportunityCard/ResearchDashboard.tsx
+
+import React, { useState } from 'react';
+
+interface ResearchDashboardProps {
+  data: ResearchDashboardData;
+  onUnlock: (layer: number) => void;
+}
+
+export const ResearchDashboard: React.FC<ResearchDashboardProps> = ({ data, onUnlock }) => {
+  const [activeTab, setActiveTab] = useState('market_validation');
+  
+  return (
+    <div className="research-dashboard">
+      {/* Header */}
+      <div className="dashboard-header">
+        <div className="dashboard-title">
+          <span className="icon">📊</span>
+          <span>Research dashboard</span>
+          <LayerIndicator current={data.currentLayer} total={3} />
+        </div>
+        <div className="dashboard-actions">
+          <button className="btn-secondary">⬇ Export</button>
+          <button className="btn-secondary">👤 Find expert</button>
+          <button className="btn-primary">Generate report</button>
+        </div>
+      </div>
+      
+      {/* Tabs */}
+      <div className="dashboard-tabs">
+        <Tab 
+          id="market_validation" 
+          label="Market validation" 
+          active={activeTab === 'market_validation'}
+          onClick={setActiveTab}
+        />
+        <Tab id="geographic" label="Geographic" active={activeTab === 'geographic'} onClick={setActiveTab} />
+        <Tab id="problem_analysis" label="Problem analysis" active={activeTab === 'problem_analysis'} onClick={setActiveTab} />
+        <Tab id="competitive" label="Competitive" active={activeTab === 'competitive'} onClick={setActiveTab} />
+        <Tab 
+          id="solution_pathways" 
+          label="Solution pathways" 
+          active={activeTab === 'solution_pathways'}
+          onClick={setActiveTab}
+          badge="L3"
+          locked={data.currentLayer < 3}
+        />
+      </div>
+      
+      {/* Tab Content */}
+      <div className="dashboard-content">
+        {activeTab === 'market_validation' && (
+          <MarketValidationTab 
+            data={data} 
+            onUnlock={() => onUnlock(2)} 
+          />
+        )}
+        {/* Other tabs... */}
+      </div>
+    </div>
+  );
+};
+
+
+// Gated Section Component
+interface GatedSectionProps {
+  children: React.ReactNode;
+  isGated: boolean;
+  gatedCount: number;
+  gatedLabel: string;
+  unlockPrice: number;
+  onUnlock: () => void;
+}
+
+export const GatedSection: React.FC<GatedSectionProps> = ({
+  children,
+  isGated,
+  gatedCount,
+  gatedLabel,
+  unlockPrice,
+  onUnlock
+}) => {
+  if (!isGated) {
+    return <>{children}</>;
+  }
+  
+  return (
+    <div className="gated-section">
+      <div className="gated-blur">
+        {children}
+      </div>
+      <div className="gated-overlay">
+        <div className="lock-pill">
+          🔒 +{gatedCount} {gatedLabel}
+        </div>
+        <button className="unlock-btn" onClick={onUnlock}>
+          Unlock all → ${unlockPrice}
+        </button>
+      </div>
+    </div>
+  );
+};
+
+
+// Source Card Component
+interface SourceCardProps {
+  source: Source;
+}
+
+export const SourceCard: React.FC<SourceCardProps> = ({ source }) => {
+  const platformIcons: Record<string, string> = {
+    reddit: 'R',
+    youtube: 'YT',
+    twitter: 'X',
+    nextdoor: 'ND',
+    yelp: 'Y',
+    gmaps: 'G'
+  };
+  
+  const severityColors: Record<string, string> = {
+    critical: 'severity-critical',
+    high: 'severity-high',
+    medium: 'severity-medium',
+    low: 'severity-low'
+  };
+  
+  return (
+    <div className="source-card">
+      <div className={`source-logo ${source.platform}`}>
+        {platformIcons[source.platform]}
+      </div>
+      <div className="source-body">
+        <div className="source-header">
+          <span className="source-title">{source.title}</span>
+          <span className={`severity-badge ${severityColors[source.severity]}`}>
+            {source.severity.toUpperCase()}
+          </span>
+          <span className="source-meta">{source.engagement} · {source.date}</span>
+        </div>
+        <p className="source-quote">"{source.quote}"</p>
+      </div>
+    </div>
+  );
+};
+```
+
+---
+
+### Implementation: Gated Overlay Styles
+
+```css
+/* frontend/src/styles/gated-section.css */
+
+.gated-section {
+  position: relative;
+  margin: 16px 0;
+}
+
+.gated-blur {
+  filter: blur(5px);
+  opacity: 0.6;
+  pointer-events: none;
+  user-select: none;
+}
+
+.gated-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.9) 50%,
+    rgba(255, 255, 255, 1) 100%
+  );
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .gated-overlay {
+    background: linear-gradient(
+      180deg,
+      rgba(30, 30, 30, 0) 0%,
+      rgba(30, 30, 30, 0.9) 50%,
+      rgba(30, 30, 30, 1) 100%
+    );
+  }
+}
+
+.lock-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.unlock-btn {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.unlock-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(26, 127, 100, 0.3);
+}
+
+.unlock-btn:active {
+  transform: scale(0.98);
+}
+```
+
+---
+
+## Part 3: Implementation Checklist
+
+### Phase 1: Critical Fixes (Day 1)
+- [ ] Fix hardcoded `user_id = 1` in all Consultant Studio endpoints
+- [ ] Add proper authentication to analysis endpoints
+- [ ] Review and fix CORS settings for production
+
+### Phase 2: Data Layer (Days 2-3)
+- [ ] Create/update TypeScript interfaces for AnalysisResult, AnalysisVerdict, and OpportunityCard
+- [ ] Create AnalysisService with mode-specific methods
+- [ ] Implement _generate_verdict method with Claude integration
+- [ ] Implement signal color determination logic (_determine_signal_color)
+- [ ] Integrate Census Bureau API for demographics
+- [ ] Integrate Google Places API for competitor data
+- [ ] Integrate Walk Score API
+- [ ] Create layer access calculation logic
+- [ ] Build source/competitor gating logic
+
+### Phase 3: API Endpoints (Days 4-5)
+- [ ] Update `/consultant-studio/analyze` endpoint
+- [ ] Update `/opportunities/{id}` endpoint
+- [ ] Add layer access headers to responses
+- [ ] Create unlock endpoint for Layer 2/3 purchases
+- [ ] Wire up Stripe checkout for unlocks
+
+### Phase 4: Frontend Components (Days 6-8)
+- [ ] Create VerdictBox component with signal badges
+- [ ] Create AnalysisResults component with all 4 modes
+- [ ] Create MetricCard, InsightRow, SiteCard sub-components
+- [ ] Create ResearchDashboard component
+- [ ] Create GatedSection reusable component
+- [ ] Create SourceCard, CompetitorCard, ExpertCard components
+- [ ] Create LayerIndicator component
+- [ ] Add loading skeletons for all components
+
+### Phase 5: Styling (Days 9-10)
+- [ ] Implement verdict-box.css
+- [ ] Implement analysis-results.css
+- [ ] Implement research-dashboard.css
+- [ ] Implement gated-section.css
+- [ ] Implement source-card.css
+- [ ] Ensure dark mode compatibility
+- [ ] Test responsive layout (mobile, tablet, desktop)
+
+### Phase 6: Integration & Testing (Days 11-12)
+- [ ] Connect components to API endpoints
+- [ ] Test all 4 Consultant Studio modes
+- [ ] Test layer gating logic with different user tiers
+- [ ] Test unlock flow with Stripe
+- [ ] Test error states and loading states
+- [ ] Performance testing (lazy load gated content)
+
+---
+
+## Part 4: Key Metrics to Track
+
+After implementation, monitor these metrics:
+
+1. **Engagement**: Time spent on Analysis Results / Idea Card
+2. **Conversion**: % of free analyses → paid report purchases
+3. **Unlock Rate**: % of users who unlock Layer 2
+4. **Source Attribution**: Which data source tags correlate with higher conversion
+5. **CTA Clicks**: Click rate on "Get Report" buttons
+
+---
+
+## Appendix: Color Variables Reference
+
+```css
+:root {
+  /* Primary accent (OppGrid green) */
+  --accent-primary: #1a7f64;
+  --accent-primary-hover: #0f5a47;
+  
+  /* Backgrounds */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f1f3f4;
+  
+  /* Text */
+  --text-primary: #1a1a1a;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  
+  /* Borders */
+  --border-primary: rgba(0, 0, 0, 0.1);
+  --border-secondary: rgba(0, 0, 0, 0.06);
+  --border-tertiary: rgba(0, 0, 0, 0.04);
+  
+  /* Semantic */
+  --color-success: #0F6E56;
+  --color-warning: #BA7517;
+  --color-danger: #A32D2D;
+  --color-info: #185FA5;
+  
+  --bg-success: #E1F5EE;
+  --bg-warning: #FAEEDA;
+  --bg-danger: #FCEBEB;
+  --bg-info: #E6F1FB;
+  
+  /* Severity badges */
+  --severity-critical-bg: #FCEBEB;
+  --severity-critical-text: #A32D2D;
+  --severity-high-bg: #FAEEDA;
+  --severity-high-text: #854F0B;
+  --severity-medium-bg: #E6F1FB;
+  --severity-medium-text: #185FA5;
+}
+```
+
+---
+
+## Appendix: API Response Examples
+
+### Identify Location Response
+```json
+{
+  "mode": "identify_location",
+  "metrics": [
+    { "label": "Competitors", "value": 847, "subtext": "within 5 mi" },
+    { "label": "Density", "value": "High", "subtext": "1 per 312 residents", "color": "danger" },
+    { "label": "Avg. rating", "value": "4.2★", "subtext": "area benchmark" },
+    { "label": "Foot traffic", "value": "+18%", "subtext": "YoY growth", "trend": "up" }
+  ],
+  "demographics": {
+    "median_income": 67400,
+    "age_25_44_pct": 38,
+    "pop_growth": 4.2,
+    "walk_score": 72
+  },
+  "sites": [
+    { "name": "Wynwood Arts District", "score": 87, "scoreLabel": "high", "description": "Low saturation · High foot traffic · Tourist + local mix" },
+    { "name": "Little Havana (Calle Ocho)", "

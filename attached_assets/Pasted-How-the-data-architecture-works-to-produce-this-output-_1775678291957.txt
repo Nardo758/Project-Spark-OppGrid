@@ -1,0 +1,17 @@
+How the data architecture works to produce this output:
+
+Each of the 4 modes needs two things the current implementation is missing: (1) rich AI-generated narrative specific to the search/location/idea, and (2) additional structured fields computed from data you already have (or have just seeded).
+
+Mode 1 — Validate Idea → "OppGrid Verdict":
+The backend already runs Claude + DeepSeek. It needs to add: a narrative_verdict field (Claude synthesizes a 2-3 sentence paragraph using the pattern_analysis data), market_signals_count (a COUNT query on the detected_trends table filtered by inferred category, last 90 days), demand_signal_quote (top customer complaint phrase — Claude extracts this from the trend/opportunity descriptions), key_competitors (named players from pattern_analysis), and a single validation_score (0–100) consolidating the current split online/physical scores.
+
+Mode 2 — Search Ideas → "Category Outlook":
+The backend already queries opportunities and trends. It needs: a Claude-generated narrative_summary (paragraph about the category's current signal strength with specific numbers), signal_surge_pct (compare COUNT of opportunities in last 30 days vs prior 30 days), avg_viability_score (AVG(feasibility_score) from the opportunities table), and a top_signals_this_week list with richer fields (each signal gets TAM from INDUSTRY_BENCHMARKS, mention count from trend data).
+
+Mode 3 — Identify Location → "Location Intelligence":
+The backend already runs the trade area analyzer and returns raw competitor + demographics data. It needs: a narrative_summary (Claude writes the "Miami's coffee market is highly saturated..." paragraph using the geo_analysis data already returned), micro_markets (Claude generates 3 neighborhood names + strategic notes for the city/business combo — this is pure AI knowledge since we don't have neighborhood-level data), avg_rating (computed from the competitor rating list already returned), foot_traffic_growth (from the seeded market_growth_trajectories.pop_growth as a proxy), density_per_residents (competitor_count ÷ city population from census table), and proceed_recommendation ("Proceed with targeting" / "Proceed with caution" / "Avoid").
+
+Mode 4 — Clone Success → "Clone Assessment":
+This mode is the most sparse currently. It needs: a narrative_summary (Claude generates the "X's model is highly replicable..." paragraph using industry benchmark + competitor data), est_startup_cost (pulled from INDUSTRY_BENCHMARKS[category]['capital_required']), market_gap_pct (AI estimates % of metros underserved based on business category), why_it_works (4 Claude-generated bullet points), differentiation_needed (Claude one-liner), and replicability_label.
+
+The key pattern is the same across all 4: Pull numbers from the DB → pass them as structured context to a Claude call → Claude synthesizes the narrative paragraph AND formats the key metrics → merge AI output with DB numbers in the response. No new tables needed — uses the census, market_growth_trajectories, detected_trends, and INDUSTRY_BENCHMARKS data that's already in place.

@@ -1,0 +1,876 @@
+"""
+OppGrid Consultant Studio - Enhanced Analysis Implementation
+============================================================
+
+This file contains the exact changes needed to produce rich analysis results
+for all 4 modes. The pattern is the same across all modes:
+
+1. Query existing tables (census, market_growth_trajectories, detected_trends, INDUSTRY_BENCHMARKS)
+2. Compute structured metrics from the query results
+3. Pass metrics as context to Claude for narrative synthesis
+4. Merge DB metrics + Claude narrative into response
+
+TABLES USED (already exist):
+- census: population, demographics by location
+- market_growth_trajectories: pop_growth as foot traffic proxy
+- detected_trends: scraped signals with category, timestamps
+- opportunities: validated opportunities with feasibility_score
+- INDUSTRY_BENCHMARKS: dict with capital_required, margin, etc.
+- pattern_analysis: competitor data from geo analysis
+
+NO NEW TABLES NEEDED.
+"""
+
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timedelta
+from pydantic import BaseModel
+
+# ============================================================================
+# RESPONSE SCHEMAS
+# ============================================================================
+
+class AnalysisVerdict(BaseModel):
+    """The AI-synthesized verdict paragraph + signal badge"""
+    icon: str  # 📊, 🔥, 📍, 🎯
+    label: str  # "OppGrid verdict", "Category outlook", etc.
+    signal: str  # "green", "yellow", "red"
+    signal_text: str  # "Worth exploring", "Proceed with targeting", etc.
+    summary: str  # 2-3 sentence narrative with <strong> tags
+
+class AnalysisMetric(BaseModel):
+    """Single metric card"""
+    label: str
+    value: str
+    subtext: Optional[str] = None
+    color: Optional[str] = None  # "success", "warning", "danger"
+
+class AnalysisInsight(BaseModel):
+    """Insight row with icon"""
+    type: str  # "positive", "caution", "info"
+    label: str
+    text: str
+
+class MicroMarket(BaseModel):
+    """Site recommendation for location mode"""
+    name: str
+    score: int
+    score_label: str  # "high", "medium", "low"
+    description: str
+
+class TopSignal(BaseModel):
+    """Trending signal for search mode"""
+    title: str
+    mention_count: int
+    tam: Optional[str] = None
+    velocity_pct: int
+
+
+# ============================================================================
+# MODE 1: VALIDATE IDEA
+# ============================================================================
+
+async def analyze_validate_idea(idea: str, db, claude_client) -> dict:
+    """
+    Validate Idea mode - returns validation score, market signals, competition analysis.
+    
+    DB Queries:
+    - detected_trends: COUNT signals matching idea category (last 90 days)
+    - opportunities: Related opportunities with feasibility scores
+    - pattern_analysis: Competitor names from previous geo analysis
+    
+    Claude generates:
+    - narrative_verdict: 2-3 sentence synthesis
+    - demand_signal_quote: Top customer complaint phrase
+    """
+    
+    # 1. QUERY: Count market signals from detected_trends (last 90 days)
+    ninety_days_ago = datetime.utcnow() - timedelta(days=90)
+    
+    signals_query = """
+        SELECT COUNT(*) as signal_count
+        FROM detected_trends
+        WHERE category ILIKE :category
+        AND detected_at >= :since
+    """
+    # Infer category from idea (Claude can help here too)
+    inferred_category = await claude_client.infer_category(idea)
+    signal_result = await db.fetch_one(signals_query, {
+        "category": f"%{inferred_category}%",
+        "since": ninety_days_ago
+    })
+    market_signals_count = signal_result["signal_count"] if signal_result else 0
+    
+    # 2. QUERY: Get related opportunities for scoring
+    opportunities_query = """
+        SELECT title, feasibility_score, online_score, physical_score, description
+        FROM opportunities
+        WHERE category ILIKE :category
+        ORDER BY feasibility_score DESC
+        LIMIT 10
+    """
+    related_opps = await db.fetch_all(opportunities_query, {"category": f"%{inferred_category}%"})
+    
+    # 3. COMPUTE: Unified validation score (0-100)
+    # Consolidate online_score + physical_score into single validation_score
+    if related_opps:
+        avg_online = sum(o.get("online_score", 50) for o in related_opps) / len(related_opps)
+        avg_physical = sum(o.get("physical_score", 50) for o in related_opps) / len(related_opps)
+        validation_score = int((avg_online + avg_physical) / 2)
+    else:
+        validation_score = 50  # Neutral if no data
+    
+    # Boost score based on signal count
+    if market_signals_count > 1000:
+        validation_score = min(100, validation_score + 15)
+    elif market_signals_count > 500:
+        validation_score = min(100, validation_score + 10)
+    
+    # 4. QUERY: Get competitor names from pattern_analysis (if available)
+    competitors_query = """
+        SELECT DISTINCT competitor_name
+        FROM pattern_analysis
+        WHERE category ILIKE :category
+        LIMIT 5
+    """
+    competitor_results = await db.fetch_all(competitors_query, {"category": f"%{inferred_category}%"})
+    key_competitors = [c["competitor_name"] for c in competitor_results] if competitor_results else []
+    
+    # 5. COMPUTE: Competition level
+    competitor_count = len(key_competitors)
+    if competitor_count >= 10:
+        competition_level = "High"
+        competition_color = "danger"
+    elif competitor_count >= 5:
+        competition_level = "Moderate"
+        competition_color = "warning"
+    else:
+        competition_level = "Low"
+        competition_color = "success"
+    
+    # 6. CLAUDE: Generate narrative verdict + demand signal quote
+    claude_prompt = f"""
+You are analyzing a business idea for OppGrid's Consultant Studio.
+
+IDEA: {idea}
+CATEGORY: {inferred_category}
+
+DATA:
+- Validation Score: {validation_score}/100
+- Market Signals (last 90 days): {market_signals_count:,}
+- Competition Level: {competition_level} ({competitor_count} known players)
+- Top Competitors: {', '.join(key_competitors) if key_competitors else 'None identified'}
+- Related Opportunities Found: {len(related_opps)}
+
+TASK 1 - NARRATIVE VERDICT:
+Write a 2-3 sentence verdict paragraph. Reference the specific metrics above.
+- If score >= 70: Recommend proceeding, highlight the opportunity angle
+- If 50-69: Proceed with caution, note the specific risk
+- If < 50: Consider pivoting, explain why
+Use <strong> tags to emphasize 1-2 key phrases (like a niche to target or a differentiator).
+
+TASK 2 - DEMAND SIGNAL QUOTE:
+Extract or synthesize the top customer pain point that appears in discussions about this category.
+Format: "Why can't I find X?" or "I wish there was Y" style - something that appears frequently.
+
+TASK 3 - MARKET RISK:
+One sentence about the competitive risk and where the opportunity exists.
+
+Return as JSON:
+{{
+    "narrative_verdict": "...",
+    "demand_signal_quote": "...",
+    "demand_signal_pct": 34,  // % of discussions mentioning this pain point (estimate)
+    "market_risk": "..."
+}}
+"""
+    
+    claude_response = await claude_client.generate(
+        system="You are a market analyst. Return only valid JSON.",
+        prompt=claude_prompt,
+        max_tokens=500
+    )
+    ai_output = parse_json_response(claude_response.text)
+    
+    # 7. DETERMINE: Signal color
+    if validation_score >= 70:
+        signal = "green"
+        signal_text = "Worth exploring"
+    elif validation_score >= 50:
+        signal = "yellow"
+        signal_text = "Proceed with caution"
+    else:
+        signal = "red"
+        signal_text = "High risk"
+    
+    # 8. BUILD RESPONSE
+    return {
+        "mode": "validate_idea",
+        "verdict": {
+            "icon": "📊",
+            "label": "OppGrid verdict",
+            "signal": signal,
+            "signal_text": signal_text,
+            "summary": ai_output.get("narrative_verdict", "")
+        },
+        "metrics": [
+            {
+                "label": "Validation score",
+                "value": f"{validation_score}/100",
+                "subtext": "Strong signal" if validation_score >= 70 else "Moderate" if validation_score >= 50 else "Weak",
+                "color": "success" if validation_score >= 70 else "warning" if validation_score >= 50 else "danger"
+            },
+            {
+                "label": "Market signals",
+                "value": f"{market_signals_count:,}",
+                "subtext": "Last 90 days"
+            },
+            {
+                "label": "Competition",
+                "value": competition_level,
+                "subtext": f"{competitor_count} active players",
+                "color": competition_color
+            }
+        ],
+        "insights": [
+            {
+                "type": "positive",
+                "label": "Key demand signal",
+                "text": f'"{ai_output.get("demand_signal_quote", "")}" appears in {ai_output.get("demand_signal_pct", 0)}% of analyzed discussions'
+            },
+            {
+                "type": "caution",
+                "label": "Market risk",
+                "text": ai_output.get("market_risk", "")
+            }
+        ],
+        "tags": ["Reddit signals", "Google Trends", "Crunchbase", f"+{max(0, 4)} sources"],
+        "cta": {
+            "text": "Full competitive analysis, TAM/SAM, and execution playbook",
+            "report_type": "Feasibility Study",
+            "price": 25
+        }
+    }
+
+
+# ============================================================================
+# MODE 2: SEARCH IDEAS (Category Browse)
+# ============================================================================
+
+async def analyze_search_ideas(category: str, db, claude_client) -> dict:
+    """
+    Search Ideas mode - returns category outlook with trending signals.
+    
+    DB Queries:
+    - opportunities: COUNT by category, AVG feasibility_score
+    - detected_trends: COUNT last 30 days vs prior 30 days for surge %
+    - INDUSTRY_BENCHMARKS: TAM for top signals
+    """
+    
+    # 1. QUERY: Count opportunities in category
+    opp_query = """
+        SELECT 
+            COUNT(*) as total_count,
+            AVG(feasibility_score) as avg_score
+        FROM opportunities
+        WHERE category ILIKE :category
+    """
+    opp_result = await db.fetch_one(opp_query, {"category": f"%{category}%"})
+    opportunity_count = opp_result["total_count"] if opp_result else 0
+    avg_viability_score = int(opp_result["avg_score"]) if opp_result and opp_result["avg_score"] else 65
+    
+    # 2. QUERY: Signal surge (last 30 days vs prior 30 days)
+    now = datetime.utcnow()
+    thirty_days_ago = now - timedelta(days=30)
+    sixty_days_ago = now - timedelta(days=60)
+    
+    recent_count_query = """
+        SELECT COUNT(*) as cnt FROM detected_trends
+        WHERE category ILIKE :category AND detected_at >= :since
+    """
+    prior_count_query = """
+        SELECT COUNT(*) as cnt FROM detected_trends
+        WHERE category ILIKE :category AND detected_at >= :start AND detected_at < :end
+    """
+    
+    recent = await db.fetch_one(recent_count_query, {"category": f"%{category}%", "since": thirty_days_ago})
+    prior = await db.fetch_one(prior_count_query, {
+        "category": f"%{category}%",
+        "start": sixty_days_ago,
+        "end": thirty_days_ago
+    })
+    
+    recent_count = recent["cnt"] if recent else 0
+    prior_count = prior["cnt"] if prior else 1  # Avoid division by zero
+    signal_surge_pct = int(((recent_count - prior_count) / max(prior_count, 1)) * 100)
+    
+    # 3. QUERY: Top signals this week
+    top_signals_query = """
+        SELECT 
+            trend_name,
+            mention_count,
+            category as sub_category
+        FROM detected_trends
+        WHERE category ILIKE :category
+        AND detected_at >= :since
+        ORDER BY mention_count DESC
+        LIMIT 3
+    """
+    one_week_ago = now - timedelta(days=7)
+    top_signals_raw = await db.fetch_all(top_signals_query, {
+        "category": f"%{category}%",
+        "since": one_week_ago
+    })
+    
+    # Enrich with TAM from INDUSTRY_BENCHMARKS
+    from app.data.industry_benchmarks import INDUSTRY_BENCHMARKS
+    
+    top_signals = []
+    for sig in top_signals_raw:
+        sub_cat = sig.get("sub_category", category)
+        benchmark = INDUSTRY_BENCHMARKS.get(sub_cat, {})
+        tam = benchmark.get("market_size", "Unknown")
+        
+        # Calculate velocity (estimate based on mention count)
+        velocity = min(200, int((sig["mention_count"] / max(10, 1)) * 20))
+        
+        top_signals.append({
+            "title": sig["trend_name"],
+            "mention_count": sig["mention_count"],
+            "tam": tam,
+            "velocity_pct": velocity
+        })
+    
+    # 4. CLAUDE: Generate narrative summary
+    claude_prompt = f"""
+You are analyzing the {category} category for OppGrid's Consultant Studio.
+
+DATA:
+- Total Opportunities: {opportunity_count}
+- Signal Surge: {signal_surge_pct:+d}% vs last month
+- Average Viability Score: {avg_viability_score}/100 (platform median is 64)
+- Top Signals This Week: {[s['title'] for s in top_signals]}
+
+Write a 2-3 sentence category outlook paragraph. Reference the specific metrics.
+- Highlight whether the category is heating up or cooling down
+- Mention the top 1-2 signals by name
+- Use <strong> tags to emphasize key trends
+
+Return as JSON:
+{{
+    "narrative_summary": "..."
+}}
+"""
+    
+    claude_response = await claude_client.generate(
+        system="You are a market analyst. Return only valid JSON.",
+        prompt=claude_prompt,
+        max_tokens=300
+    )
+    ai_output = parse_json_response(claude_response.text)
+    
+    # 5. DETERMINE: Signal color
+    if signal_surge_pct > 10:
+        signal = "green"
+        signal_text = "High activity"
+    elif signal_surge_pct > 0:
+        signal = "yellow"
+        signal_text = "Stable"
+    else:
+        signal = "red"
+        signal_text = "Declining"
+    
+    # 6. BUILD RESPONSE
+    return {
+        "mode": "search_ideas",
+        "verdict": {
+            "icon": "🔥",
+            "label": "Category outlook",
+            "signal": signal,
+            "signal_text": signal_text,
+            "summary": ai_output.get("narrative_summary", "")
+        },
+        "metrics": [
+            {
+                "label": "Opportunities",
+                "value": str(opportunity_count),
+                "subtext": "in this category"
+            },
+            {
+                "label": "Trending now",
+                "value": f"{signal_surge_pct:+d}%",
+                "subtext": "vs. last month",
+                "color": "success" if signal_surge_pct > 0 else "danger"
+            },
+            {
+                "label": "Avg. score",
+                "value": str(avg_viability_score),
+                "subtext": "High viability" if avg_viability_score > 70 else "Moderate"
+            }
+        ],
+        "top_signals": top_signals,
+        "tags": ["Real-time consumer sentiment", "7 data sources", "AI-curated"],
+        "cta": {
+            "text": "Unlock full opportunity cards with execution data",
+            "report_type": "Subscription",
+            "price": 29
+        }
+    }
+
+
+# ============================================================================
+# MODE 3: IDENTIFY LOCATION
+# ============================================================================
+
+async def analyze_identify_location(location: str, business_type: str, db, claude_client) -> dict:
+    """
+    Identify Location mode - returns geographic intelligence with micro-market recommendations.
+    
+    DB Queries:
+    - pattern_analysis (from geo analyzer): competitor list, ratings
+    - census: population for density calculation
+    - market_growth_trajectories: pop_growth as foot traffic proxy
+    - INDUSTRY_BENCHMARKS: density benchmarks
+    
+    Claude generates:
+    - narrative_summary: Location intelligence paragraph
+    - micro_markets: 3 neighborhood recommendations (AI knowledge)
+    """
+    
+    # 1. QUERY: Get geo analysis results (competitor data)
+    # This assumes the trade_area_analyzer has already run and stored results
+    geo_query = """
+        SELECT 
+            competitor_count,
+            avg_rating,
+            competitor_list
+        FROM geo_analysis_cache
+        WHERE location = :location AND business_type = :business_type
+        ORDER BY analyzed_at DESC
+        LIMIT 1
+    """
+    geo_result = await db.fetch_one(geo_query, {
+        "location": location,
+        "business_type": business_type
+    })
+    
+    # Fallback to direct competitor query if cache miss
+    if not geo_result:
+        competitor_query = """
+            SELECT COUNT(*) as cnt, AVG(rating) as avg_rating
+            FROM competitors
+            WHERE city ILIKE :location AND category ILIKE :business_type
+        """
+        geo_result = await db.fetch_one(competitor_query, {
+            "location": f"%{location}%",
+            "business_type": f"%{business_type}%"
+        })
+    
+    competitor_count = geo_result.get("competitor_count", geo_result.get("cnt", 0)) if geo_result else 0
+    avg_rating = round(geo_result.get("avg_rating", 4.0), 1) if geo_result else 4.0
+    
+    # 2. QUERY: Get population from census
+    census_query = """
+        SELECT population, median_income, age_25_44_pct
+        FROM census
+        WHERE city ILIKE :location
+        LIMIT 1
+    """
+    census_result = await db.fetch_one(census_query, {"location": f"%{location}%"})
+    
+    population = census_result.get("population", 500000) if census_result else 500000
+    median_income = census_result.get("median_income", 55000) if census_result else 55000
+    age_25_44_pct = census_result.get("age_25_44_pct", 30) if census_result else 30
+    
+    # 3. COMPUTE: Density per residents
+    if competitor_count > 0 and population > 0:
+        density_per = int(population / competitor_count)
+        density_ratio = f"1 per {density_per:,} residents"
+    else:
+        density_per = 0
+        density_ratio = "Unknown"
+    
+    # Determine density label based on business type benchmarks
+    from app.data.industry_benchmarks import INDUSTRY_BENCHMARKS
+    benchmark = INDUSTRY_BENCHMARKS.get(business_type, {})
+    typical_density = benchmark.get("typical_density_per_capita", 500)
+    
+    if density_per > 0:
+        if density_per < typical_density * 0.5:
+            density_label = "High"
+            density_color = "danger"
+        elif density_per < typical_density:
+            density_label = "Medium"
+            density_color = "warning"
+        else:
+            density_label = "Low"
+            density_color = "success"
+    else:
+        density_label = "Unknown"
+        density_color = None
+    
+    # 4. QUERY: Get foot traffic proxy from market_growth_trajectories
+    growth_query = """
+        SELECT pop_growth as foot_traffic_growth
+        FROM market_growth_trajectories
+        WHERE city ILIKE :location
+        ORDER BY year DESC
+        LIMIT 1
+    """
+    growth_result = await db.fetch_one(growth_query, {"location": f"%{location}%"})
+    foot_traffic_growth = growth_result.get("foot_traffic_growth", 5) if growth_result else 5
+    
+    # 5. CLAUDE: Generate narrative + micro-markets
+    claude_prompt = f"""
+You are a location intelligence analyst for OppGrid's Consultant Studio.
+
+LOCATION: {location}
+BUSINESS TYPE: {business_type}
+
+DATA:
+- Competitors: {competitor_count} within 5 miles
+- Market Density: {density_label} ({density_ratio})
+- Average Competitor Rating: {avg_rating}★
+- Foot Traffic Growth: +{foot_traffic_growth}% YoY
+- Median Income: ${median_income:,}
+- Target Demographic (25-44): {age_25_44_pct}%
+
+TASK 1 - NARRATIVE SUMMARY:
+Write a 2-3 sentence location intelligence paragraph.
+- Reference the specific metrics above
+- If high density, recommend specific strategies (premium positioning, niche differentiation)
+- Use <strong> tags to emphasize recommended neighborhoods or strategies
+
+TASK 2 - MICRO MARKETS:
+Generate 3 neighborhood/area recommendations within {location} for a {business_type}.
+Use your knowledge of {location}'s neighborhoods. For each:
+- Name: The neighborhood name
+- Score: 70-95 based on fit
+- Description: Short strategic note (e.g., "Low saturation · High foot traffic · Tourist + local mix")
+
+TASK 3 - PROCEED RECOMMENDATION:
+Return one of: "Strong opportunity", "Proceed with targeting", "Proceed with caution", "Avoid"
+
+Return as JSON:
+{{
+    "narrative_summary": "...",
+    "micro_markets": [
+        {{"name": "...", "score": 87, "description": "..."}},
+        {{"name": "...", "score": 82, "description": "..."}},
+        {{"name": "...", "score": 71, "description": "..."}}
+    ],
+    "proceed_recommendation": "..."
+}}
+"""
+    
+    claude_response = await claude_client.generate(
+        system="You are a location analyst. Return only valid JSON.",
+        prompt=claude_prompt,
+        max_tokens=600
+    )
+    ai_output = parse_json_response(claude_response.text)
+    
+    # 6. DETERMINE: Signal color
+    proceed_rec = ai_output.get("proceed_recommendation", "Proceed with targeting")
+    if proceed_rec == "Strong opportunity":
+        signal = "green"
+    elif proceed_rec in ["Proceed with targeting", "Proceed with caution"]:
+        signal = "yellow"
+    else:
+        signal = "red"
+    
+    # 7. Format micro markets
+    micro_markets = []
+    for mm in ai_output.get("micro_markets", []):
+        score = mm.get("score", 75)
+        if score >= 80:
+            score_label = "high"
+        elif score >= 60:
+            score_label = "medium"
+        else:
+            score_label = "low"
+        
+        micro_markets.append({
+            "name": mm.get("name", "Unknown"),
+            "score": score,
+            "score_label": score_label,
+            "description": mm.get("description", "")
+        })
+    
+    # 8. BUILD RESPONSE
+    return {
+        "mode": "identify_location",
+        "verdict": {
+            "icon": "📍",
+            "label": "Location intelligence",
+            "signal": signal,
+            "signal_text": proceed_rec,
+            "summary": ai_output.get("narrative_summary", "")
+        },
+        "metrics": [
+            {
+                "label": "Competitors",
+                "value": str(competitor_count),
+                "subtext": "within 5 mi"
+            },
+            {
+                "label": "Density",
+                "value": density_label,
+                "subtext": density_ratio,
+                "color": density_color
+            },
+            {
+                "label": "Avg. rating",
+                "value": f"{avg_rating}★",
+                "subtext": "area benchmark"
+            },
+            {
+                "label": "Foot traffic",
+                "value": f"+{foot_traffic_growth}%",
+                "subtext": "YoY growth",
+                "color": "success" if foot_traffic_growth > 0 else "danger"
+            }
+        ],
+        "demographics": {
+            "median_income": median_income,
+            "age_25_44_pct": age_25_44_pct,
+            "pop_growth": foot_traffic_growth,
+            "walk_score": 72  # Could query Walk Score API if integrated
+        },
+        "micro_markets": micro_markets,
+        "tags": ["Census Bureau", "Google Places", "Walk Score", "PostGIS analytics"],
+        "cta": {
+            "text": "Full location analysis with Census data, heat maps & lease intel",
+            "report_type": "Business Plan",
+            "price": 149
+        }
+    }
+
+
+# ============================================================================
+# MODE 4: CLONE SUCCESS
+# ============================================================================
+
+async def analyze_clone_success(model_name: str, db, claude_client) -> dict:
+    """
+    Clone Success mode - analyzes a successful business model for replication.
+    
+    DB Queries:
+    - INDUSTRY_BENCHMARKS: capital_required, margins
+    - competitors: Find similar businesses for analysis
+    
+    Claude generates:
+    - narrative_summary: Clone assessment paragraph
+    - why_it_works: 4 bullet points
+    - differentiation_needed: One-liner
+    - market_gap_pct: Estimate of underserved metros
+    """
+    
+    # 1. Infer category from model name
+    category_prompt = f"What business category does '{model_name}' belong to? Return just the category name (e.g., 'fast_casual_restaurant', 'fitness_studio', 'coffee_shop')."
+    category_response = await claude_client.generate(
+        system="Return only the category name, nothing else.",
+        prompt=category_prompt,
+        max_tokens=50
+    )
+    inferred_category = category_response.text.strip().lower().replace(" ", "_")
+    
+    # 2. QUERY: Get industry benchmarks
+    from app.data.industry_benchmarks import INDUSTRY_BENCHMARKS
+    benchmark = INDUSTRY_BENCHMARKS.get(inferred_category, {})
+    
+    est_startup_cost = benchmark.get("capital_required", "$250K-$500K")
+    typical_margin = benchmark.get("net_margin", "10-15%")
+    avg_revenue = benchmark.get("avg_unit_revenue", "$500K-$1M")
+    
+    # 3. QUERY: Check for similar competitors in DB
+    similar_query = """
+        SELECT COUNT(DISTINCT city) as metro_count
+        FROM competitors
+        WHERE category ILIKE :category
+    """
+    similar_result = await db.fetch_one(similar_query, {"category": f"%{inferred_category}%"})
+    metros_with_presence = similar_result.get("metro_count", 0) if similar_result else 0
+    
+    # Estimate total addressable metros (rough US estimate)
+    total_viable_metros = 384  # US metros with 50K+ population
+    market_gap_pct = max(0, int(((total_viable_metros - metros_with_presence) / total_viable_metros) * 100))
+    
+    # 4. CLAUDE: Generate full clone assessment
+    claude_prompt = f"""
+You are a business model analyst for OppGrid's Consultant Studio.
+
+MODEL TO CLONE: {model_name}
+INFERRED CATEGORY: {inferred_category}
+
+INDUSTRY BENCHMARKS:
+- Estimated Startup Cost: {est_startup_cost}
+- Typical Net Margin: {typical_margin}
+- Average Unit Revenue: {avg_revenue}
+- Metros with Similar Concepts: {metros_with_presence} of {total_viable_metros}
+- Estimated Market Gap: {market_gap_pct}% of metros underserved
+
+TASK 1 - NARRATIVE SUMMARY:
+Write a 2-3 sentence clone assessment paragraph.
+- Reference the replicability of the model
+- Mention the lean/modified approach vs. original format
+- Use <strong> tags to emphasize key numbers (startup cost, market gap)
+
+TASK 2 - REPLICABILITY LABEL:
+Return one of: "High", "Medium", "Low"
+
+TASK 3 - WHY IT WORKS:
+4 concise bullet points explaining the model's success factors (e.g., "Digital-first ordering captures 68% of revenue").
+
+TASK 4 - DIFFERENTIATION NEEDED:
+One sentence about how to differentiate from the original (e.g., "Regional ingredient sourcing and smaller footprint for profitability").
+
+Return as JSON:
+{{
+    "narrative_summary": "...",
+    "replicability_label": "High",
+    "why_it_works": ["...", "...", "...", "..."],
+    "differentiation_needed": "..."
+}}
+"""
+    
+    claude_response = await claude_client.generate(
+        system="You are a business strategist. Return only valid JSON.",
+        prompt=claude_prompt,
+        max_tokens=600
+    )
+    ai_output = parse_json_response(claude_response.text)
+    
+    # 5. DETERMINE: Signal color
+    replicability = ai_output.get("replicability_label", "Medium")
+    if replicability == "High":
+        signal = "green"
+        signal_text = "High replicability"
+    elif replicability == "Medium":
+        signal = "yellow"
+        signal_text = "Moderate replicability"
+    else:
+        signal = "red"
+        signal_text = "Low replicability"
+    
+    # 6. BUILD RESPONSE
+    return {
+        "mode": "clone_success",
+        "verdict": {
+            "icon": "🎯",
+            "label": "Clone assessment",
+            "signal": signal,
+            "signal_text": signal_text,
+            "summary": ai_output.get("narrative_summary", "")
+        },
+        "metrics": [
+            {
+                "label": "Model viability",
+                "value": replicability,
+                "subtext": "Replicable format",
+                "color": "success" if replicability == "High" else "warning"
+            },
+            {
+                "label": "Est. startup cost",
+                "value": est_startup_cost,
+                "subtext": "Lean version"
+            },
+            {
+                "label": "Market gap",
+                "value": f"{market_gap_pct}%",
+                "subtext": "Underserved metros"
+            }
+        ],
+        "insights": [
+            {
+                "type": "positive",
+                "label": "Why this works",
+                "text": " · ".join(ai_output.get("why_it_works", [])[:2])  # First 2 for preview
+            },
+            {
+                "type": "info",
+                "label": "Differentiation needed",
+                "text": ai_output.get("differentiation_needed", "")
+            }
+        ],
+        "why_it_works_full": ai_output.get("why_it_works", []),
+        "tags": ["Unit economics modeled", "3 location archetypes", "Competitor comparison"],
+        "cta": {
+            "text": "Full clone playbook with financials, suppliers & launch timeline",
+            "report_type": "Deep Clone Analysis",
+            "price": 549
+        }
+    }
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def parse_json_response(text: str) -> dict:
+    """Parse JSON from Claude response, handling markdown code blocks."""
+    import json
+    
+    # Remove markdown code blocks if present
+    text = text.strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    
+    try:
+        return json.loads(text.strip())
+    except json.JSONDecodeError:
+        return {}
+
+
+# ============================================================================
+# ROUTER INTEGRATION
+# ============================================================================
+
+async def analyze(mode: str, params: dict, db, claude_client) -> dict:
+    """
+    Main router for Consultant Studio analysis.
+    
+    Args:
+        mode: "validate_idea" | "search_ideas" | "identify_location" | "clone_success"
+        params: Mode-specific parameters
+        db: Database connection
+        claude_client: Claude API client
+    
+    Returns:
+        Rich analysis result with verdict, metrics, insights
+    """
+    
+    if mode == "validate_idea":
+        return await analyze_validate_idea(
+            idea=params.get("idea", ""),
+            db=db,
+            claude_client=claude_client
+        )
+    
+    elif mode == "search_ideas":
+        return await analyze_search_ideas(
+            category=params.get("category", ""),
+            db=db,
+            claude_client=claude_client
+        )
+    
+    elif mode == "identify_location":
+        return await analyze_identify_location(
+            location=params.get("location", ""),
+            business_type=params.get("business_type", ""),
+            db=db,
+            claude_client=claude_client
+        )
+    
+    elif mode == "clone_success":
+        return await analyze_clone_success(
+            model_name=params.get("model_name", ""),
+            db=db,
+            claude_client=claude_client
+        )
+    
+    else:
+        raise ValueError(f"Unknown analysis mode: {mode}")
