@@ -55,6 +55,596 @@ class ConsultantStudioService:
     def __init__(self, db: Session):
         self.db = db
 
+    async def _call_claude_json(self, system: str, prompt: str, max_tokens: int = 600) -> dict:
+        """Call Claude with a JSON-returning prompt. Returns parsed dict or {} on failure."""
+        import asyncio
+        from app.services.ai_report_generator import get_anthropic_client
+
+        client = get_anthropic_client()
+        if not client:
+            logger.warning("Anthropic client not available for intel card generation")
+            return {}
+
+        def _sync_call():
+            try:
+                msg = client.messages.create(
+                    model="claude-opus-4-5",
+                    max_tokens=max_tokens,
+                    system=system,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = msg.content[0].text if msg.content else ""
+                text = text.strip()
+                if text.startswith("```json"):
+                    text = text[7:]
+                if text.startswith("```"):
+                    text = text[3:]
+                if text.endswith("```"):
+                    text = text[:-3]
+                import json as _json
+                return _json.loads(text.strip())
+            except Exception as e:
+                logger.warning(f"Claude JSON call failed: {e}")
+                return {}
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _sync_call)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # INTELLIGENCE CARD BUILDERS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def _build_validate_intel_card(
+        self,
+        idea: str,
+        online_score: int,
+        physical_score: int,
+        pattern_analysis: Optional[Dict],
+    ) -> dict:
+        """Build intelligence card for validate_idea mode."""
+        try:
+            from sqlalchemy import text as _text
+
+            # Infer category from the idea
+            inferred_category = self._infer_business_category(idea)
+
+            # 1. Count market signals in detected_trends (last 90 days)
+            ninety_days_ago = datetime.utcnow() - timedelta(days=90)
+            try:
+                sig_row = self.db.execute(
+                    _text("SELECT COUNT(*) as cnt FROM detected_trends WHERE category ILIKE :cat AND detected_at >= :since"),
+                    {"cat": f"%{inferred_category}%", "since": ninety_days_ago},
+                ).fetchone()
+                market_signals_count = int(sig_row[0]) if sig_row else 0
+            except Exception:
+                market_signals_count = 0
+
+            # 2. Derive validation score
+            validation_score = int((online_score + physical_score) / 2)
+            if market_signals_count > 1000:
+                validation_score = min(100, validation_score + 15)
+            elif market_signals_count > 500:
+                validation_score = min(100, validation_score + 10)
+
+            # 3. Competitors from pattern_analysis or DB
+            key_competitors = []
+            if pattern_analysis and isinstance(pattern_analysis, dict):
+                comps = pattern_analysis.get("competitors", [])
+                key_competitors = [c.get("name", "") for c in comps[:5] if c.get("name")]
+            if not key_competitors:
+                try:
+                    rows = self.db.execute(
+                        _text("SELECT DISTINCT competitor_name FROM pattern_analysis WHERE category ILIKE :cat LIMIT 5"),
+                        {"cat": f"%{inferred_category}%"},
+                    ).fetchall()
+                    key_competitors = [r[0] for r in rows if r[0]]
+                except Exception:
+                    pass
+
+            competitor_count = len(key_competitors)
+            if competitor_count >= 10:
+                competition_level, competition_color = "High", "danger"
+            elif competitor_count >= 5:
+                competition_level, competition_color = "Moderate", "warning"
+            else:
+                competition_level, competition_color = "Low", "success"
+
+            # 4. Determine signal
+            if validation_score >= 70:
+                signal, signal_text = "green", "Worth exploring"
+            elif validation_score >= 50:
+                signal, signal_text = "yellow", "Proceed with caution"
+            else:
+                signal, signal_text = "red", "High risk"
+
+            # 5. Claude narrative
+            ai_output = await self._call_claude_json(
+                system="You are a market analyst. Return only valid JSON.",
+                prompt=f"""You are analyzing a business idea for OppGrid's Consultant Studio.
+
+IDEA: {idea}
+CATEGORY: {inferred_category}
+
+DATA:
+- Validation Score: {validation_score}/100
+- Market Signals (last 90 days): {market_signals_count:,}
+- Competition Level: {competition_level} ({competitor_count} known players)
+- Top Competitors: {', '.join(key_competitors) if key_competitors else 'None identified'}
+
+TASK 1 - NARRATIVE VERDICT:
+Write a 2-3 sentence verdict paragraph referencing these specific metrics.
+Use <strong> tags to emphasize 1-2 key phrases.
+
+TASK 2 - DEMAND SIGNAL QUOTE:
+Synthesize the top customer pain point for this category (e.g., "Why can't I find X?").
+
+TASK 3 - MARKET RISK:
+One sentence about the competitive risk and where opportunity exists.
+
+Return as JSON:
+{{
+    "narrative_verdict": "...",
+    "demand_signal_quote": "...",
+    "demand_signal_pct": 34,
+    "market_risk": "..."
+}}""",
+                max_tokens=500,
+            )
+
+            return {
+                "intel_verdict": {
+                    "icon": "📊",
+                    "label": "OppGrid verdict",
+                    "signal": signal,
+                    "signal_text": signal_text,
+                    "summary": ai_output.get("narrative_verdict", ""),
+                },
+                "intel_metrics": [
+                    {
+                        "label": "Validation score",
+                        "value": f"{validation_score}/100",
+                        "subtext": "Strong signal" if validation_score >= 70 else "Moderate" if validation_score >= 50 else "Weak",
+                        "color": "success" if validation_score >= 70 else "warning" if validation_score >= 50 else "danger",
+                    },
+                    {
+                        "label": "Market signals",
+                        "value": f"{market_signals_count:,}",
+                        "subtext": "Last 90 days",
+                    },
+                    {
+                        "label": "Competition",
+                        "value": competition_level,
+                        "subtext": f"{competitor_count} active players",
+                        "color": competition_color,
+                    },
+                ],
+                "intel_insights": [
+                    {
+                        "type": "positive",
+                        "label": "Key demand signal",
+                        "text": f'"{ai_output.get("demand_signal_quote", "")}" — appears in ~{ai_output.get("demand_signal_pct", 0)}% of analyzed discussions',
+                    },
+                    {
+                        "type": "caution",
+                        "label": "Market risk",
+                        "text": ai_output.get("market_risk", ""),
+                    },
+                ],
+                "intel_tags": ["Reddit signals", "Google Trends", "Crunchbase", "+4 sources"],
+                "intel_cta": {
+                    "text": "Full competitive analysis, TAM/SAM, and execution playbook",
+                    "report_type": "Feasibility Study",
+                    "price": 25,
+                },
+            }
+        except Exception as e:
+            logger.warning(f"_build_validate_intel_card failed: {e}")
+            return {}
+
+    async def _build_search_intel_card(
+        self,
+        filters: Dict[str, Any],
+        opportunities: list,
+        trends: list,
+    ) -> dict:
+        """Build intelligence card for search_ideas mode."""
+        try:
+            from sqlalchemy import text as _text
+
+            category = filters.get("category") or filters.get("categories", [""])[0] if filters.get("categories") else ""
+            if isinstance(category, list):
+                category = category[0] if category else ""
+
+            # 1. Count + avg score from supplied opportunities list
+            opportunity_count = len(opportunities)
+            if opportunities:
+                avg_viability_score = int(
+                    sum(o.feasibility_score or 65 for o in opportunities) / max(len(opportunities), 1)
+                )
+            else:
+                avg_viability_score = 65
+
+            # 2. Signal surge: last 30 days vs prior 30 days
+            now = datetime.utcnow()
+            thirty_days_ago = now - timedelta(days=30)
+            sixty_days_ago = now - timedelta(days=60)
+            try:
+                recent_row = self.db.execute(
+                    _text("SELECT COUNT(*) FROM detected_trends WHERE category ILIKE :cat AND detected_at >= :since"),
+                    {"cat": f"%{category}%" if category else "%", "since": thirty_days_ago},
+                ).fetchone()
+                prior_row = self.db.execute(
+                    _text("SELECT COUNT(*) FROM detected_trends WHERE category ILIKE :cat AND detected_at >= :start AND detected_at < :end"),
+                    {"cat": f"%{category}%" if category else "%", "start": sixty_days_ago, "end": thirty_days_ago},
+                ).fetchone()
+                recent_count = int(recent_row[0]) if recent_row else 0
+                prior_count = int(prior_row[0]) if prior_row else 1
+            except Exception:
+                recent_count, prior_count = 0, 1
+            signal_surge_pct = int(((recent_count - prior_count) / max(prior_count, 1)) * 100)
+
+            # 3. Top signals from supplied trends + DB enrichment
+            from app.services.report_data_service import ReportDataService as _RDS; INDUSTRY_BENCHMARKS = _RDS.INDUSTRY_BENCHMARKS
+            top_signals = []
+            # Use supplied trends first
+            for t in trends[:3]:
+                sub_cat = getattr(t, "category", category) or category
+                benchmark = INDUSTRY_BENCHMARKS.get(sub_cat, {})
+                tam = benchmark.get("market_size", None)
+                mention_count = getattr(t, "opportunities_count", 0) or 0
+                velocity = min(200, int((mention_count / max(10, 1)) * 20))
+                top_signals.append({
+                    "title": getattr(t, "trend_name", ""),
+                    "mention_count": mention_count,
+                    "tam": tam,
+                    "velocity_pct": velocity,
+                })
+
+            # 4. Signal color
+            if signal_surge_pct > 10:
+                signal, signal_text = "green", "High activity"
+            elif signal_surge_pct >= 0:
+                signal, signal_text = "yellow", "Stable"
+            else:
+                signal, signal_text = "red", "Declining"
+
+            # 5. Claude narrative
+            ai_output = await self._call_claude_json(
+                system="You are a market analyst. Return only valid JSON.",
+                prompt=f"""You are analyzing the {category or 'selected'} category for OppGrid's Consultant Studio.
+
+DATA:
+- Total Opportunities: {opportunity_count}
+- Signal Surge: {signal_surge_pct:+d}% vs last month
+- Average Viability Score: {avg_viability_score}/100 (platform median is 64)
+- Top Signals This Week: {[s['title'] for s in top_signals]}
+
+Write a 2-3 sentence category outlook paragraph. Reference the specific metrics.
+Highlight whether the category is heating up or cooling down.
+Mention the top 1-2 signals by name. Use <strong> tags to emphasize key trends.
+
+Return as JSON:
+{{
+    "narrative_summary": "..."
+}}""",
+                max_tokens=300,
+            )
+
+            return {
+                "intel_verdict": {
+                    "icon": "🔥",
+                    "label": "Category outlook",
+                    "signal": signal,
+                    "signal_text": signal_text,
+                    "summary": ai_output.get("narrative_summary", ""),
+                },
+                "intel_metrics": [
+                    {
+                        "label": "Opportunities",
+                        "value": str(opportunity_count),
+                        "subtext": "in this category",
+                    },
+                    {
+                        "label": "Trending now",
+                        "value": f"{signal_surge_pct:+d}%",
+                        "subtext": "vs. last month",
+                        "color": "success" if signal_surge_pct > 0 else "danger",
+                    },
+                    {
+                        "label": "Avg. score",
+                        "value": str(avg_viability_score),
+                        "subtext": "High viability" if avg_viability_score > 70 else "Moderate",
+                    },
+                ],
+                "intel_top_signals": top_signals,
+                "intel_tags": ["Real-time consumer sentiment", "7 data sources", "AI-curated"],
+                "intel_cta": {
+                    "text": "Unlock full opportunity cards with execution data",
+                    "report_type": "Subscription",
+                    "price": 29,
+                },
+            }
+        except Exception as e:
+            logger.warning(f"_build_search_intel_card failed: {e}")
+            return {}
+
+    async def _build_location_intel_card(
+        self,
+        city: str,
+        business_type: str,
+        competitors: list,
+        geo_analysis: Dict[str, Any],
+    ) -> dict:
+        """Build intelligence card for identify_location mode."""
+        try:
+            from sqlalchemy import text as _text
+            from app.services.report_data_service import ReportDataService as _RDS; INDUSTRY_BENCHMARKS = _RDS.INDUSTRY_BENCHMARKS
+
+            # 1. Competitor count + avg rating from geo_analysis
+            competitor_count = len(competitors)
+            if competitors:
+                ratings = [c.get("rating") for c in competitors if c.get("rating")]
+                avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else 4.0
+            else:
+                avg_rating = 4.0
+
+            # 2. Census data
+            parsed_city, parsed_state = parse_city_state(city)
+            try:
+                census_row = self.db.execute(
+                    _text("SELECT population, median_income, age_25_44_pct FROM census WHERE city ILIKE :city LIMIT 1"),
+                    {"city": f"%{parsed_city}%"},
+                ).fetchone()
+                if census_row:
+                    population = int(census_row[0] or 500000)
+                    median_income = int(census_row[1] or 55000)
+                    age_25_44_pct = int(census_row[2] or 30)
+                else:
+                    population, median_income, age_25_44_pct = 500000, 55000, 30
+            except Exception:
+                population, median_income, age_25_44_pct = 500000, 55000, 30
+
+            # 3. Density calculation
+            benchmark = INDUSTRY_BENCHMARKS.get(business_type, {})
+            typical_density = benchmark.get("typical_density_per_capita", 5000)
+            if competitor_count > 0 and population > 0:
+                density_per = int(population / competitor_count)
+                density_ratio = f"1 per {density_per:,} residents"
+                if density_per < typical_density * 0.5:
+                    density_label, density_color = "High", "danger"
+                elif density_per < typical_density:
+                    density_label, density_color = "Medium", "warning"
+                else:
+                    density_label, density_color = "Low", "success"
+            else:
+                density_per, density_ratio = 0, "Unknown"
+                density_label, density_color = "Unknown", None
+
+            # 4. Foot traffic proxy from market_growth_trajectories
+            try:
+                growth_row = self.db.execute(
+                    _text("SELECT pop_growth FROM market_growth_trajectories WHERE city ILIKE :city ORDER BY year DESC LIMIT 1"),
+                    {"city": f"%{parsed_city}%"},
+                ).fetchone()
+                foot_traffic_growth = float(growth_row[0]) if growth_row and growth_row[0] else 5
+            except Exception:
+                foot_traffic_growth = 5
+
+            # 5. Claude narrative + micro-markets
+            ai_output = await self._call_claude_json(
+                system="You are a location analyst. Return only valid JSON.",
+                prompt=f"""You are a location intelligence analyst for OppGrid's Consultant Studio.
+
+LOCATION: {city}
+BUSINESS TYPE: {business_type}
+
+DATA:
+- Competitors: {competitor_count} within 5 miles
+- Market Density: {density_label} ({density_ratio})
+- Average Competitor Rating: {avg_rating}★
+- Foot Traffic Growth: +{foot_traffic_growth}% YoY
+- Median Income: ${median_income:,}
+- Target Demographic (25-44): {age_25_44_pct}%
+
+TASK 1 - NARRATIVE SUMMARY:
+Write a 2-3 sentence location intelligence paragraph referencing these metrics.
+Use <strong> tags to emphasize recommended neighborhoods or strategies.
+
+TASK 2 - MICRO MARKETS:
+Generate 3 neighborhood/area recommendations within {city} for a {business_type}.
+For each: Name (neighborhood name), Score (70-95), Description (short strategic note).
+
+TASK 3 - PROCEED RECOMMENDATION:
+Return one of: "Strong opportunity", "Proceed with targeting", "Proceed with caution", "Avoid"
+
+Return as JSON:
+{{
+    "narrative_summary": "...",
+    "micro_markets": [
+        {{"name": "...", "score": 87, "description": "..."}},
+        {{"name": "...", "score": 82, "description": "..."}},
+        {{"name": "...", "score": 71, "description": "..."}}
+    ],
+    "proceed_recommendation": "..."
+}}""",
+                max_tokens=600,
+            )
+
+            proceed_rec = ai_output.get("proceed_recommendation", "Proceed with targeting")
+            if proceed_rec == "Strong opportunity":
+                signal = "green"
+            elif proceed_rec in ["Proceed with targeting", "Proceed with caution"]:
+                signal = "yellow"
+            else:
+                signal = "red"
+
+            micro_markets = []
+            for mm in ai_output.get("micro_markets", []):
+                score = mm.get("score", 75)
+                score_label = "high" if score >= 80 else "medium" if score >= 60 else "low"
+                micro_markets.append({
+                    "name": mm.get("name", "Unknown"),
+                    "score": score,
+                    "score_label": score_label,
+                    "description": mm.get("description", ""),
+                })
+
+            return {
+                "intel_verdict": {
+                    "icon": "📍",
+                    "label": "Location intelligence",
+                    "signal": signal,
+                    "signal_text": proceed_rec,
+                    "summary": ai_output.get("narrative_summary", ""),
+                },
+                "intel_metrics": [
+                    {"label": "Competitors", "value": str(competitor_count), "subtext": "within 5 mi"},
+                    {"label": "Density", "value": density_label, "subtext": density_ratio, "color": density_color},
+                    {"label": "Avg. rating", "value": f"{avg_rating}★", "subtext": "area benchmark"},
+                    {
+                        "label": "Foot traffic",
+                        "value": f"+{foot_traffic_growth:.0f}%",
+                        "subtext": "YoY growth",
+                        "color": "success" if foot_traffic_growth > 0 else "danger",
+                    },
+                ],
+                "intel_demographics": {
+                    "median_income": median_income,
+                    "age_25_44_pct": age_25_44_pct,
+                    "pop_growth": foot_traffic_growth,
+                },
+                "intel_micro_markets": micro_markets,
+                "intel_tags": ["Census Bureau", "Google Places", "Market Growth Data", "AI analysis"],
+                "intel_cta": {
+                    "text": "Full location analysis with Census data, heat maps & lease intel",
+                    "report_type": "Business Plan",
+                    "price": 149,
+                },
+            }
+        except Exception as e:
+            logger.warning(f"_build_location_intel_card failed: {e}")
+            return {}
+
+    async def _build_clone_intel_card(
+        self,
+        business_name: str,
+        source_analysis: Dict[str, Any],
+    ) -> dict:
+        """Build intelligence card for clone_success mode."""
+        try:
+            from sqlalchemy import text as _text
+            from app.services.report_data_service import ReportDataService as _RDS; INDUSTRY_BENCHMARKS = _RDS.INDUSTRY_BENCHMARKS
+
+            category = source_analysis.get("category", "")
+            benchmark = INDUSTRY_BENCHMARKS.get(category, {})
+            est_startup_cost = benchmark.get("capital_required", "$250K–$500K")
+            typical_margin = benchmark.get("net_margin", "10–15%")
+            avg_revenue = benchmark.get("avg_unit_revenue", "$500K–$1M")
+
+            # Count metros with similar concepts
+            try:
+                metros_row = self.db.execute(
+                    _text("SELECT COUNT(DISTINCT city) FROM competitors WHERE category ILIKE :cat"),
+                    {"cat": f"%{category}%" if category else "%"},
+                ).fetchone()
+                metros_with_presence = int(metros_row[0]) if metros_row else 0
+            except Exception:
+                metros_with_presence = 0
+
+            total_viable_metros = 384
+            market_gap_pct = max(0, int(((total_viable_metros - metros_with_presence) / total_viable_metros) * 100))
+
+            # Claude assessment
+            ai_output = await self._call_claude_json(
+                system="You are a business strategist. Return only valid JSON.",
+                prompt=f"""You are a business model analyst for OppGrid's Consultant Studio.
+
+MODEL TO CLONE: {business_name}
+INFERRED CATEGORY: {category}
+
+INDUSTRY BENCHMARKS:
+- Estimated Startup Cost: {est_startup_cost}
+- Typical Net Margin: {typical_margin}
+- Average Unit Revenue: {avg_revenue}
+- Metros with Similar Concepts: {metros_with_presence} of {total_viable_metros}
+- Estimated Market Gap: {market_gap_pct}% of metros underserved
+
+TASK 1 - NARRATIVE SUMMARY:
+Write a 2-3 sentence clone assessment paragraph.
+Reference the replicability of the model, mention startup cost and market gap.
+Use <strong> tags to emphasize key numbers.
+
+TASK 2 - REPLICABILITY LABEL:
+Return one of: "High", "Medium", "Low"
+
+TASK 3 - WHY IT WORKS:
+4 concise bullet points explaining the model's success factors.
+
+TASK 4 - DIFFERENTIATION NEEDED:
+One sentence about how to differentiate from the original.
+
+Return as JSON:
+{{
+    "narrative_summary": "...",
+    "replicability_label": "High",
+    "why_it_works": ["...", "...", "...", "..."],
+    "differentiation_needed": "..."
+}}""",
+                max_tokens=600,
+            )
+
+            replicability = ai_output.get("replicability_label", "Medium")
+            if replicability == "High":
+                signal, signal_text = "green", "High replicability"
+            elif replicability == "Medium":
+                signal, signal_text = "yellow", "Moderate replicability"
+            else:
+                signal, signal_text = "red", "Low replicability"
+
+            why_it_works = ai_output.get("why_it_works", [])
+
+            return {
+                "intel_verdict": {
+                    "icon": "🎯",
+                    "label": "Clone assessment",
+                    "signal": signal,
+                    "signal_text": signal_text,
+                    "summary": ai_output.get("narrative_summary", ""),
+                },
+                "intel_metrics": [
+                    {
+                        "label": "Model viability",
+                        "value": replicability,
+                        "subtext": "Replicable format",
+                        "color": "success" if replicability == "High" else "warning",
+                    },
+                    {"label": "Est. startup cost", "value": str(est_startup_cost), "subtext": "Lean version"},
+                    {"label": "Market gap", "value": f"{market_gap_pct}%", "subtext": "Underserved metros"},
+                ],
+                "intel_why_it_works": why_it_works,
+                "intel_insights": [
+                    {
+                        "type": "positive",
+                        "label": "Why this works",
+                        "text": " · ".join(why_it_works[:2]),
+                    },
+                    {
+                        "type": "info",
+                        "label": "Differentiation needed",
+                        "text": ai_output.get("differentiation_needed", ""),
+                    },
+                ],
+                "intel_tags": ["Unit economics modeled", "3 location archetypes", "Competitor comparison"],
+                "intel_cta": {
+                    "text": "Full clone playbook with financials, suppliers & launch timeline",
+                    "report_type": "Deep Clone Analysis",
+                    "price": 549,
+                },
+            }
+        except Exception as e:
+            logger.warning(f"_build_clone_intel_card failed: {e}")
+            return {}
+
     def _get_cache_key(self, idea_description: str, context: Optional[Dict] = None) -> str:
         """Generate a cache key for validation results"""
         content = idea_description.lower().strip()
@@ -244,6 +834,11 @@ class ConsultantStudioService:
                 advantages = viability_report.get("strengths", []) + viability_report.get("opportunities", [])
                 risks = viability_report.get("weaknesses", []) + viability_report.get("threats", [])
 
+            # ── INTELLIGENCE CARD: validate_idea ──────────────────────────────
+            intel_card = await self._build_validate_intel_card(
+                idea_description, online_score, physical_score, pattern_analysis
+            )
+
             result = {
                 "success": True,
                 "idea_description": idea_description,
@@ -266,6 +861,8 @@ class ConsultantStudioService:
                 "advantages": advantages[:6] if advantages else None,
                 "risks": risks[:6] if risks else None,
                 "four_ps_scores": enrichment.get("four_ps_scores") if enrichment else None,
+                # Intelligence card fields
+                **intel_card,
                 "feasibility_preview": enrichment.get("feasibility_preview") if enrichment else None,
                 "data_quality": enrichment.get("data_quality") if enrichment else None,
             }
@@ -308,7 +905,10 @@ class ConsultantStudioService:
             trends = await self._detect_trends(opportunities, filters)
             
             synthesis = self._generate_quick_synthesis(opportunities, trends, filters)
-            
+
+            # ── INTELLIGENCE CARD: search_ideas ───────────────────────────────
+            intel_card = await self._build_search_intel_card(filters, opportunities, trends)
+
             processing_time = int((time.time() - start_time) * 1000)
             
             result = {
@@ -338,6 +938,8 @@ class ConsultantStudioService:
                 "synthesis": synthesis,
                 "total_count": len(opportunities),
                 "processing_time_ms": processing_time,
+                # Intelligence card fields
+                **intel_card,
             }
             
             await self._log_activity(
@@ -439,6 +1041,11 @@ class ConsultantStudioService:
             # Enrich with 4P's data from ReportDataService
             location_enrichment = self._enrich_location_with_report_data(city, inferred_category)
 
+            # ── INTELLIGENCE CARD: identify_location ──────────────────────────
+            intel_card = await self._build_location_intel_card(
+                city, inferred_category, competitors, geo_analysis
+            )
+
             result = {
                 "success": True,
                 "city": city,
@@ -454,6 +1061,8 @@ class ConsultantStudioService:
                 "four_ps_scores": location_enrichment.get("four_ps_scores") if location_enrichment else None,
                 "four_ps_details": location_enrichment.get("four_ps_details") if location_enrichment else None,
                 "data_quality": location_enrichment.get("data_quality") if location_enrichment else None,
+                # Intelligence card fields
+                **intel_card,
             }
             
             await self._cache_analysis(
@@ -465,6 +1074,7 @@ class ConsultantStudioService:
                 geo_analysis=geo_analysis,
                 market_report=market_report,
                 site_recommendations=site_recommendations,
+                intel_card=intel_card,
             )
             
             await self._log_activity(
@@ -520,6 +1130,11 @@ class ConsultantStudioService:
                     target_city, source_analysis.get("category", "retail"), target_state
                 )
 
+            # ── INTELLIGENCE CARD: clone_success ──────────────────────────────
+            intel_card = await self._build_clone_intel_card(
+                business_name, source_analysis
+            )
+
             result = {
                 "success": True,
                 "source_business": source_analysis,
@@ -529,6 +1144,8 @@ class ConsultantStudioService:
                 # Enriched fields
                 "target_four_ps": clone_enrichment.get("four_ps_scores") if clone_enrichment else None,
                 "data_quality": clone_enrichment.get("data_quality") if clone_enrichment else None,
+                # Intelligence card fields
+                **intel_card,
             }
             
             await self._log_activity(
@@ -2416,7 +3033,10 @@ class ConsultantStudioService:
                 cached.hit_count = (cached.hit_count or 0) + 1
                 cached.updated_at = datetime.utcnow()
                 self.db.commit()
-                return {
+                # Restore intel_card from market_metrics if stored
+                market_metrics = cached.market_metrics or {}
+                intel_card = market_metrics.get("_intel_card", {})
+                result = {
                     "success": True,
                     "city": cached.city,
                     "business_type": cached.business_type,
@@ -2426,6 +3046,9 @@ class ConsultantStudioService:
                     "site_recommendations": cached.site_recommendations or [],
                     "hit_count": cached.hit_count,
                 }
+                if intel_card:
+                    result.update(intel_card)
+                return result
         except Exception as e:
             logger.warning(f"Location cache lookup failed: {e}")
             self.db.rollback()
@@ -2442,39 +3065,39 @@ class ConsultantStudioService:
         geo_analysis: Dict[str, Any],
         market_report: Dict[str, Any],
         site_recommendations: List[Dict[str, Any]],
+        intel_card: Optional[Dict[str, Any]] = None,
     ):
         """Cache location analysis for future use with safe upsert handling"""
+        # Store intel card inside market_metrics to avoid DB migration
+        market_metrics = {
+            "demographics": geo_analysis.get("demographics"),
+            "_intel_card": intel_card or {},
+        }
+
+        def _apply(obj):
+            obj.city = city
+            obj.business_type = business_type
+            obj.business_subtype = business_subtype
+            obj.query_params = query_params
+            obj.demographic_data = geo_analysis
+            obj.market_metrics = market_metrics
+            obj.claude_summary = market_report.get("executive_summary")
+            obj.site_recommendations = site_recommendations
+            obj.expires_at = datetime.utcnow() + timedelta(days=self.CACHE_TTL_DAYS)
+
         try:
             existing = self.db.query(LocationAnalysisCache).filter(
                 LocationAnalysisCache.cache_key == cache_key
             ).first()
 
             if existing:
-                existing.city = city
-                existing.business_type = business_type
-                existing.business_subtype = business_subtype
-                existing.query_params = query_params
-                existing.demographic_data = geo_analysis
-                existing.market_metrics = geo_analysis.get("demographics")
-                existing.claude_summary = market_report.get("executive_summary")
-                existing.site_recommendations = site_recommendations
-                existing.expires_at = datetime.utcnow() + timedelta(days=self.CACHE_TTL_DAYS)
+                _apply(existing)
                 existing.updated_at = datetime.utcnow()
                 self.db.commit()
                 return
 
-            cache_entry = LocationAnalysisCache(
-                cache_key=cache_key,
-                city=city,
-                business_type=business_type,
-                business_subtype=business_subtype,
-                query_params=query_params,
-                demographic_data=geo_analysis,
-                market_metrics=geo_analysis.get("demographics"),
-                claude_summary=market_report.get("executive_summary"),
-                site_recommendations=site_recommendations,
-                expires_at=datetime.utcnow() + timedelta(days=self.CACHE_TTL_DAYS),
-            )
+            cache_entry = LocationAnalysisCache(cache_key=cache_key)
+            _apply(cache_entry)
             self.db.add(cache_entry)
             self.db.commit()
         except IntegrityError:
@@ -2483,15 +3106,7 @@ class ConsultantStudioService:
                 LocationAnalysisCache.cache_key == cache_key
             ).first()
             if existing:
-                existing.city = city
-                existing.business_type = business_type
-                existing.business_subtype = business_subtype
-                existing.query_params = query_params
-                existing.demographic_data = geo_analysis
-                existing.market_metrics = geo_analysis.get("demographics")
-                existing.claude_summary = market_report.get("executive_summary")
-                existing.site_recommendations = site_recommendations
-                existing.expires_at = datetime.utcnow() + timedelta(days=self.CACHE_TTL_DAYS)
+                _apply(existing)
                 existing.updated_at = datetime.utcnow()
                 self.db.commit()
         except Exception as e:

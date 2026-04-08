@@ -42,6 +42,12 @@ class ValidateIdeaResponse(BaseModel):
     four_ps_scores: Optional[Dict[str, Any]] = None
     feasibility_preview: Optional[Dict[str, Any]] = None
     data_quality: Optional[Dict[str, Any]] = None
+    # Intelligence card fields
+    intel_verdict: Optional[Dict[str, Any]] = None
+    intel_metrics: Optional[List[Dict[str, Any]]] = None
+    intel_insights: Optional[List[Dict[str, Any]]] = None
+    intel_tags: Optional[List[str]] = None
+    intel_cta: Optional[Dict[str, Any]] = None
 
 
 class SearchIdeasRequest(BaseModel):
@@ -64,6 +70,12 @@ class SearchIdeasResponse(BaseModel):
     # Enriched fields
     ai_synthesis: Optional[str] = None
     opportunity_four_ps: Optional[Dict[str, Any]] = None
+    # Intelligence card fields
+    intel_verdict: Optional[Dict[str, Any]] = None
+    intel_metrics: Optional[List[Dict[str, Any]]] = None
+    intel_top_signals: Optional[List[Dict[str, Any]]] = None
+    intel_tags: Optional[List[str]] = None
+    intel_cta: Optional[Dict[str, Any]] = None
 
 
 class IdentifyLocationRequest(BaseModel):
@@ -90,6 +102,13 @@ class IdentifyLocationResponse(BaseModel):
     four_ps_scores: Optional[Dict[str, Any]] = None
     four_ps_details: Optional[Dict[str, Any]] = None
     data_quality: Optional[Dict[str, Any]] = None
+    # Intelligence card fields
+    intel_verdict: Optional[Dict[str, Any]] = None
+    intel_metrics: Optional[List[Dict[str, Any]]] = None
+    intel_demographics: Optional[Dict[str, Any]] = None
+    intel_micro_markets: Optional[List[Dict[str, Any]]] = None
+    intel_tags: Optional[List[str]] = None
+    intel_cta: Optional[Dict[str, Any]] = None
 
 
 class CloneSuccessRequest(BaseModel):
@@ -127,6 +146,13 @@ class CloneSuccessResponse(BaseModel):
     # Enriched fields
     target_four_ps: Optional[Dict[str, Any]] = None
     data_quality: Optional[Dict[str, Any]] = None
+    # Intelligence card fields
+    intel_verdict: Optional[Dict[str, Any]] = None
+    intel_metrics: Optional[List[Dict[str, Any]]] = None
+    intel_why_it_works: Optional[List[str]] = None
+    intel_insights: Optional[List[Dict[str, Any]]] = None
+    intel_tags: Optional[List[str]] = None
+    intel_cta: Optional[Dict[str, Any]] = None
 
 
 class DeepCloneRequest(BaseModel):

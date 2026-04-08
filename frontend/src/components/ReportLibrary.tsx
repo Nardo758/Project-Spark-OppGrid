@@ -674,6 +674,177 @@ export default function ReportLibrary({
             </button>
           </div>
 
+          {/* ── INTELLIGENCE CARD ─────────────────────────────── */}
+          {consultantResult.intel_verdict && (
+            <div className="mb-5">
+              {/* Verdict box */}
+              <div className="rounded-r-xl mb-4 p-3.5" style={{
+                background: 'linear-gradient(135deg,#f8faf9 0%,#e8f4f0 100%)',
+                borderLeft: '4px solid #0F6E56',
+              }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-base">{consultantResult.intel_verdict.icon}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[#0F6E56]">
+                    {consultantResult.intel_verdict.label}
+                  </span>
+                  <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded"
+                    style={{
+                      background: consultantResult.intel_verdict.signal === 'green' ? '#E1F5EE'
+                        : consultantResult.intel_verdict.signal === 'yellow' ? '#FAEEDA' : '#FCEBEB',
+                      color: consultantResult.intel_verdict.signal === 'green' ? '#0F6E56'
+                        : consultantResult.intel_verdict.signal === 'yellow' ? '#854F0B' : '#A32D2D',
+                    }}>
+                    {consultantResult.intel_verdict.signal_text}
+                  </span>
+                </div>
+                {consultantResult.intel_verdict.summary && (
+                  <p className="text-[13px] text-gray-700 leading-relaxed m-0"
+                    dangerouslySetInnerHTML={{ __html: consultantResult.intel_verdict.summary }}
+                    style={{ '--accent-primary': '#0F6E56' } as React.CSSProperties}
+                  />
+                )}
+              </div>
+
+              {/* Metric cards */}
+              {consultantResult.intel_metrics && consultantResult.intel_metrics.length > 0 && (
+                <div className={`grid gap-3 mb-4`} style={{
+                  gridTemplateColumns: `repeat(${Math.min(consultantResult.intel_metrics.length, 4)}, 1fr)`
+                }}>
+                  {consultantResult.intel_metrics.map((m: any, i: number) => (
+                    <div key={i} className="bg-gray-50 rounded-xl p-3 text-center">
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1">{m.label}</div>
+                      <div className={`text-[17px] font-semibold ${
+                        m.color === 'success' ? 'text-[#0F6E56]'
+                        : m.color === 'warning' ? 'text-amber-600'
+                        : m.color === 'danger' ? 'text-red-600'
+                        : 'text-gray-900'
+                      }`}>{String(m.value)}</div>
+                      {m.subtext && <div className="text-[10px] text-gray-400 mt-0.5">{m.subtext}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Insights (validate + clone) */}
+              {consultantResult.intel_insights && consultantResult.intel_insights.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {consultantResult.intel_insights.map((ins: any, i: number) => (
+                    <div key={i} className="flex items-start gap-3 pt-2 border-t border-gray-100">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] flex-shrink-0 ${
+                        ins.type === 'positive' ? 'bg-emerald-50 text-emerald-700'
+                        : ins.type === 'caution' ? 'bg-amber-50 text-amber-700'
+                        : 'bg-blue-50 text-blue-700'
+                      }`}>
+                        {ins.type === 'positive' ? '✓' : ins.type === 'caution' ? '!' : '→'}
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-gray-400 block mb-0.5">{ins.label}</span>
+                        <span className="text-[12px] text-gray-700 leading-snug">{ins.text}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Top signals (search mode) */}
+              {consultantResult.intel_top_signals && consultantResult.intel_top_signals.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Top signals this week</div>
+                  <div className="space-y-2">
+                    {consultantResult.intel_top_signals.map((sig: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg">
+                        <div>
+                          <div className="text-[12px] font-medium text-gray-800">{sig.title}</div>
+                          {sig.tam && <div className="text-[10px] text-gray-400">TAM: {sig.tam}</div>}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[11px] font-semibold text-[#0F6E56]">↑{sig.velocity_pct}%</div>
+                          <div className="text-[10px] text-gray-400">{sig.mention_count} mentions</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Micro-markets (location mode) */}
+              {consultantResult.intel_micro_markets && consultantResult.intel_micro_markets.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Recommended micro-markets</div>
+                  <div className="space-y-2">
+                    {consultantResult.intel_micro_markets.map((mm: any, i: number) => (
+                      <div key={i} className="flex items-center gap-3 p-2.5 bg-gray-50 rounded-lg">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-semibold flex-shrink-0 ${
+                          mm.score_label === 'high' ? 'bg-emerald-50 text-[#0F6E56]'
+                          : mm.score_label === 'medium' ? 'bg-amber-50 text-amber-700'
+                          : 'bg-red-50 text-red-700'
+                        }`}>{mm.score}</div>
+                        <div>
+                          <div className="text-[12px] font-medium text-gray-800">{mm.name}</div>
+                          <div className="text-[10px] text-gray-500">{mm.description}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Why it works (clone mode) */}
+              {consultantResult.intel_why_it_works && consultantResult.intel_why_it_works.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Why this model works</div>
+                  <div className="space-y-1.5">
+                    {consultantResult.intel_why_it_works.map((bullet: string, i: number) => (
+                      <div key={i} className="flex items-start gap-2 text-[12px] text-gray-700">
+                        <span className="text-[#0F6E56] mt-0.5 flex-shrink-0">•</span>
+                        <span>{bullet}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Demographics (location mode) */}
+              {consultantResult.intel_demographics && (
+                <div className="grid grid-cols-2 gap-2 mb-4 text-[11px] text-gray-500">
+                  {consultantResult.intel_demographics.median_income && (
+                    <div>💰 Median income: <strong className="text-gray-700">${consultantResult.intel_demographics.median_income.toLocaleString()}</strong></div>
+                  )}
+                  {consultantResult.intel_demographics.age_25_44_pct && (
+                    <div>👥 25–44 demographic: <strong className="text-gray-700">{consultantResult.intel_demographics.age_25_44_pct}%</strong></div>
+                  )}
+                  {consultantResult.intel_demographics.pop_growth && (
+                    <div>📈 Pop. growth: <strong className="text-gray-700">+{consultantResult.intel_demographics.pop_growth}%</strong></div>
+                  )}
+                </div>
+              )}
+
+              {/* Source tags */}
+              {consultantResult.intel_tags && consultantResult.intel_tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {consultantResult.intel_tags.map((tag: string, i: number) => (
+                    <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-gray-100 text-gray-400">{tag}</span>
+                  ))}
+                </div>
+              )}
+
+              {/* CTA */}
+              {consultantResult.intel_cta && (
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className="text-[11px] text-gray-500 pr-3">{consultantResult.intel_cta.text}</span>
+                  <button
+                    onClick={() => window.location.href = '/dashboard'}
+                    className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white"
+                    style={{ background: '#0F6E56' }}
+                  >
+                    Get {consultantResult.intel_cta.report_type} → ${consultantResult.intel_cta.price}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {/* ── END INTELLIGENCE CARD ─────────────────────────────── */}
+
           {inputMode === 'validate' && (
             <>
               <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-5">
