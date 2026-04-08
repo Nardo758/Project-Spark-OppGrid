@@ -355,6 +355,35 @@ export default function ReportLibrary({
     }
   }
 
+  const handleCtaCheckout = async (report: ReportItem) => {
+    setPurchaseLoading(true)
+    setGenerateError(null)
+    try {
+      const baseUrl = window.location.origin
+      const returnPath = window.location.pathname
+      const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}`
+      const cancelUrl = `${baseUrl}/billing/return?status=canceled&return_to=${encodeURIComponent(returnPath)}`
+      const res = await fetch('/api/v1/report-pricing/studio-report-checkout', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          report_type: report.slug,
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+          report_context: { idea_description: ideaDescription },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Failed to start checkout')
+      if (data.url) window.location.href = data.url
+      else throw new Error('No checkout URL returned')
+    } catch (e) {
+      setGenerateError(e instanceof Error ? e.message : 'Checkout failed')
+    } finally {
+      setPurchaseLoading(false)
+    }
+  }
+
   const getContextForMode = () => {
     switch (inputMode) {
       case 'validate':
@@ -909,21 +938,23 @@ export default function ReportLibrary({
                 const ctaSlug = ctaSlugMap[consultantResult.intel_cta.report_type] || 'market_analysis'
                 const ctaReport = allReports.find(r => r.slug === ctaSlug)
                 return (
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                    <span className="text-[11px] text-gray-500 pr-3">{consultantResult.intel_cta.text}</span>
-                    <button
-                      onClick={() => {
-                        if (ctaReport) {
-                          setSidebarReport(ctaSlug)
-                          handleReportAction(ctaReport)
-                        }
-                      }}
-                      disabled={purchaseLoading}
-                      className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-60"
-                      style={{ background: '#0F6E56' }}
-                    >
-                      {purchaseLoading ? 'Processing...' : `Get ${consultantResult.intel_cta.report_type} → $${consultantResult.intel_cta.price}`}
-                    </button>
+                  <div className="pt-3 border-t border-gray-100">
+                    {generateError && (
+                      <p className="text-[10px] text-red-600 mb-2">{generateError}</p>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-500 pr-3">{consultantResult.intel_cta.text}</span>
+                      <button
+                        onClick={() => {
+                          if (ctaReport) handleCtaCheckout(ctaReport)
+                        }}
+                        disabled={purchaseLoading || !ctaReport}
+                        className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-60 transition-opacity"
+                        style={{ background: '#0F6E56' }}
+                      >
+                        {purchaseLoading ? 'Redirecting to Stripe...' : `Get ${consultantResult.intel_cta.report_type} → $${consultantResult.intel_cta.price}`}
+                      </button>
+                    </div>
                   </div>
                 )
               })()}
