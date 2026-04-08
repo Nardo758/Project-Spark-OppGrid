@@ -182,6 +182,9 @@ export default function ReportLibrary({
   const [sidebarEmail, setSidebarEmail] = useState('')
   const [sidebarEmailError, setSidebarEmailError] = useState<string | null>(null)
 
+  const [guestEmail, setGuestEmail] = useState('')
+  const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
+
   const isGuest = !isAuthenticated
 
   const headers = (): Record<string, string> => {
@@ -357,25 +360,36 @@ export default function ReportLibrary({
 
   const handleCtaCheckout = async (report: ReportItem) => {
     if (!isAuthenticated) {
-      window.location.href = '/auth/login?return_to=' + encodeURIComponent(window.location.pathname)
-      return
+      const email = guestEmail.trim()
+      if (!email) {
+        setGuestEmailError('Please enter your email to receive your report.')
+        return
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setGuestEmailError('Please enter a valid email address.')
+        return
+      }
+      setGuestEmailError(null)
     }
     setPurchaseLoading(true)
     setGenerateError(null)
     try {
       const baseUrl = window.location.origin
       const returnPath = window.location.pathname
-      const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}`
+      const email = isAuthenticated ? '' : guestEmail.trim()
+      const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}${email ? `&email=${encodeURIComponent(email)}` : ''}`
       const cancelUrl = `${baseUrl}/billing/return?status=canceled&return_to=${encodeURIComponent(returnPath)}`
+      const body: Record<string, any> = {
+        report_type: report.slug,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        report_context: { idea_description: ideaDescription },
+      }
+      if (email) body.email = email
       const res = await fetch('/api/v1/report-pricing/studio-report-checkout', {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify({
-          report_type: report.slug,
-          success_url: successUrl,
-          cancel_url: cancelUrl,
-          report_context: { idea_description: ideaDescription },
-        }),
+        body: JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Failed to start checkout')
@@ -943,6 +957,19 @@ export default function ReportLibrary({
                 const ctaReport = allReports.find(r => r.slug === ctaSlug)
                 return (
                   <div className="pt-3 border-t border-gray-100">
+                    {isGuest && (
+                      <div className="mb-3">
+                        <p className="text-[11px] text-gray-500 mb-1.5">Enter your email to receive the report:</p>
+                        <input
+                          type="email"
+                          placeholder="you@example.com"
+                          value={guestEmail}
+                          onChange={e => { setGuestEmail(e.target.value); setGuestEmailError(null) }}
+                          className="w-full text-[12px] px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
+                        />
+                        {guestEmailError && <p className="text-[10px] text-red-500 mt-1">{guestEmailError}</p>}
+                      </div>
+                    )}
                     {generateError && (
                       <p className="text-[10px] text-red-600 mb-2">{generateError}</p>
                     )}

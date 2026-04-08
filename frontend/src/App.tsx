@@ -49,6 +49,7 @@ import AdminExperts from './pages/AdminExperts'
 import AdminAffiliateTools from './pages/AdminAffiliateTools'
 import StripeArchitecture from './pages/StripeArchitecture'
 import BillingReturn from './pages/BillingReturn'
+import PublicReportViewer from './pages/PublicReportViewer'
 import MapWorkspace from './pages/MapWorkspace'
 import MyIdeas from './pages/MyIdeas'
 import LifecycleDashboard from './pages/LifecycleDashboard'
@@ -235,6 +236,7 @@ function App() {
         <Route path="auth/oauth-callback" element={<OAuthCallback />} />
         <Route path="auth/magic" element={<MagicLinkCallback />} />
         <Route path="billing/return" element={<BillingReturn />} />
+        <Route path="reports/view/:reportId" element={<PublicReportViewer />} />
         <Route path="admin" element={<RequireAuth><AdminRedirect /></RequireAuth>} />
         <Route path="admin/marketing" element={<AdminMarketing />} />
         <Route path="admin/experts" element={<AdminExperts />} />

@@ -1002,20 +1002,31 @@ async def trigger_report_generation(
         # Send email if we have a recipient
         if recipient_email:
             try:
+                from app.routers.reports import generate_report_view_token
                 report_name = report_type.replace("_", " ").title()
+                view_token = generate_report_view_token(pending_report.id)
+                base_url = os.getenv("APP_BASE_URL", "https://oppgrid.replit.app")
+                view_url = f"{base_url}/reports/view/{pending_report.id}?token={view_token}"
                 email_service.send_email(
                     to_email=recipient_email,
                     subject=f"Your {report_name} Report is Ready - OppGrid",
                     html_content=f"""
-                    <h2>Your {report_name} Report is Ready!</h2>
+                    <html><body style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">
+                    <h2 style="color:#0F6E56;">Your {report_name} Report is Ready!</h2>
                     <p>Thank you for your purchase. Your AI-generated report has been completed.</p>
-                    <p>You can view your report by visiting: <a href="https://oppgrid.replit.app/reports/{pending_report.id}">View Report</a></p>
-                    <p>Report Details:</p>
-                    <ul>
-                        <li>Report Type: {report_name}</li>
-                        <li>Business Concept: {report_context.get('businessConcept', 'N/A')}</li>
-                    </ul>
-                    <p>Thank you for using OppGrid!</p>
+                    <div style="margin:24px 0;">
+                        <a href="{view_url}"
+                           style="background:#0F6E56;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:600;display:inline-block;">
+                           View Your Report →
+                        </a>
+                    </div>
+                    <p style="color:#666;font-size:13px;">
+                        <strong>Report:</strong> {report_name}<br>
+                        <strong>Business:</strong> {report_context.get('businessConcept', report_context.get('idea_description', 'N/A'))}<br>
+                        <strong>Link valid for:</strong> 30 days
+                    </p>
+                    <p style="color:#999;font-size:11px;">If the button doesn't work, copy this link: {view_url}</p>
+                    </body></html>
                     """
                 )
             except Exception as email_err:

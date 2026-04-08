@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional, Tuple, Any
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import re
 import time
+import hmac
+import hashlib
+import os
 
 from app.db.database import get_db
 from app.models import (
@@ -628,3 +631,53 @@ async def seed_templates(db: Session):
     
     db.commit()
     logger.info("Seeded report templates")
+
+
+_REPORT_LINK_SECRET = os.getenv("SECRET_KEY", "oppgrid-report-link-secret-2024")
+_TOKEN_TTL_SECONDS = 30 * 24 * 3600
+
+
+def generate_report_view_token(report_id: int) -> str:
+    expire_ts = int(datetime.now(timezone.utc).timestamp()) + _TOKEN_TTL_SECONDS
+    message = f"{report_id}:{expire_ts}"
+    sig = hmac.new(_REPORT_LINK_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()
+    return f"{expire_ts}.{sig}"
+
+
+def verify_report_view_token(report_id: int, token: str) -> bool:
+    try:
+        expire_ts_str, sig = token.split(".", 1)
+        expire_ts = int(expire_ts_str)
+        if int(datetime.now(timezone.utc).timestamp()) > expire_ts:
+            return False
+        message = f"{report_id}:{expire_ts}"
+        expected_sig = hmac.new(_REPORT_LINK_SECRET.encode(), message.encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected_sig)
+    except Exception:
+        return False
+
+
+@router.get("/public/{report_id}")
+async def get_public_report(
+    report_id: int,
+    token: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    """Return a report without authentication using a signed time-limited token."""
+    if not verify_report_view_token(report_id, token):
+        raise HTTPException(status_code=403, detail="Invalid or expired report link.")
+
+    report = db.query(GeneratedReport).filter(GeneratedReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found.")
+
+    return {
+        "id": report.id,
+        "title": report.title,
+        "report_type": report.report_type.value if report.report_type else None,
+        "status": report.status.value if report.status else None,
+        "content": report.content,
+        "confidence_score": report.confidence_score,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "completed_at": report.completed_at.isoformat() if report.completed_at else None,
+    }
