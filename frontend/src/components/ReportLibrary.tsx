@@ -436,7 +436,7 @@ export default function ReportLibrary({
     <div className="lg:sticky lg:top-8">
       <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
         <div className="flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-[#D97757]" />
+          <Sparkles className="w-4 h-4 text-[#0F6E56]" />
           <h3 className="text-sm font-bold text-gray-900">Generate Report</h3>
         </div>
 
@@ -445,7 +445,7 @@ export default function ReportLibrary({
           <select
             value={sidebarReport}
             onChange={(e) => setSidebarReport(e.target.value)}
-            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757] transition-all"
+            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56] transition-all"
           >
             {REPORT_CATEGORIES.map(cat => (
               <optgroup key={cat.id} label={cat.label}>
@@ -481,7 +481,7 @@ export default function ReportLibrary({
             value={sidebarEmail}
             onChange={(e) => { setSidebarEmail(e.target.value); setSidebarEmailError(null) }}
             placeholder="your@email.com"
-            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757] transition-all placeholder:text-gray-400"
+            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56] transition-all placeholder:text-gray-400"
           />
           <p className="text-[10px] text-gray-400 mt-1">Reports are also available in your dashboard</p>
           {sidebarEmailError && (
@@ -496,7 +496,7 @@ export default function ReportLibrary({
           }}
           disabled={purchaseLoading || !!generatingReport}
           className="w-full py-3 text-white rounded-xl text-sm font-semibold transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
-          style={{ background: 'linear-gradient(135deg, #D97757, #BA7517)' }}
+          style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
         >
           {purchaseLoading || generatingReport ? (
             <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
@@ -559,7 +559,7 @@ export default function ReportLibrary({
             value={ideaDescription}
             onChange={(e) => setIdeaDescription(e.target.value)}
             placeholder="Describe your business idea in detail — the more context you provide, the better your analysis will be..."
-            className="w-full border border-gray-200 rounded-xl p-4 text-sm text-gray-700 bg-gray-50/50 resize-none focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757] transition-all placeholder:text-gray-400"
+            className="w-full border border-gray-200 rounded-xl p-4 text-sm text-gray-700 bg-gray-50/50 resize-none focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56] transition-all placeholder:text-gray-400"
             rows={4}
           />
         )}
@@ -571,12 +571,12 @@ export default function ReportLibrary({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search keyword (e.g., coffee, fitness, SaaS...)"
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
             />
             <select
               value={searchCategory}
               onChange={(e) => setSearchCategory(e.target.value)}
-              className="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+              className="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
             >
               <option value="">All Categories</option>
               <option value="work_productivity">Work & Productivity</option>
@@ -594,14 +594,14 @@ export default function ReportLibrary({
               value={locationCity}
               onChange={(e) => setLocationCity(e.target.value)}
               placeholder="City (e.g., Miami, Florida)"
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
             />
             <input
               type="text"
               value={locationBusiness}
               onChange={(e) => setLocationBusiness(e.target.value)}
               placeholder="Business type (e.g., Coffee shop)"
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
             />
           </div>
         )}
@@ -613,21 +613,21 @@ export default function ReportLibrary({
               value={cloneBusinessName}
               onChange={(e) => setCloneBusinessName(e.target.value)}
               placeholder="Business name (e.g., Sweetgreen)"
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
             />
             <input
               type="text"
               value={cloneBusinessAddress}
               onChange={(e) => setCloneBusinessAddress(e.target.value)}
               placeholder="Business address"
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
             />
             <input
               type="text"
               value={cloneTargetCity}
               onChange={(e) => setCloneTargetCity(e.target.value)}
               placeholder="Target city (optional)"
-              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#D97757]/30 focus:border-[#D97757]"
+              className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
             />
           </div>
         )}
@@ -641,7 +641,7 @@ export default function ReportLibrary({
         <button
           onClick={runConsultantAnalysis}
           disabled={!canAnalyze() || consultantLoading}
-          className="mt-4 w-full py-3 bg-[#D97757] hover:bg-[#c4684b] text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md active:scale-[0.98]"
+          className="mt-4 w-full py-3 bg-[#0F6E56] hover:bg-[#0a5a44] text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow-md active:scale-[0.98]"
         >
           {consultantLoading ? (
             <>
@@ -852,7 +852,7 @@ export default function ReportLibrary({
                     <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
                   </div>
                   <div className="text-right">
-                    <div className="text-xl font-bold text-[#D97757]">{loc.similarity_score}%</div>
+                    <div className="text-xl font-bold text-[#0F6E56]">{loc.similarity_score}%</div>
                     <div className="text-[10px] text-gray-400">Match</div>
                   </div>
                 </div>
@@ -863,7 +863,7 @@ export default function ReportLibrary({
           {inputMode === 'validate' && (
             <div className="mt-6">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-1.5 h-5 rounded-full bg-[#D97757]" />
+                <div className="w-1.5 h-5 rounded-full bg-[#0F6E56]" />
                 <h3 className="text-base font-semibold text-gray-900">Just Generated</h3>
                 <span className="text-[10px] text-gray-400">Free with your analysis</span>
               </div>
@@ -942,7 +942,7 @@ export default function ReportLibrary({
         <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <div className="w-1.5 h-5 rounded-full" style={{ background: '#BA7517' }} />
+              <div className="w-1.5 h-5 rounded-full bg-[#0F6E56]" />
               <h2 className="text-lg font-bold text-gray-900">Go Deeper</h2>
               <span className="ml-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500">{TOTAL_REPORTS} reports</span>
             </div>
