@@ -903,7 +903,7 @@ export default function ReportLibrary({
                 const ctaSlugMap: Record<string, string> = {
                   'Feasibility Study': 'feasibility_study',
                   'Business Plan': 'business_plan',
-                  'Deep Clone Analysis': 'strategic_assessment',
+                  'Deep Clone Analysis': 'competitive_analysis',
                   'Subscription': 'market_analysis',
                 }
                 const ctaSlug = ctaSlugMap[consultantResult.intel_cta.report_type] || 'market_analysis'
