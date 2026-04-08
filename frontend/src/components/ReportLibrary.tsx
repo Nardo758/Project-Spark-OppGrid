@@ -271,7 +271,7 @@ export default function ReportLibrary({
   }
 
   const generateFreeReports = async (analysisResult: any) => {
-    const context = `Idea: ${ideaDescription}\n\nAnalysis: ${JSON.stringify(analysisResult, null, 2)}`
+    const analysisContext = `Idea: ${ideaDescription}\n\nAnalysis: ${JSON.stringify(analysisResult, null, 2)}`
     const reportTypes = ['feasibility_study']
 
     for (const reportType of reportTypes) {
@@ -282,7 +282,8 @@ export default function ReportLibrary({
           headers: headers(),
           body: JSON.stringify({
             report_type: reportType,
-            idea_description: context,
+            idea_description: ideaDescription,
+            analysis_context: analysisContext,
             opportunity_id: opportunityId,
           }),
         })
@@ -1350,7 +1351,7 @@ export default function ReportLibrary({
                 </h3>
                 <div className="flex items-center gap-3 mt-2">
                   <p className="text-xs text-white/70">
-                    Generated {new Date(viewingReport.created_at).toLocaleDateString()}
+                    Generated {viewingReport.created_at && !isNaN(new Date(viewingReport.created_at).getTime()) ? new Date(viewingReport.created_at).toLocaleDateString() : 'Today'}
                   </p>
                   {viewingReport.confidence_score && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-medium">

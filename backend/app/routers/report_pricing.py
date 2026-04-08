@@ -1397,6 +1397,7 @@ class FreeReportGenerateRequest(BaseModel):
     opportunity_id: Optional[int] = None
     report_type: str
     idea_description: Optional[str] = None
+    analysis_context: Optional[str] = None
     target_market: Optional[str] = None
     location: Optional[str] = None
 
@@ -1474,7 +1475,9 @@ async def generate_free_report(
 
     # Build context for AI generation
     context_parts = []
-    if request_data.idea_description:
+    if request_data.analysis_context:
+        context_parts.append(request_data.analysis_context)
+    elif request_data.idea_description:
         context_parts.append(f"Business Concept: {request_data.idea_description}")
     if request_data.target_market:
         context_parts.append(f"Target Market: {request_data.target_market}")
