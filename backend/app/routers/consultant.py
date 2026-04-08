@@ -55,6 +55,9 @@ class ValidateIdeaResponse(BaseModel):
     proceed_recommendation: Optional[str] = None
     competition_level: Optional[str] = None
     inferred_category: Optional[str] = None
+    demand_signal_quote: Optional[str] = None
+    key_competitors: Optional[List[str]] = None
+    market_heat_sources: Optional[List[str]] = None
 
 
 class SearchIdeasRequest(BaseModel):
@@ -84,6 +87,7 @@ class SearchIdeasResponse(BaseModel):
     intel_tags: Optional[List[str]] = None
     intel_cta: Optional[Dict[str, Any]] = None
     # Canonical top-level fields
+    narrative_summary: Optional[str] = None
     narrative_verdict: Optional[str] = None
     signal_surge_pct: Optional[int] = None
     avg_viability_score: Optional[int] = None
@@ -121,6 +125,14 @@ class IdentifyLocationResponse(BaseModel):
     intel_micro_markets: Optional[List[Dict[str, Any]]] = None
     intel_tags: Optional[List[str]] = None
     intel_cta: Optional[Dict[str, Any]] = None
+    # Canonical top-level fields
+    narrative_summary: Optional[str] = None
+    proceed_recommendation: Optional[str] = None
+    avg_rating: Optional[float] = None
+    foot_traffic_growth: Optional[float] = None
+    density_per_residents: Optional[str] = None
+    demographic_snapshot: Optional[Dict[str, Any]] = None
+    micro_markets: Optional[List[Dict[str, Any]]] = None
 
 
 class CloneSuccessRequest(BaseModel):
@@ -165,6 +177,13 @@ class CloneSuccessResponse(BaseModel):
     intel_insights: Optional[List[Dict[str, Any]]] = None
     intel_tags: Optional[List[str]] = None
     intel_cta: Optional[Dict[str, Any]] = None
+    # Canonical top-level fields
+    narrative_summary: Optional[str] = None
+    replicability_label: Optional[str] = None
+    est_startup_cost: Optional[str] = None
+    market_gap_pct: Optional[int] = None
+    why_it_works: Optional[List[str]] = None
+    differentiation_needed: Optional[str] = None
 
 
 class DeepCloneRequest(BaseModel):

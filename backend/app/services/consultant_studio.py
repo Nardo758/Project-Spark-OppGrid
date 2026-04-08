@@ -251,6 +251,9 @@ Return as JSON:
                 "proceed_recommendation": proceed_rec,
                 "competition_level": competition_level,
                 "inferred_category": inferred_category,
+                "demand_signal_quote": ai_output.get("demand_signal_quote", ""),
+                "key_competitors": key_competitors,
+                "market_heat_sources": ["Reddit signals", "Google Trends", "Crunchbase", "+4 sources"],
             }
         except Exception as e:
             logger.warning(f"_build_validate_intel_card failed: {e}")
@@ -382,7 +385,7 @@ Return as JSON:
                     "price": 29,
                 },
                 # Canonical top-level fields for API contract
-                "narrative_verdict": narrative_summary,
+                "narrative_summary": narrative_summary,
                 "signal_surge_pct": signal_surge_pct,
                 "avg_viability_score": avg_viability_score,
                 "top_signals_this_week": top_signals,
@@ -425,6 +428,7 @@ Return as JSON:
                 else:
                     population, median_income, age_25_44_pct = 500000, 55000, 30
             except Exception:
+                self.db.rollback()
                 population, median_income, age_25_44_pct = 500000, 55000, 30
 
             # 3. Density calculation
@@ -451,6 +455,7 @@ Return as JSON:
                 ).fetchone()
                 foot_traffic_growth = float(growth_row[0]) if growth_row and growth_row[0] else 5
             except Exception:
+                self.db.rollback()
                 foot_traffic_growth = 5
 
             # 5. Claude narrative + micro-markets
@@ -512,6 +517,11 @@ Return as JSON:
                     "description": mm.get("description", ""),
                 })
 
+            demographic_snapshot = {
+                "median_income": median_income,
+                "age_25_44_pct": age_25_44_pct,
+                "pop_growth": foot_traffic_growth,
+            }
             return {
                 "intel_verdict": {
                     "icon": "📍",
@@ -531,11 +541,7 @@ Return as JSON:
                         "color": "success" if foot_traffic_growth > 0 else "danger",
                     },
                 ],
-                "intel_demographics": {
-                    "median_income": median_income,
-                    "age_25_44_pct": age_25_44_pct,
-                    "pop_growth": foot_traffic_growth,
-                },
+                "intel_demographics": demographic_snapshot,
                 "intel_micro_markets": micro_markets,
                 "intel_tags": ["Census Bureau", "Google Places", "Market Growth Data", "AI analysis"],
                 "intel_cta": {
@@ -543,6 +549,14 @@ Return as JSON:
                     "report_type": "Business Plan",
                     "price": 149,
                 },
+                # Canonical top-level fields for API contract
+                "narrative_summary": ai_output.get("narrative_summary", ""),
+                "proceed_recommendation": proceed_rec,
+                "avg_rating": avg_rating,
+                "foot_traffic_growth": foot_traffic_growth,
+                "density_per_residents": density_ratio,
+                "demographic_snapshot": demographic_snapshot,
+                "micro_markets": micro_markets,
             }
         except Exception as e:
             logger.warning(f"_build_location_intel_card failed: {e}")
@@ -572,6 +586,7 @@ Return as JSON:
                 ).fetchone()
                 metros_with_presence = int(metros_row[0]) if metros_row else 0
             except Exception:
+                self.db.rollback()
                 metros_with_presence = 0
 
             total_viable_metros = 384
@@ -663,6 +678,13 @@ Return as JSON:
                     "report_type": "Deep Clone Analysis",
                     "price": 549,
                 },
+                # Canonical top-level fields for API contract
+                "narrative_summary": ai_output.get("narrative_summary", ""),
+                "replicability_label": replicability,
+                "est_startup_cost": str(est_startup_cost),
+                "market_gap_pct": market_gap_pct,
+                "why_it_works": why_it_works,
+                "differentiation_needed": ai_output.get("differentiation_needed", ""),
             }
         except Exception as e:
             logger.warning(f"_build_clone_intel_card failed: {e}")
@@ -720,6 +742,7 @@ Return as JSON:
             intel_keys = {k for k in result if k.startswith("intel_") or k in (
                 "narrative_verdict", "validation_score", "market_signals_count",
                 "proceed_recommendation", "competition_level", "inferred_category",
+                "demand_signal_quote", "key_competitors", "market_heat_sources",
                 "signal_surge_pct", "avg_viability_score", "top_signals_this_week",
             )}
             intel_card = {k: result[k] for k in intel_keys if k in result}

@@ -660,6 +660,41 @@ export default function ReportLibrary({
       {sidebarCard}
       </div>
 
+      {consultantLoading && !consultantResult && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-6 shadow-sm mt-4">
+          <div className="animate-pulse space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-5 bg-gray-200 rounded-full" />
+              <div className="h-4 bg-gray-200 rounded w-32" />
+            </div>
+            <div className="rounded-xl p-4 bg-gray-50 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-gray-200 rounded-full" />
+                <div className="h-3 bg-gray-200 rounded w-24" />
+                <div className="ml-auto h-5 bg-gray-200 rounded w-20" />
+              </div>
+              <div className="h-3 bg-gray-200 rounded w-full" />
+              <div className="h-3 bg-gray-200 rounded w-4/5" />
+              <div className="h-3 bg-gray-200 rounded w-2/3" />
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[0,1,2].map(i => (
+                <div key={i} className="bg-gray-50 rounded-xl p-3 text-center space-y-2">
+                  <div className="h-2 bg-gray-200 rounded w-3/4 mx-auto" />
+                  <div className="h-5 bg-gray-200 rounded w-1/2 mx-auto" />
+                  <div className="h-2 bg-gray-200 rounded w-2/3 mx-auto" />
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2">
+              <div className="h-3 bg-gray-200 rounded w-full" />
+              <div className="h-3 bg-gray-200 rounded w-4/5" />
+            </div>
+            <p className="text-xs text-gray-400 text-center pt-1">AI analysis in progress — typically 15–30 seconds</p>
+          </div>
+        </div>
+      )}
+
       {consultantResult && consultantResult.success && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 shadow-sm animate-slide-up" style={{ borderLeft: '3px solid #0F6E56' }}>
           <div className="flex items-center gap-2 mb-5">
@@ -757,6 +792,27 @@ export default function ReportLibrary({
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Competitor tags (validate mode) */}
+              {inputMode === 'validate' && consultantResult.intel_verdict && consultantResult.key_competitors && consultantResult.key_competitors.length > 0 && (
+                <div className="mb-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Known competitors</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {consultantResult.key_competitors.map((comp: string, i: number) => (
+                      <span key={i} className="text-[11px] px-2 py-1 rounded-full bg-gray-100 text-gray-600 font-medium border border-gray-200">{comp}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Competitor placeholder when no data (validate mode) */}
+              {inputMode === 'validate' && consultantResult.intel_verdict && (!consultantResult.key_competitors || consultantResult.key_competitors.length === 0) && (
+                <div className="mb-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Known competitors</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <span className="text-[11px] px-2 py-1 rounded-full bg-gray-50 text-gray-400 font-medium border border-gray-100 italic">No established competitors identified — early market</span>
+                  </div>
                 </div>
               )}
 
