@@ -1145,9 +1145,6 @@ export default function ReportLibrary({
           )}
 
 
-          <p className="text-[10px] text-gray-400 text-center mt-3">
-            Powered by DeepSeek + Claude AI · {((consultantResult.processing_time_ms || 0) / 1000).toFixed(1)}s
-          </p>
         </div>
       )}
 
