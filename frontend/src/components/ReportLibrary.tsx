@@ -356,6 +356,10 @@ export default function ReportLibrary({
   }
 
   const handleCtaCheckout = async (report: ReportItem) => {
+    if (!isAuthenticated) {
+      window.location.href = '/auth/login?return_to=' + encodeURIComponent(window.location.pathname)
+      return
+    }
     setPurchaseLoading(true)
     setGenerateError(null)
     try {
