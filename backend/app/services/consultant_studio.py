@@ -117,6 +117,7 @@ class ConsultantStudioService:
                 ).fetchone()
                 market_signals_count = int(sig_row[0]) if sig_row else 0
             except Exception:
+                self.db.rollback()
                 market_signals_count = 0
 
             # 2. Derive validation score
@@ -142,6 +143,7 @@ class ConsultantStudioService:
                     key_competitors = [r[0] for r in rows[:5] if r[0]]
                     total_competitor_count = len(rows)
                 except Exception:
+                    self.db.rollback()
                     pass
 
             competitor_count = total_competitor_count or len(key_competitors)
@@ -194,13 +196,16 @@ Return as JSON:
                 max_tokens=500,
             )
 
+            narrative_verdict = ai_output.get("narrative_verdict", "")
+            proceed_rec = "proceed" if validation_score >= 70 else "caution" if validation_score >= 50 else "pass"
             return {
+                # Nested intel card objects
                 "intel_verdict": {
                     "icon": "📊",
                     "label": "OppGrid verdict",
                     "signal": signal,
                     "signal_text": signal_text,
-                    "summary": ai_output.get("narrative_verdict", ""),
+                    "summary": narrative_verdict,
                 },
                 "intel_metrics": [
                     {
@@ -239,6 +244,13 @@ Return as JSON:
                     "report_type": "Feasibility Study",
                     "price": 25,
                 },
+                # Canonical top-level fields for API contract
+                "narrative_verdict": narrative_verdict,
+                "validation_score": validation_score,
+                "market_signals_count": market_signals_count,
+                "proceed_recommendation": proceed_rec,
+                "competition_level": competition_level,
+                "inferred_category": inferred_category,
             }
         except Exception as e:
             logger.warning(f"_build_validate_intel_card failed: {e}")
@@ -267,22 +279,24 @@ Return as JSON:
             else:
                 avg_viability_score = 65
 
-            # 2. Signal surge: last 30 days vs prior 30 days
+            # 2. Signal surge: last 30 days vs prior 30 days (opportunities table)
             now = datetime.utcnow()
             thirty_days_ago = now - timedelta(days=30)
             sixty_days_ago = now - timedelta(days=60)
             try:
+                cat_filter = f"%{category}%" if category else "%"
                 recent_row = self.db.execute(
-                    _text("SELECT COUNT(*) FROM detected_trends WHERE category ILIKE :cat AND detected_at >= :since"),
-                    {"cat": f"%{category}%" if category else "%", "since": thirty_days_ago},
+                    _text("SELECT COUNT(*) FROM opportunities WHERE category ILIKE :cat AND created_at >= :since"),
+                    {"cat": cat_filter, "since": thirty_days_ago},
                 ).fetchone()
                 prior_row = self.db.execute(
-                    _text("SELECT COUNT(*) FROM detected_trends WHERE category ILIKE :cat AND detected_at >= :start AND detected_at < :end"),
-                    {"cat": f"%{category}%" if category else "%", "start": sixty_days_ago, "end": thirty_days_ago},
+                    _text("SELECT COUNT(*) FROM opportunities WHERE category ILIKE :cat AND created_at >= :start AND created_at < :end"),
+                    {"cat": cat_filter, "start": sixty_days_ago, "end": thirty_days_ago},
                 ).fetchone()
                 recent_count = int(recent_row[0]) if recent_row else 0
                 prior_count = int(prior_row[0]) if prior_row else 1
             except Exception:
+                self.db.rollback()
                 recent_count, prior_count = 0, 1
             signal_surge_pct = int(((recent_count - prior_count) / max(prior_count, 1)) * 100)
 
@@ -293,13 +307,13 @@ Return as JSON:
             for t in trends[:3]:
                 sub_cat = getattr(t, "category", category) or category
                 benchmark = INDUSTRY_BENCHMARKS.get(sub_cat, {})
-                tam = benchmark.get("market_size", None)
-                mention_count = getattr(t, "opportunities_count", 0) or 0
-                velocity = min(200, int((mention_count / max(10, 1)) * 20))
+                tam_label = benchmark.get("market_size", None)
+                member_count = getattr(t, "opportunities_count", 0) or 0
+                velocity = min(200, int((member_count / max(10, 1)) * 20))
                 top_signals.append({
-                    "title": getattr(t, "trend_name", ""),
-                    "mention_count": mention_count,
-                    "tam": tam,
+                    "name": getattr(t, "trend_name", ""),
+                    "member_count": member_count,
+                    "tam_label": tam_label,
                     "velocity_pct": velocity,
                 })
 
@@ -320,7 +334,7 @@ DATA:
 - Total Opportunities: {opportunity_count}
 - Signal Surge: {signal_surge_pct:+d}% vs last month
 - Average Viability Score: {avg_viability_score}/100 (platform median is 64)
-- Top Signals This Week: {[s['title'] for s in top_signals]}
+- Top Signals This Week: {[s['name'] for s in top_signals]}
 
 Write a 2-3 sentence category outlook paragraph. Reference the specific metrics.
 Highlight whether the category is heating up or cooling down.
@@ -333,13 +347,14 @@ Return as JSON:
                 max_tokens=300,
             )
 
+            narrative_summary = ai_output.get("narrative_summary", "")
             return {
                 "intel_verdict": {
                     "icon": "🔥",
                     "label": "Category outlook",
                     "signal": signal,
                     "signal_text": signal_text,
-                    "summary": ai_output.get("narrative_summary", ""),
+                    "summary": narrative_summary,
                 },
                 "intel_metrics": [
                     {
@@ -366,6 +381,11 @@ Return as JSON:
                     "report_type": "Subscription",
                     "price": 29,
                 },
+                # Canonical top-level fields for API contract
+                "narrative_verdict": narrative_summary,
+                "signal_surge_pct": signal_surge_pct,
+                "avg_viability_score": avg_viability_score,
+                "top_signals_this_week": top_signals,
             }
         except Exception as e:
             logger.warning(f"_build_search_intel_card failed: {e}")
@@ -669,17 +689,21 @@ Return as JSON:
                 self.db.commit()
                 
                 logger.info(f"DB cache hit for validation: {cache_key[:8]} (hits: {cached.hit_count})")
-                return {
+                pattern = cached.pattern_analysis or {}
+                intel_card = pattern.pop("_intel_card", None) or {}
+                result = {
                     "success": True,
                     "idea_description": cached.idea_description,
                     "recommendation": cached.recommendation,
                     "online_score": cached.online_score,
                     "physical_score": cached.physical_score,
-                    "pattern_analysis": cached.pattern_analysis or {},
+                    "pattern_analysis": pattern,
                     "viability_report": cached.viability_report or {},
                     "similar_opportunities": cached.similar_opportunities or [],
                     "processing_time_ms": cached.processing_time_ms,
                 }
+                result.update(intel_card)
+                return result
         except Exception as e:
             logger.warning(f"Cache lookup failed: {e}")
             self.db.rollback()
@@ -692,11 +716,22 @@ Return as JSON:
                 IdeaValidationCache.cache_key == cache_key
             ).first()
             
+            # Extract intel fields to store inside pattern_analysis JSONB
+            intel_keys = {k for k in result if k.startswith("intel_") or k in (
+                "narrative_verdict", "validation_score", "market_signals_count",
+                "proceed_recommendation", "competition_level", "inferred_category",
+                "signal_surge_pct", "avg_viability_score", "top_signals_this_week",
+            )}
+            intel_card = {k: result[k] for k in intel_keys if k in result}
+            pattern_with_intel = dict(result.get("pattern_analysis") or {})
+            if intel_card:
+                pattern_with_intel["_intel_card"] = intel_card
+
             if existing:
                 existing.recommendation = result.get("recommendation")
                 existing.online_score = result.get("online_score")
                 existing.physical_score = result.get("physical_score")
-                existing.pattern_analysis = result.get("pattern_analysis")
+                existing.pattern_analysis = pattern_with_intel
                 existing.viability_report = result.get("viability_report")
                 existing.similar_opportunities = result.get("similar_opportunities")
                 existing.processing_time_ms = result.get("processing_time_ms")
@@ -711,7 +746,7 @@ Return as JSON:
                     recommendation=result.get("recommendation"),
                     online_score=result.get("online_score"),
                     physical_score=result.get("physical_score"),
-                    pattern_analysis=result.get("pattern_analysis"),
+                    pattern_analysis=pattern_with_intel,
                     viability_report=result.get("viability_report"),
                     similar_opportunities=result.get("similar_opportunities"),
                     processing_time_ms=result.get("processing_time_ms"),
@@ -994,11 +1029,24 @@ Return as JSON:
                 city, business_description, inferred_category, additional_params
             )
             logger.info(f"[TIMING] Geo analysis: {int((time.time() - geo_start) * 1000)}ms")
-            
-            market_report = self._generate_quick_market_report(
-                city, business_description, inferred_category, geo_analysis
+
+            competitors = geo_analysis.get("competitors", [])
+
+            # Run market report generation and intel card call in parallel
+            loop = asyncio.get_event_loop()
+
+            async def _async_market_report():
+                return await loop.run_in_executor(
+                    None,
+                    self._generate_quick_market_report,
+                    city, business_description, inferred_category, geo_analysis,
+                )
+
+            market_report, intel_card = await asyncio.gather(
+                _async_market_report(),
+                self._build_location_intel_card(city, inferred_category, competitors, geo_analysis),
             )
-            logger.info(f"[TIMING] Quick market report generated")
+            logger.info(f"[TIMING] Market report + intel card (parallel): {int((time.time() - geo_start) * 1000)}ms")
             
             site_recommendations = self._generate_site_recommendations(
                 geo_analysis, market_report, inferred_category
@@ -1006,7 +1054,6 @@ Return as JSON:
             
             processing_time = int((time.time() - start_time) * 1000)
             
-            competitors = geo_analysis.get("competitors", [])
             pins = []
             for idx, comp in enumerate(competitors):
                 if comp.get("lat") and comp.get("lng"):
@@ -1043,11 +1090,6 @@ Return as JSON:
             
             # Enrich with 4P's data from ReportDataService
             location_enrichment = self._enrich_location_with_report_data(city, inferred_category)
-
-            # ── INTELLIGENCE CARD: identify_location ──────────────────────────
-            intel_card = await self._build_location_intel_card(
-                city, inferred_category, competitors, geo_analysis
-            )
 
             result = {
                 "success": True,

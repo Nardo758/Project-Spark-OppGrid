@@ -767,12 +767,12 @@ export default function ReportLibrary({
                     {consultantResult.intel_top_signals.map((sig: any, i: number) => (
                       <div key={i} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-lg">
                         <div>
-                          <div className="text-[12px] font-medium text-gray-800">{sig.title}</div>
-                          {sig.tam && <div className="text-[10px] text-gray-400">TAM: {sig.tam}</div>}
+                          <div className="text-[12px] font-medium text-gray-800">{sig.name || sig.title}</div>
+                          {(sig.tam_label || sig.tam) && <div className="text-[10px] text-gray-400">TAM: {sig.tam_label || sig.tam}</div>}
                         </div>
                         <div className="text-right">
                           <div className="text-[11px] font-semibold text-[#0F6E56]">↑{sig.velocity_pct}%</div>
-                          <div className="text-[10px] text-gray-400">{sig.mention_count} mentions</div>
+                          <div className="text-[10px] text-gray-400">{sig.member_count ?? sig.mention_count ?? 0} signals</div>
                         </div>
                       </div>
                     ))}
@@ -874,7 +874,7 @@ export default function ReportLibrary({
           )}
           {/* ── END INTELLIGENCE CARD ─────────────────────────────── */}
 
-          {inputMode === 'validate' && (
+          {inputMode === 'validate' && !consultantResult.intel_verdict && (
             <>
               <div className="flex flex-wrap justify-center gap-4 sm:gap-6 mb-5">
                 <ScoreRing

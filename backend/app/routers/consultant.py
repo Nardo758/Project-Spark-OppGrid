@@ -48,6 +48,13 @@ class ValidateIdeaResponse(BaseModel):
     intel_insights: Optional[List[Dict[str, Any]]] = None
     intel_tags: Optional[List[str]] = None
     intel_cta: Optional[Dict[str, Any]] = None
+    # Canonical top-level fields
+    narrative_verdict: Optional[str] = None
+    validation_score: Optional[int] = None
+    market_signals_count: Optional[int] = None
+    proceed_recommendation: Optional[str] = None
+    competition_level: Optional[str] = None
+    inferred_category: Optional[str] = None
 
 
 class SearchIdeasRequest(BaseModel):
@@ -76,6 +83,11 @@ class SearchIdeasResponse(BaseModel):
     intel_top_signals: Optional[List[Dict[str, Any]]] = None
     intel_tags: Optional[List[str]] = None
     intel_cta: Optional[Dict[str, Any]] = None
+    # Canonical top-level fields
+    narrative_verdict: Optional[str] = None
+    signal_surge_pct: Optional[int] = None
+    avg_viability_score: Optional[int] = None
+    top_signals_this_week: Optional[List[Dict[str, Any]]] = None
 
 
 class IdentifyLocationRequest(BaseModel):
