@@ -698,10 +698,23 @@ export default function ReportLibrary({
                   </span>
                 </div>
                 {consultantResult.intel_verdict.summary && (
-                  <p className="text-[13px] text-gray-700 leading-relaxed m-0"
-                    dangerouslySetInnerHTML={{ __html: consultantResult.intel_verdict.summary }}
-                    style={{ '--accent-primary': '#0F6E56' } as React.CSSProperties}
-                  />
+                  <p className="text-[13px] text-gray-700 leading-relaxed m-0">
+                    {consultantResult.intel_verdict.summary
+                      .replace(/<strong>/g, '\u200B__BOLD__')
+                      .replace(/<\/strong>/g, '__END__\u200B')
+                      .split('\u200B')
+                      .map((part: string, idx: number) => {
+                        if (part.startsWith('__BOLD__') && part.endsWith('__END__')) {
+                          return <strong key={idx} className="text-[#0F6E56] font-semibold">{part.slice(8, -7)}</strong>
+                        }
+                        if (part.startsWith('__BOLD__')) {
+                          return <strong key={idx} className="text-[#0F6E56] font-semibold">{part.slice(8)}</strong>
+                        }
+                        const text = part.replace(/__END__/g, '').replace(/<[^>]+>/g, '')
+                        return text ? <span key={idx}>{text}</span> : null
+                      })
+                    }
+                  </p>
                 )}
               </div>
 
@@ -829,18 +842,34 @@ export default function ReportLibrary({
               )}
 
               {/* CTA */}
-              {consultantResult.intel_cta && (
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                  <span className="text-[11px] text-gray-500 pr-3">{consultantResult.intel_cta.text}</span>
-                  <button
-                    onClick={() => window.location.href = '/dashboard'}
-                    className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white"
-                    style={{ background: '#0F6E56' }}
-                  >
-                    Get {consultantResult.intel_cta.report_type} → ${consultantResult.intel_cta.price}
-                  </button>
-                </div>
-              )}
+              {consultantResult.intel_cta && (() => {
+                const ctaSlugMap: Record<string, string> = {
+                  'Feasibility Study': 'feasibility_study',
+                  'Business Plan': 'business_plan',
+                  'Deep Clone Analysis': 'strategic_assessment',
+                  'Subscription': 'market_analysis',
+                }
+                const ctaSlug = ctaSlugMap[consultantResult.intel_cta.report_type] || 'market_analysis'
+                const ctaReport = allReports.find(r => r.slug === ctaSlug)
+                return (
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                    <span className="text-[11px] text-gray-500 pr-3">{consultantResult.intel_cta.text}</span>
+                    <button
+                      onClick={() => {
+                        if (ctaReport) {
+                          setSidebarReport(ctaSlug)
+                          handleReportAction(ctaReport)
+                        }
+                      }}
+                      disabled={purchaseLoading}
+                      className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-60"
+                      style={{ background: '#0F6E56' }}
+                    >
+                      {purchaseLoading ? 'Processing...' : `Get ${consultantResult.intel_cta.report_type} → $${consultantResult.intel_cta.price}`}
+                    </button>
+                  </div>
+                )
+              })()}
             </div>
           )}
           {/* ── END INTELLIGENCE CARD ─────────────────────────────── */}
@@ -945,7 +974,7 @@ export default function ReportLibrary({
             </>
           )}
 
-          {inputMode === 'search' && (
+          {inputMode === 'search' && !consultantResult.intel_verdict && (
             <div className="space-y-3">
               {consultantResult.ai_synthesis && (
                 <div className="rounded-lg p-3 mb-3 border-l-3 bg-amber-50" style={{ borderLeft: '3px solid #D97757' }}>
@@ -959,7 +988,16 @@ export default function ReportLibrary({
             </div>
           )}
 
-          {inputMode === 'location' && (
+          {inputMode === 'search' && consultantResult.intel_verdict && consultantResult.total_count > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-[11px] text-gray-400 mb-2">Top matching opportunities ({consultantResult.total_count})</p>
+              {consultantResult.opportunities?.slice(0, 3).map((opp: any) => (
+                <OppRow key={opp.id} title={opp.title} category={opp.category} score={opp.score} to={`/opportunity/${opp.id}`} />
+              ))}
+            </div>
+          )}
+
+          {inputMode === 'location' && !consultantResult.intel_verdict && (
             <div className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {consultantResult.inferred_category && (
@@ -1002,7 +1040,7 @@ export default function ReportLibrary({
             </div>
           )}
 
-          {inputMode === 'clone' && (
+          {inputMode === 'clone' && !consultantResult.intel_verdict && (
             <div className="space-y-3">
               {consultantResult.source_business && (
                 <div className="p-3 bg-gray-50 rounded-lg">
@@ -1018,6 +1056,24 @@ export default function ReportLibrary({
               <p className="text-sm text-gray-500">Found {consultantResult.matching_locations?.length || 0} matching locations</p>
               {consultantResult.matching_locations?.slice(0, 3).map((loc: any, idx: number) => (
                 <div key={idx} className="p-3 bg-gray-50 rounded-lg flex justify-between items-center">
+                  <div>
+                    <div className="font-medium text-gray-900 text-sm">{loc.name}</div>
+                    <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xl font-bold text-[#0F6E56]">{loc.similarity_score}%</div>
+                    <div className="text-[10px] text-gray-400">Match</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {inputMode === 'clone' && consultantResult.intel_verdict && consultantResult.matching_locations?.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-[11px] text-gray-400 mb-2">Best matching locations ({consultantResult.matching_locations.length} found)</p>
+              {consultantResult.matching_locations.slice(0, 3).map((loc: any, idx: number) => (
+                <div key={idx} className="p-3 mb-2 bg-gray-50 rounded-lg flex justify-between items-center">
                   <div>
                     <div className="font-medium text-gray-900 text-sm">{loc.name}</div>
                     <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>

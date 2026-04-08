@@ -128,20 +128,23 @@ class ConsultantStudioService:
 
             # 3. Competitors from pattern_analysis or DB
             key_competitors = []
+            total_competitor_count = 0
             if pattern_analysis and isinstance(pattern_analysis, dict):
                 comps = pattern_analysis.get("competitors", [])
+                total_competitor_count = len(comps)
                 key_competitors = [c.get("name", "") for c in comps[:5] if c.get("name")]
             if not key_competitors:
                 try:
                     rows = self.db.execute(
-                        _text("SELECT DISTINCT competitor_name FROM pattern_analysis WHERE category ILIKE :cat LIMIT 5"),
+                        _text("SELECT DISTINCT competitor_name FROM pattern_analysis WHERE category ILIKE :cat"),
                         {"cat": f"%{inferred_category}%"},
                     ).fetchall()
-                    key_competitors = [r[0] for r in rows if r[0]]
+                    key_competitors = [r[0] for r in rows[:5] if r[0]]
+                    total_competitor_count = len(rows)
                 except Exception:
                     pass
 
-            competitor_count = len(key_competitors)
+            competitor_count = total_competitor_count or len(key_competitors)
             if competitor_count >= 10:
                 competition_level, competition_color = "High", "danger"
             elif competitor_count >= 5:
