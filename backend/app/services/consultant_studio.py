@@ -269,7 +269,8 @@ Return as JSON:
         try:
             from sqlalchemy import text as _text
 
-            category = filters.get("category") or filters.get("categories", [""])[0] if filters.get("categories") else ""
+            _cats = filters.get("categories") or []
+            category = filters.get("category") or (_cats[0] if _cats else "")
             if isinstance(category, list):
                 category = category[0] if category else ""
 
