@@ -207,7 +207,49 @@ class ReportDataService:
             report_type="market_analysis"
         )
     """
+
+    # Industry benchmarks used as fallback when OppGrid primary data is sparse.
+    # Values: (revenue_per_year, capital_required, market_size_label)
+    INDUSTRY_BENCHMARKS: Dict[str, Dict] = {
+        "restaurant":       {"revenue": 850000,  "capital": 375000, "market": "$899B (US restaurant industry)"},
+        "cafe":             {"revenue": 450000,  "capital": 200000, "market": "$47.5B (US coffee shop market)"},
+        "coffee shop":      {"revenue": 450000,  "capital": 200000, "market": "$47.5B (US coffee shop market)"},
+        "bakery":           {"revenue": 380000,  "capital": 150000, "market": "$11B (US retail bakery market)"},
+        "gym":              {"revenue": 600000,  "capital": 400000, "market": "$35B (US fitness industry)"},
+        "fitness center":   {"revenue": 600000,  "capital": 400000, "market": "$35B (US fitness industry)"},
+        "salon":            {"revenue": 320000,  "capital": 120000, "market": "$52B (US hair salon industry)"},
+        "barbershop":       {"revenue": 250000,  "capital": 80000,  "market": "$5.5B (US barber shop market)"},
+        "clinic":           {"revenue": 1200000, "capital": 500000, "market": "$4.5T (US healthcare market)"},
+        "dental":           {"revenue": 1100000, "capital": 450000, "market": "$163B (US dental market)"},
+        "medical":          {"revenue": 1200000, "capital": 500000, "market": "$4.5T (US healthcare market)"},
+        "pharmacy":         {"revenue": 2200000, "capital": 600000, "market": "$550B (US pharmacy market)"},
+        "daycare":          {"revenue": 480000,  "capital": 200000, "market": "$60B (US childcare market)"},
+        "tutoring":         {"revenue": 280000,  "capital": 50000,  "market": "$11B (US tutoring market)"},
+        "yoga studio":      {"revenue": 350000,  "capital": 120000, "market": "$9B (US yoga market)"},
+        "spa":              {"revenue": 420000,  "capital": 200000, "market": "$19B (US spa industry)"},
+        "hotel":            {"revenue": 3000000, "capital": 2000000,"market": "$230B (US hotel industry)"},
+        "brewery":          {"revenue": 1100000, "capital": 700000, "market": "$28B (US craft beer market)"},
+        "laundromat":       {"revenue": 280000,  "capital": 300000, "market": "$5B (US laundry market)"},
+        "car wash":         {"revenue": 680000,  "capital": 350000, "market": "$14.5B (US car wash market)"},
+        "pet grooming":     {"revenue": 380000,  "capital": 100000, "market": "$10B (US pet grooming market)"},
+        "auto repair":      {"revenue": 650000,  "capital": 200000, "market": "$64B (US auto repair market)"},
+        "real estate":      {"revenue": 900000,  "capital": 50000,  "market": "$200B+ (US real estate brokerage)"},
+        "coworking":        {"revenue": 1200000, "capital": 1000000,"market": "$13B (US coworking market)"},
+        "mental health":    {"revenue": 800000,  "capital": 200000, "market": "$280B (US mental health market)"},
+        "therapy":          {"revenue": 750000,  "capital": 180000, "market": "$280B (US mental health market)"},
+        "counseling":       {"revenue": 700000,  "capital": 150000, "market": "$280B (US mental health market)"},
+        "consulting":       {"revenue": 1500000, "capital": 30000,  "market": "$700B (US consulting market)"},
+        "ecommerce":        {"revenue": 800000,  "capital": 100000, "market": "$1.1T (US ecommerce market)"},
+        "saas":             {"revenue": 2000000, "capital": 500000, "market": "$200B (US SaaS market)"},
+        "retail":           {"revenue": 700000,  "capital": 300000, "market": "$6.5T (US retail market)"},
+        "grocery":          {"revenue": 3500000, "capital": 800000, "market": "$800B (US grocery market)"},
+        "gas station":      {"revenue": 3000000, "capital": 600000, "market": "$600B (US gas station market)"},
+        "bar and grill":    {"revenue": 950000,  "capital": 400000, "market": "$899B (US restaurant industry)"},
+        "fitness":          {"revenue": 600000,  "capital": 400000, "market": "$35B (US fitness industry)"},
+    }
     
+    DEFAULT_BENCHMARK = {"revenue": 700000, "capital": 250000, "market": "$50B+ (industry estimate)"}
+
     def __init__(self, db: Session):
         self.db = db
         self.jedire_client = get_jedire_client()
@@ -285,21 +327,35 @@ class ReportDataService:
                 data.urgency_level = opp.ai_urgency_level
                 data.target_audience = opp.ai_target_audience
         
-        # Get aggregated opportunity data for location
-        opps = self.db.query(Opportunity).filter(
-            func.lower(Opportunity.city) == city.lower(),
-            Opportunity.status == 'active'
-        )
-        if business_type:
-            opps = opps.filter(func.lower(Opportunity.category) == business_type.lower())
-        opps = opps.all()
-        
-        if opps and not opportunity_id:
-            scores = [o.ai_opportunity_score for o in opps if o.ai_opportunity_score]
-            pains = [o.ai_pain_intensity for o in opps if o.ai_pain_intensity]
-            data.opportunity_score = sum(scores) / len(scores) if scores else None
-            data.pain_intensity = sum(pains) / len(pains) if pains else None
-            data.opportunities_count = len(opps)
+        # Get aggregated opportunity data for location — fall back to category-wide if city has none
+        if not opportunity_id:
+            opps = self.db.query(Opportunity).filter(
+                func.lower(Opportunity.city) == city.lower(),
+                Opportunity.status == 'active'
+            )
+            if business_type:
+                opps = opps.filter(func.lower(Opportunity.category) == business_type.lower())
+            opps = opps.all()
+
+            if not opps and business_type:
+                # No city-specific data — use all opportunities in this category
+                opps = self.db.query(Opportunity).filter(
+                    func.lower(Opportunity.category) == business_type.lower(),
+                    Opportunity.status == 'active'
+                ).limit(50).all()
+
+            if not opps:
+                # Final fallback — all active opportunities
+                opps = self.db.query(Opportunity).filter(
+                    Opportunity.status == 'active'
+                ).limit(100).all()
+
+            if opps:
+                scores = [o.ai_opportunity_score for o in opps if o.ai_opportunity_score]
+                pains = [o.ai_pain_intensity for o in opps if o.ai_pain_intensity]
+                data.opportunity_score = sum(scores) / len(scores) if scores else None
+                data.pain_intensity = sum(pains) / len(pains) if pains else None
+                data.opportunities_count = len(opps)
         
         # Get detected trends
         trends = self.db.query(DetectedTrend).filter(
@@ -368,6 +424,23 @@ class ReportDataService:
             capitals = [float(p.capital_spent) for p in patterns if p.capital_spent]
             data.revenue_benchmark = sum(revenues) / len(revenues) if revenues else None
             data.capital_required = sum(capitals) / len(capitals) if capitals else None
+        
+        # Fallback: inject industry benchmarks when OppGrid success_patterns is empty
+        if data.revenue_benchmark is None or data.capital_required is None:
+            bench = None
+            if business_type:
+                btype_lower = business_type.lower()
+                for keyword, b in self.INDUSTRY_BENCHMARKS.items():
+                    if keyword in btype_lower:
+                        bench = b
+                        break
+            bench = bench or self.DEFAULT_BENCHMARK
+            if data.revenue_benchmark is None:
+                data.revenue_benchmark = bench["revenue"]
+            if data.capital_required is None:
+                data.capital_required = bench["capital"]
+            if not data.market_size_estimate:
+                data.market_size_estimate = bench["market"]
         
         # Get census income data
         census = self.db.query(CensusPopulationEstimate).filter(
