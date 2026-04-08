@@ -15,6 +15,7 @@ from app.models import (
 )
 from app.core.dependencies import get_current_user
 from app.services.llm_ai_engine import llm_ai_engine_service
+from app.services.ai_report_generator import AIReportGenerator
 from app.data.report_templates_seed import REPORT_TEMPLATES
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
@@ -499,8 +500,10 @@ async def generate_report(
         data_instruction = ""
         if report_data_text:
             data_instruction = " Use the OppGrid Market Intelligence Data provided to ground your analysis in real data points. Cite specific metrics where relevant."
-        
-        full_prompt = f"""You are a business strategy expert creating professional reports. Provide actionable, specific, and well-structured content.{data_instruction}
+
+        full_prompt = f"""You are OppGrid's senior market intelligence analyst producing institutional-grade business reports.{data_instruction}
+
+{AIReportGenerator.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
 {prompt}"""
         result = await llm_ai_engine_service.generate_response(full_prompt, model="claude")
@@ -509,9 +512,12 @@ async def generate_report(
             logger.error(f"AI service error: {result.get('error_message', result.get('error'))}")
             raise Exception(f"AI service unavailable: {result.get('error_message', 'Unknown error')}")
         
-        content = result.get("response") or result.get("raw")
-        if not content:
+        raw_content = result.get("response") or result.get("raw")
+        if not raw_content:
             raise Exception("AI returned empty response")
+        
+        formatter = AIReportGenerator()
+        content = formatter._format_institutional_report(raw_content, template.slug)
         
         generation_time_ms = int((time.time() - start_time) * 1000)
         
