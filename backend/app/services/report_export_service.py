@@ -107,7 +107,7 @@ def _branded_html_wrapper(content: str, title: str, report_type: str, generated_
     letter-spacing: 1.5px;
     text-transform: uppercase;
     display: block;
-    margin: 2px 0 0 0;
+    margin: 0;
     padding: 0;
   }}
 
