@@ -56,7 +56,7 @@ type ReportItem = {
   price: string
   priceCents: number
   consultantPrice: string
-  icon: any
+  icon: React.ElementType
   accentColor: string
   sections: string[]
   deliveryTime: string
@@ -66,9 +66,32 @@ type ReportItem = {
 type ReportCategory = {
   id: string
   label: string
-  icon: any
+  icon: React.ElementType
   color: string
   reports: ReportItem[]
+}
+
+type ReportOptionItem = {
+  report_type: string
+  label: string
+  price_cents: number
+  is_included: boolean
+  display_price: string
+}
+
+type CheckoutPanelConfig = {
+  state: 'subscriber_has_credits' | 'subscriber_no_credits' | 'free_tier' | 'guest'
+  report_options: ReportOptionItem[]
+  reports_remaining: number | null
+  reports_total: number | null
+  email_on_file: string | null
+  selected_report: string
+  base_price_cents: number
+  discount_pct: number
+  final_price_cents: number
+  primary_cta: string
+  secondary_cta: string | null
+  upsell_message: string | null
 }
 
 type GeneratedReport = {
@@ -185,9 +208,9 @@ export default function ReportLibrary({
   const [guestEmail, setGuestEmail] = useState('')
   const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
 
-  const [checkoutState, setCheckoutState] = useState<any>(null)
+  const [checkoutState, setCheckoutState] = useState<CheckoutPanelConfig | null>(null)
   const [checkoutStateLoading, setCheckoutStateLoading] = useState(false)
-  const [sidebarCheckoutState, setSidebarCheckoutState] = useState<any>(null)
+  const [sidebarCheckoutState, setSidebarCheckoutState] = useState<CheckoutPanelConfig | null>(null)
 
   const isGuest = !isAuthenticated
 
@@ -308,7 +331,7 @@ export default function ReportLibrary({
     setGeneratingFree(null)
   }
 
-  const fetchCheckoutState = async (reportType: string, setter: (s: any) => void) => {
+  const fetchCheckoutState = async (reportType: string, setter: (s: CheckoutPanelConfig) => void) => {
     setCheckoutStateLoading(true)
     try {
       const h: Record<string, string> = {}
@@ -553,9 +576,12 @@ export default function ReportLibrary({
           >
             {REPORT_CATEGORIES.map(cat => (
               <optgroup key={cat.id} label={cat.label}>
-                {cat.reports.map(r => (
-                  <option key={r.slug} value={r.slug}>{r.title} — {r.price}</option>
-                ))}
+                {cat.reports.map(r => {
+                  const optLabel = sidebarCheckoutState?.report_options?.find(o => o.report_type === r.slug)?.label
+                  return (
+                    <option key={r.slug} value={r.slug}>{optLabel ?? `${r.title} — ${r.price}`}</option>
+                  )
+                })}
               </optgroup>
             ))}
           </select>
@@ -1091,7 +1117,7 @@ export default function ReportLibrary({
                 const ctaSlug = ctaSlugMap[consultantResult.intel_cta.report_type] || 'market_analysis'
                 const ctaReport = allReports.find(r => r.slug === ctaSlug)
                 const cs = checkoutState
-                const selectedOpt = cs?.report_options?.find((o: any) => o.report_type === ctaSlug) || null
+                const selectedOpt: ReportOptionItem | undefined = cs?.report_options?.find(o => o.report_type === ctaSlug)
 
                 return (
                   <div className="pt-3 border-t border-gray-100 space-y-3">
@@ -1124,7 +1150,7 @@ export default function ReportLibrary({
                           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white text-[12px] font-semibold disabled:opacity-50 transition-all hover:shadow-md"
                           style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
                         >
-                          {generatingReport ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating...</> : <><FileText className="w-3.5 h-3.5" /> Generate report (use 1 credit)</>}
+                          {generatingReport ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating...</> : <><FileText className="w-3.5 h-3.5" /> {cs.primary_cta}</>}
                         </button>
                       </>
                     )}
@@ -1145,18 +1171,20 @@ export default function ReportLibrary({
                         </div>
                         {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-gray-500">{consultantResult.intel_cta.text}</span>
+                          <span className="text-[11px] text-gray-500">
+                            {cs ? `${selectedOpt?.label ?? consultantResult.intel_cta.report_type}` : consultantResult.intel_cta.text}
+                          </span>
                           <button
                             onClick={() => { if (ctaReport) handleCtaCheckout(ctaReport) }}
                             disabled={purchaseLoading || !ctaReport || !isValidGuestEmail}
                             className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-40 transition-all"
                             style={{ background: '#0F6E56' }}
                           >
-                            {purchaseLoading ? 'Redirecting...' : `Get ${consultantResult.intel_cta.report_type} → $${consultantResult.intel_cta.price}`}
+                            {purchaseLoading ? 'Redirecting...' : (cs ? cs.primary_cta : `Get ${consultantResult.intel_cta.report_type} → $${consultantResult.intel_cta.price}`)}
                           </button>
                         </div>
                         <Link to="/register" className="block text-center text-[10px] text-[#185FA5] hover:underline">
-                          Create free account (save 20%)
+                          {cs?.secondary_cta ?? 'Create free account (save 20%)'}
                         </Link>
                       </>
                     )}
