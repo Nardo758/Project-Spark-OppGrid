@@ -1,0 +1,549 @@
+"""
+OppGrid Report Checkout Flow
+=============================
+
+Handles three user states:
+1. Subscriber with allocation → One-click generate (no payment)
+2. Guest / non-subscriber → Email + Stripe checkout
+3. Authenticated user needs to pay → Use email on file + Stripe
+
+FRONTEND CALLS: GET /api/reports/checkout-state
+RETURNS: { state, panel_config, user_context }
+"""
+
+from typing import Optional, Literal
+from pydantic import BaseModel
+from datetime import datetime
+from enum import Enum
+
+
+# ============================================================================
+# TYPES
+# ============================================================================
+
+class CheckoutState(str, Enum):
+    SUBSCRIBER_HAS_CREDITS = "subscriber_has_credits"  # One-click, no payment
+    SUBSCRIBER_NO_CREDITS = "subscriber_no_credits"    # Has account, needs to pay
+    GUEST = "guest"                                     # No account, email + pay
+    FREE_TIER = "free_tier"                            # Account but no subscription
+
+
+class ReportType(str, Enum):
+    FEASIBILITY_STUDY = "feasibility_study"
+    BUSINESS_PLAN = "business_plan"
+    STRATEGIC_ANALYSIS = "strategic_analysis"
+    DEEP_CLONE = "deep_clone"
+    # Add others as needed
+
+
+# Report pricing (cents for Stripe)
+REPORT_PRICES = {
+    ReportType.FEASIBILITY_STUDY: 2500,      # $25
+    ReportType.BUSINESS_PLAN: 14900,          # $149
+    ReportType.STRATEGIC_ANALYSIS: 22900,     # $229
+    ReportType.DEEP_CLONE: 54900,             # $549
+}
+
+# Which reports are included in each subscription tier
+TIER_INCLUDED_REPORTS = {
+    "starter": [ReportType.FEASIBILITY_STUDY, ReportType.BUSINESS_PLAN],
+    "professional": [ReportType.FEASIBILITY_STUDY, ReportType.BUSINESS_PLAN, 
+                     ReportType.STRATEGIC_ANALYSIS],
+    "consultant": [ReportType.FEASIBILITY_STUDY, ReportType.BUSINESS_PLAN,
+                   ReportType.STRATEGIC_ANALYSIS, ReportType.DEEP_CLONE],
+}
+
+# Monthly report allocation per tier
+TIER_MONTHLY_ALLOCATION = {
+    "free": 0,
+    "starter": 3,
+    "professional": 10,
+    "consultant": 999,  # Unlimited
+}
+
+# Subscriber discount on pay-per-report (when allocation exhausted)
+SUBSCRIBER_DISCOUNT = 0.20  # 20% off
+
+
+# ============================================================================
+# RESPONSE MODELS
+# ============================================================================
+
+class ReportOption(BaseModel):
+    """Single report option in dropdown"""
+    report_type: str
+    label: str
+    price_cents: int
+    is_included: bool  # In user's subscription
+    display_price: str  # "$149" or "included"
+
+
+class CheckoutPanelConfig(BaseModel):
+    """Configuration for the Generate Report panel"""
+    state: CheckoutState
+    
+    # Report options for dropdown
+    report_options: list[ReportOption]
+    
+    # Allocation (only for subscribers)
+    reports_remaining: Optional[int] = None
+    reports_total: Optional[int] = None
+    
+    # User context
+    email_on_file: Optional[str] = None
+    payment_method_hint: Optional[str] = None  # "Visa ****4242"
+    
+    # Pricing for selected report
+    selected_report: str
+    base_price_cents: int
+    discount_pct: int = 0
+    final_price_cents: int
+    
+    # CTAs
+    primary_cta: str
+    secondary_cta: Optional[str] = None
+    
+    # Upsell message (when allocation exhausted)
+    upsell_message: Optional[str] = None
+
+
+# ============================================================================
+# MAIN CHECKOUT STATE RESOLVER
+# ============================================================================
+
+async def get_checkout_state(
+    user_id: Optional[int],
+    report_type: ReportType,
+    db
+) -> CheckoutPanelConfig:
+    """
+    Determine checkout state and return panel configuration.
+    
+    Called by frontend when user opens Generate Report panel.
+    """
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # STATE 1: No user → Guest checkout
+    # ─────────────────────────────────────────────────────────────────────────
+    if user_id is None:
+        return CheckoutPanelConfig(
+            state=CheckoutState.GUEST,
+            report_options=_build_report_options(tier=None),
+            selected_report=report_type.value,
+            base_price_cents=REPORT_PRICES[report_type],
+            discount_pct=0,
+            final_price_cents=REPORT_PRICES[report_type],
+            primary_cta=f"Pay ${REPORT_PRICES[report_type] / 100:.0f} & generate",
+            secondary_cta="Create free account (save 20%)",
+        )
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # Fetch user subscription data
+    # ─────────────────────────────────────────────────────────────────────────
+    user_query = """
+        SELECT 
+            email,
+            subscription_tier,
+            reports_used_this_month,
+            stripe_payment_method_last4
+        FROM users
+        WHERE id = :user_id
+    """
+    user = await db.fetch_one(user_query, {"user_id": user_id})
+    
+    if not user:
+        # User ID invalid, treat as guest
+        return await get_checkout_state(None, report_type, db)
+    
+    tier = user["subscription_tier"] or "free"
+    reports_used = user["reports_used_this_month"] or 0
+    allocation = TIER_MONTHLY_ALLOCATION.get(tier, 0)
+    reports_remaining = max(0, allocation - reports_used)
+    included_reports = TIER_INCLUDED_REPORTS.get(tier, [])
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # STATE 2: Free tier → Pay per report (no allocation)
+    # ─────────────────────────────────────────────────────────────────────────
+    if tier == "free":
+        return CheckoutPanelConfig(
+            state=CheckoutState.FREE_TIER,
+            report_options=_build_report_options(tier=tier),
+            email_on_file=user["email"],
+            payment_method_hint=_format_payment_hint(user["stripe_payment_method_last4"]),
+            selected_report=report_type.value,
+            base_price_cents=REPORT_PRICES[report_type],
+            discount_pct=0,
+            final_price_cents=REPORT_PRICES[report_type],
+            primary_cta=f"Pay ${REPORT_PRICES[report_type] / 100:.0f} & generate",
+            secondary_cta="Subscribe & save 20%+",
+            upsell_message="Subscribe to get included reports each month.",
+        )
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # STATE 3: Subscriber with reports remaining
+    # ─────────────────────────────────────────────────────────────────────────
+    report_is_included = report_type in included_reports
+    
+    if reports_remaining > 0 and report_is_included:
+        return CheckoutPanelConfig(
+            state=CheckoutState.SUBSCRIBER_HAS_CREDITS,
+            report_options=_build_report_options(tier=tier),
+            reports_remaining=reports_remaining,
+            reports_total=allocation,
+            email_on_file=user["email"],
+            selected_report=report_type.value,
+            base_price_cents=REPORT_PRICES[report_type],
+            discount_pct=100,  # Fully included
+            final_price_cents=0,
+            primary_cta="Generate report (use 1 credit)",
+        )
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # STATE 4: Subscriber but needs to pay (exhausted allocation OR report not in plan)
+    # ─────────────────────────────────────────────────────────────────────────
+    base_price = REPORT_PRICES[report_type]
+    discounted_price = int(base_price * (1 - SUBSCRIBER_DISCOUNT))
+    
+    if reports_remaining == 0:
+        upsell = f"You've used all {allocation} reports this month. Upgrade for more."
+    else:
+        upsell = f"Deep Clone is not included in your {tier.title()} plan. Upgrade to Consultant."
+    
+    return CheckoutPanelConfig(
+        state=CheckoutState.SUBSCRIBER_NO_CREDITS,
+        report_options=_build_report_options(tier=tier),
+        reports_remaining=reports_remaining,
+        reports_total=allocation,
+        email_on_file=user["email"],
+        payment_method_hint=_format_payment_hint(user["stripe_payment_method_last4"]),
+        selected_report=report_type.value,
+        base_price_cents=base_price,
+        discount_pct=int(SUBSCRIBER_DISCOUNT * 100),
+        final_price_cents=discounted_price,
+        primary_cta=f"Pay ${discounted_price / 100:.0f} & generate",
+        upsell_message=upsell,
+    )
+
+
+# ============================================================================
+# HELPERS
+# ============================================================================
+
+def _build_report_options(tier: Optional[str]) -> list[ReportOption]:
+    """Build dropdown options based on user tier"""
+    included = TIER_INCLUDED_REPORTS.get(tier, []) if tier else []
+    
+    options = []
+    for report_type, price_cents in REPORT_PRICES.items():
+        is_included = report_type in included
+        
+        if is_included:
+            display_price = "included"
+            label = f"{_format_report_name(report_type)} — included"
+        else:
+            display_price = f"${price_cents / 100:.0f}"
+            label = f"{_format_report_name(report_type)} — ${price_cents / 100:.0f}"
+        
+        options.append(ReportOption(
+            report_type=report_type.value,
+            label=label,
+            price_cents=price_cents,
+            is_included=is_included,
+            display_price=display_price,
+        ))
+    
+    return options
+
+
+def _format_report_name(report_type: ReportType) -> str:
+    """Human-readable report name"""
+    names = {
+        ReportType.FEASIBILITY_STUDY: "Feasibility Study",
+        ReportType.BUSINESS_PLAN: "Business Plan",
+        ReportType.STRATEGIC_ANALYSIS: "Strategic Analysis",
+        ReportType.DEEP_CLONE: "Deep Clone Analysis",
+    }
+    return names.get(report_type, report_type.value)
+
+
+def _format_payment_hint(last4: Optional[str]) -> Optional[str]:
+    """Format payment method hint"""
+    if not last4:
+        return None
+    return f"Visa ****{last4}"
+
+
+# ============================================================================
+# CHECKOUT ACTIONS
+# ============================================================================
+
+async def process_report_checkout(
+    user_id: Optional[int],
+    report_type: ReportType,
+    email: Optional[str],  # Required for guests
+    db,
+    stripe_client,
+    analysis_data: dict,  # The analysis results to include in report
+) -> dict:
+    """
+    Process the report generation request.
+    
+    Returns:
+    - { status: "generating", report_id: ... } for subscribers using allocation
+    - { status: "checkout", checkout_url: ... } for payment required
+    """
+    
+    # Get checkout state
+    state_config = await get_checkout_state(user_id, report_type, db)
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # CASE 1: Subscriber with credits → Generate immediately
+    # ─────────────────────────────────────────────────────────────────────────
+    if state_config.state == CheckoutState.SUBSCRIBER_HAS_CREDITS:
+        # Decrement allocation
+        await db.execute("""
+            UPDATE users 
+            SET reports_used_this_month = reports_used_this_month + 1
+            WHERE id = :user_id
+        """, {"user_id": user_id})
+        
+        # Queue report generation
+        report_id = await _queue_report_generation(
+            user_id=user_id,
+            email=state_config.email_on_file,
+            report_type=report_type,
+            analysis_data=analysis_data,
+            paid_amount=0,
+            db=db,
+        )
+        
+        return {
+            "status": "generating",
+            "report_id": report_id,
+            "message": f"Report queued. {state_config.reports_remaining - 1} credits remaining.",
+        }
+    
+    # ─────────────────────────────────────────────────────────────────────────
+    # CASE 2: Payment required → Create Stripe checkout session
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    # Validate email for guests
+    delivery_email = state_config.email_on_file or email
+    if not delivery_email:
+        raise ValueError("Email required for report delivery")
+    
+    # Create pending report record
+    report_id = await _create_pending_report(
+        user_id=user_id,
+        email=delivery_email,
+        report_type=report_type,
+        analysis_data=analysis_data,
+        price_cents=state_config.final_price_cents,
+        db=db,
+    )
+    
+    # Create Stripe checkout session
+    checkout_session = stripe_client.checkout.sessions.create(
+        mode="payment",
+        customer_email=delivery_email if not user_id else None,
+        customer=await _get_stripe_customer_id(user_id, db) if user_id else None,
+        line_items=[{
+            "price_data": {
+                "currency": "usd",
+                "product_data": {
+                    "name": _format_report_name(report_type),
+                    "description": f"OppGrid {_format_report_name(report_type)} Report",
+                },
+                "unit_amount": state_config.final_price_cents,
+            },
+            "quantity": 1,
+        }],
+        metadata={
+            "report_id": str(report_id),
+            "report_type": report_type.value,
+            "user_id": str(user_id) if user_id else "",
+        },
+        success_url=f"https://oppgrid.com/reports/{report_id}?status=generating",
+        cancel_url=f"https://oppgrid.com/studio?report_cancelled=1",
+    )
+    
+    return {
+        "status": "checkout",
+        "checkout_url": checkout_session.url,
+        "report_id": report_id,
+    }
+
+
+async def _queue_report_generation(
+    user_id: Optional[int],
+    email: str,
+    report_type: ReportType,
+    analysis_data: dict,
+    paid_amount: int,
+    db,
+) -> int:
+    """Create report record and queue for generation"""
+    result = await db.execute("""
+        INSERT INTO reports (
+            user_id, email, report_type, status, 
+            analysis_data, paid_amount_cents, created_at
+        ) VALUES (
+            :user_id, :email, :report_type, 'generating',
+            :analysis_data, :paid_amount, NOW()
+        )
+        RETURNING id
+    """, {
+        "user_id": user_id,
+        "email": email,
+        "report_type": report_type.value,
+        "analysis_data": analysis_data,  # JSON
+        "paid_amount": paid_amount,
+    })
+    
+    report_id = result.scalar()
+    
+    # TODO: Queue background job to generate report
+    # await queue.enqueue("generate_report", report_id=report_id)
+    
+    return report_id
+
+
+async def _create_pending_report(
+    user_id: Optional[int],
+    email: str,
+    report_type: ReportType,
+    analysis_data: dict,
+    price_cents: int,
+    db,
+) -> int:
+    """Create pending report (awaiting payment)"""
+    result = await db.execute("""
+        INSERT INTO reports (
+            user_id, email, report_type, status,
+            analysis_data, paid_amount_cents, created_at
+        ) VALUES (
+            :user_id, :email, :report_type, 'pending_payment',
+            :analysis_data, :price_cents, NOW()
+        )
+        RETURNING id
+    """, {
+        "user_id": user_id,
+        "email": email,
+        "report_type": report_type.value,
+        "analysis_data": analysis_data,
+        "price_cents": price_cents,
+    })
+    
+    return result.scalar()
+
+
+async def _get_stripe_customer_id(user_id: int, db) -> Optional[str]:
+    """Get Stripe customer ID for existing user"""
+    result = await db.fetch_one(
+        "SELECT stripe_customer_id FROM users WHERE id = :user_id",
+        {"user_id": user_id}
+    )
+    return result["stripe_customer_id"] if result else None
+
+
+# ============================================================================
+# STRIPE WEBHOOK HANDLER
+# ============================================================================
+
+async def handle_checkout_completed(event: dict, db):
+    """
+    Stripe webhook: checkout.session.completed
+    
+    Called when payment succeeds. Moves report from pending → generating.
+    """
+    session = event["data"]["object"]
+    metadata = session.get("metadata", {})
+    
+    report_id = metadata.get("report_id")
+    if not report_id:
+        return
+    
+    # Update report status
+    await db.execute("""
+        UPDATE reports 
+        SET status = 'generating', paid_at = NOW()
+        WHERE id = :report_id AND status = 'pending_payment'
+    """, {"report_id": int(report_id)})
+    
+    # Queue generation
+    # await queue.enqueue("generate_report", report_id=int(report_id))
+
+
+# ============================================================================
+# API ROUTES (FastAPI)
+# ============================================================================
+
+"""
+# In your router file:
+
+from fastapi import APIRouter, Depends, HTTPException
+from .checkout import get_checkout_state, process_report_checkout, ReportType
+
+router = APIRouter(prefix="/api/reports", tags=["reports"])
+
+
+@router.get("/checkout-state")
+async def checkout_state_endpoint(
+    report_type: str = "business_plan",
+    user = Depends(get_optional_current_user),  # Returns None for guests
+    db = Depends(get_db),
+):
+    '''
+    Get checkout panel configuration based on user state.
+    Frontend calls this when opening Generate Report panel.
+    '''
+    try:
+        rt = ReportType(report_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid report type: {report_type}")
+    
+    user_id = user.id if user else None
+    config = await get_checkout_state(user_id, rt, db)
+    
+    return config.dict()
+
+
+@router.post("/generate")
+async def generate_report_endpoint(
+    report_type: str,
+    email: str = None,  # Required for guests
+    analysis_id: int = None,  # Reference to Consultant Studio analysis
+    user = Depends(get_optional_current_user),
+    db = Depends(get_db),
+    stripe = Depends(get_stripe_client),
+):
+    '''
+    Initiate report generation.
+    
+    Returns either:
+    - { status: "generating", report_id } → Report queued (subscriber with credits)
+    - { status: "checkout", checkout_url } → Redirect to Stripe
+    '''
+    try:
+        rt = ReportType(report_type)
+    except ValueError:
+        raise HTTPException(400, f"Invalid report type: {report_type}")
+    
+    # Fetch analysis data
+    analysis_data = await get_analysis_data(analysis_id, db)
+    if not analysis_data:
+        raise HTTPException(404, "Analysis not found")
+    
+    user_id = user.id if user else None
+    
+    result = await process_report_checkout(
+        user_id=user_id,
+        report_type=rt,
+        email=email,
+        db=db,
+        stripe_client=stripe,
+        analysis_data=analysis_data,
+    )
+    
+    return result
+"""
