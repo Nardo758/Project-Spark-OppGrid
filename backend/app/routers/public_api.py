@@ -361,18 +361,21 @@ def get_opportunity(
 
     # --- Monthly allowance check + access recording ----------------------
     svc = OpportunityAccessService()
+    from app.models.subscription import Subscription
 
-    # Try to get Stripe customer ID for overage billing
+    # Retrieve Stripe customer ID for overage billing (log, never swallow)
     stripe_customer_id = None
     try:
-        from app.models.subscription import Subscription
         sub = db.query(Subscription).filter(
             Subscription.user_id == api_key.user_id
         ).first()
         if sub:
             stripe_customer_id = sub.stripe_customer_id
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "get_opportunity: failed to fetch subscription for user %s: %s",
+            api_key.user_id, exc,
+        )
 
     result = svc.check_and_record_access(
         db=db,
@@ -388,9 +391,10 @@ def get_opportunity(
     if result.get("requires_overage_confirmation"):
         usage = result["usage"]
         cap = TierConfig.get_monthly_cap(api_key.tier)
-        raise HTTPException(
+        # Return spec-defined top-level 402 body (not HTTPException detail wrapper)
+        return JSONResponse(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail={
+            content={
                 "error": "overage_confirmation_required",
                 "message": (
                     f"You've used all {cap} included opportunities this month."

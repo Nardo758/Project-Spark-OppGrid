@@ -178,14 +178,37 @@ class OpportunityAccessService:
 
         # ---- 5. Stripe overage invoice item ------------------------------
         stripe_item_id = None
-        if overage_charged > 0 and stripe_customer_id:
-            stripe_item_id = self._create_stripe_invoice_item(
-                stripe_customer_id=stripe_customer_id,
-                amount_usd=overage_charged,
-                opportunity_id=opportunity_id,
-            )
-            if stripe_item_id:
-                access.stripe_invoice_item_id = stripe_item_id
+        stripe_billing_failed = False
+
+        if overage_charged > 0:
+            if not stripe_customer_id:
+                # No Stripe customer: overage granted but unbilled. Mark the
+                # record with a sentinel so it can be recovered later.
+                access.stripe_invoice_item_id = "PENDING_NO_CUSTOMER"
+                logger.error(
+                    "Overage granted without Stripe customer for user %s "
+                    "opportunity %s — no stripe_customer_id available",
+                    user_id, opportunity_id,
+                )
+                stripe_billing_failed = True
+            else:
+                stripe_item_id = self._create_stripe_invoice_item(
+                    stripe_customer_id=stripe_customer_id,
+                    amount_usd=overage_charged,
+                    opportunity_id=opportunity_id,
+                )
+                if stripe_item_id:
+                    access.stripe_invoice_item_id = stripe_item_id
+                else:
+                    # Stripe call failed: mark for async recovery, log at ERROR.
+                    access.stripe_invoice_item_id = "PENDING_STRIPE_RETRY"
+                    stripe_billing_failed = True
+                    logger.error(
+                        "Stripe InvoiceItem creation FAILED for user %s "
+                        "opportunity %s (customer %s) — access granted, "
+                        "record marked PENDING_STRIPE_RETRY for recovery",
+                        user_id, opportunity_id, stripe_customer_id,
+                    )
 
         try:
             db.commit()
@@ -199,6 +222,7 @@ class OpportunityAccessService:
             "is_included": is_included,
             "charged": overage_charged,
             "remaining": max(0, cap - current_usage - 1),
+            "stripe_billing_failed": stripe_billing_failed,
         }
 
     # ------------------------------------------------------------------
