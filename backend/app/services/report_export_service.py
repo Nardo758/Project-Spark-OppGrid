@@ -4,6 +4,7 @@ Report Export Service
 Generates PDF and DOCX exports from HTML report content with OppGrid branding.
 """
 
+import html
 import io
 import re
 from datetime import datetime
@@ -128,6 +129,10 @@ def _branded_html_wrapper(content: str, title: str, report_type: str, generated_
 </html>"""
 
 
+_HTML_TAG_RE = re.compile(r"<[a-zA-Z][^>]*>|</[a-zA-Z]+>", re.DOTALL)
+_BORDER_ONLY_RE = re.compile(r"^[\s═─━╔╗╚╝║╠╣╦╩╪╫▀▄█▌▐░▒▓\-=_~*+|]+$")
+
+
 def _ensure_html(content: str) -> str:
     """Convert plain-text report content to basic HTML if needed.
 
@@ -136,21 +141,24 @@ def _ensure_html(content: str) -> str:
     parse those characters cleanly, so we detect plain-text content and
     convert it before handing it to the PDF/DOCX generators.
 
-    If the content already contains HTML tags it is returned unchanged.
+    Detection uses a tag regex (not a bare `<` check) so angle brackets in
+    plain text such as "<5%" or "&lt;10k" are not misidentified as HTML.
+    Content that passes the regex is returned unchanged.
+
+    Plain-text lines are HTML-escaped before wrapping so that any stray `<`,
+    `>`, or `&` characters do not produce malformed markup.
     """
-    if "<" in content and ">" in content:
+    if _HTML_TAG_RE.search(content):
         return content
 
-    _BORDER_ONLY = re.compile(r"^[\s═─━━╔╗╚╝║╠╣╦╩╪╫▀▄█▌▐░▒▓\-=_~*+|]+$")
-    lines = content.splitlines()
     html_parts: list[str] = []
-    for line in lines:
+    for line in content.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-        if _BORDER_ONLY.match(stripped):
+        if _BORDER_ONLY_RE.match(stripped):
             continue
-        html_parts.append(f"<p>{stripped}</p>")
+        html_parts.append(f"<p>{html.escape(stripped)}</p>")
     return "\n".join(html_parts)
 
 
