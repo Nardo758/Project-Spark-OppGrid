@@ -206,6 +206,7 @@ export default function ReportLibrary({
   const [sidebarEmailError, setSidebarEmailError] = useState<string | null>(null)
   const [goDeeperEmailHighlight, setGoDeeperEmailHighlight] = useState(false)
   const goDeeperEmailRef = useRef<HTMLInputElement>(null)
+  const goDeeperHighlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [guestEmail, setGuestEmail] = useState('')
   const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
@@ -369,6 +370,12 @@ export default function ReportLibrary({
     fetchCheckoutState(sidebarReport, setSidebarCheckoutState)
   }, [sidebarReport, token])
 
+  useEffect(() => {
+    return () => {
+      if (goDeeperHighlightTimerRef.current) clearTimeout(goDeeperHighlightTimerRef.current)
+    }
+  }, [])
+
   const handleSubscriberGenerate = async (reportType: string) => {
     setGeneratingReport(reportType)
     setGenerateError(null)
@@ -404,12 +411,17 @@ export default function ReportLibrary({
       await handleSubscriberGenerate(report.slug)
       return
     }
-    if (isGuest && !sidebarEmail.trim()) {
-      setGenerateError('Please enter your email above to receive your report.')
+    if (isGuest && !EMAIL_REGEX.test(sidebarEmail.trim())) {
+      setGenerateError(
+        sidebarEmail.trim()
+          ? 'Please enter a valid email address above to receive your report.'
+          : 'Please enter your email above to receive your report.'
+      )
       setGoDeeperEmailHighlight(true)
       goDeeperEmailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       goDeeperEmailRef.current?.focus()
-      setTimeout(() => setGoDeeperEmailHighlight(false), 2000)
+      if (goDeeperHighlightTimerRef.current) clearTimeout(goDeeperHighlightTimerRef.current)
+      goDeeperHighlightTimerRef.current = setTimeout(() => setGoDeeperEmailHighlight(false), 2000)
       return
     }
     setSidebarEmailError(null)
