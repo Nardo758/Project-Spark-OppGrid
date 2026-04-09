@@ -1,8 +1,0 @@
-README.md
-setup.py
-oppgrid/__init__.py
-oppgrid.egg-info/PKG-INFO
-oppgrid.egg-info/SOURCES.txt
-oppgrid.egg-info/dependency_links.txt
-oppgrid.egg-info/requires.txt
-oppgrid.egg-info/top_level.txt

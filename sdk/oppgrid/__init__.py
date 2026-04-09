@@ -166,44 +166,33 @@ class OpportunitiesResource:
         self,
         category: Optional[str] = None,
         city: Optional[str] = None,
-        state: Optional[str] = None,
+        region: Optional[str] = None,
         min_score: Optional[int] = None,
         page: int = 1,
-        per_page: int = 20,
-        sort_by: str = "signal_quality_score",
-        sort_order: str = "desc",
+        limit: int = 20,
     ) -> Dict[str, Any]:
         """
         List opportunities with optional filters, ordered by AI opportunity score.
 
         Args:
-            category:   Filter by category (partial match, e.g. ``"fintech"``).
-            city:       Filter by city name (partial match).
-            state:      Filter by US state / region (partial match).
-            min_score:  Minimum AI opportunity score (0–100).
-            page:       Page number, 1-indexed (default 1).
-            per_page:   Results per page, max 100 (default 20).
-            sort_by:    Sort field hint (e.g. ``"signal_quality_score"``).
-            sort_order: Sort direction: ``"asc"`` or ``"desc"`` (default ``"desc"``).
+            category:  Filter by category (partial match, e.g. ``"fintech"``).
+            city:      Filter by city name (partial match).
+            region:    Filter by region / state (partial match).
+            min_score: Minimum AI opportunity score (0–100).
+            page:      Page number, 1-indexed (default 1).
+            limit:     Results per page, max 100 (default 20).
 
         Returns:
             Dict with keys ``data`` (list of :class:`Opportunity`), ``total``,
             ``page``, ``limit``, and ``has_next``.
         """
-        # Map spec param names → backend param names
-        params: Dict[str, Any] = {
-            "page": page,
-            "limit": per_page,
-            "sort_by": sort_by,
-            "sort_order": sort_order,
-        }
+        params: Dict[str, Any] = {"page": page, "limit": limit}
         if category is not None:
             params["category"] = category
         if city is not None:
             params["city"] = city
-        if state is not None:
-            # Backend uses "region" for the state/region field
-            params["region"] = state
+        if region is not None:
+            params["region"] = region
         if min_score is not None:
             params["min_score"] = min_score
 
@@ -214,14 +203,17 @@ class OpportunitiesResource:
 
     def get(
         self,
-        opportunity_id: int,
+        opportunity_id: Any,
         include_sources: bool = False,
     ) -> Opportunity:
         """
-        Fetch a single opportunity by its integer ID.
+        Fetch a single opportunity by ID.
+
+        The live v1 API uses integer IDs (e.g. ``42``).  String values are
+        also accepted and forwarded as-is to the path.
 
         Args:
-            opportunity_id: The integer ID of the opportunity.
+            opportunity_id: The opportunity ID (integer in the live API).
             include_sources: Include raw source data (Professional+ tier).
 
         Returns:
@@ -253,35 +245,30 @@ class TrendsResource:
         min_velocity: Optional[float] = None,
         days: int = 30,
         page: int = 1,
-        per_page: int = 20,
+        limit: int = 20,
     ) -> Dict[str, Any]:
         """
         List AI-detected market trends, ordered by trend strength.
 
         Args:
             category:     Filter by category (partial match).
-            region:       Filter by geographic region (passed to backend).
+            region:       Geographic region filter (forwarded to backend).
             min_velocity: Minimum trend velocity / strength threshold (0–100).
-            days:         Look-back period in days (default 30).
+            days:         Look-back period in days hint (default 30).
             page:         Page number, 1-indexed (default 1).
-            per_page:     Results per page, max 100 (default 20).
+            limit:        Results per page, max 100 (default 20).
 
         Returns:
             Dict with keys ``data`` (list of :class:`Trend`), ``total``,
             ``page``, ``limit``, and ``has_next``.
         """
-        # Map spec param names → backend param names
-        params: Dict[str, Any] = {
-            "page": page,
-            "limit": per_page,
-            "days": days,
-        }
+        params: Dict[str, Any] = {"page": page, "limit": limit, "days": days}
         if category is not None:
             params["category"] = category
         if region is not None:
             params["region"] = region
         if min_velocity is not None:
-            # Backend uses min_strength; min_velocity maps to it
+            # Backend uses min_strength; min_velocity is the SDK-facing alias
             params["min_strength"] = int(min_velocity)
 
         response = self._client._request("GET", "/trends", params=params)
@@ -317,12 +304,12 @@ class MarketsResource:
         """
         Get market intelligence for opportunities in a specific region.
 
-        The ``region`` value is matched as a partial, case-insensitive string
-        (e.g. ``"north_america"``, ``"europe"``, ``"california"``).
+        ``region`` is matched as a partial, case-insensitive string against
+        opportunity region fields (e.g. ``"north_america"``, ``"europe"``).
 
         Args:
             region:          Region string to filter by (partial match).
-            category:        Further filter by category (passed as query param).
+            category:        Further filter by category (forwarded to backend).
             include_heatmap: Request GeoJSON heatmap (Enterprise tier only).
 
         Returns:
@@ -362,10 +349,10 @@ class OppGrid:
         for opp in result["data"]:
             print(f"{opp.title} (Score: {opp.ai_opportunity_score})")
 
-        # Get a specific opportunity by integer ID
+        # Get a specific opportunity by its ID
         opp = client.opportunities.get(42)
 
-        # List trends
+        # List trends (region and days are forwarded to the API)
         trends = client.trends.list(region="north_america", days=14)
 
         # Market overview
