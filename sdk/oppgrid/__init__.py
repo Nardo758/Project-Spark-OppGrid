@@ -166,33 +166,44 @@ class OpportunitiesResource:
         self,
         category: Optional[str] = None,
         city: Optional[str] = None,
-        region: Optional[str] = None,
+        state: Optional[str] = None,
         min_score: Optional[int] = None,
         page: int = 1,
-        limit: int = 20,
+        per_page: int = 20,
+        sort_by: str = "signal_quality_score",
+        sort_order: str = "desc",
     ) -> Dict[str, Any]:
         """
         List opportunities with optional filters, ordered by AI opportunity score.
 
         Args:
-            category:  Filter by category (partial match, e.g. ``"fintech"``).
-            city:      Filter by city name (partial match).
-            region:    Filter by region / state (partial match).
-            min_score: Minimum AI opportunity score (0–100).
-            page:      Page number, 1-indexed (default 1).
-            limit:     Results per page, max 100 (default 20).
+            category:   Filter by category (partial match, e.g. ``"fintech"``).
+            city:       Filter by city name (partial match).
+            state:      Filter by US state / region (partial match).
+            min_score:  Minimum AI opportunity score (0–100).
+            page:       Page number, 1-indexed (default 1).
+            per_page:   Results per page, max 100 (default 20).
+            sort_by:    Sort field hint (e.g. ``"signal_quality_score"``).
+            sort_order: Sort direction: ``"asc"`` or ``"desc"`` (default ``"desc"``).
 
         Returns:
             Dict with keys ``data`` (list of :class:`Opportunity`), ``total``,
             ``page``, ``limit``, and ``has_next``.
         """
-        params: Dict[str, Any] = {"page": page, "limit": limit}
+        # Map spec param names → backend param names
+        params: Dict[str, Any] = {
+            "page": page,
+            "limit": per_page,
+            "sort_by": sort_by,
+            "sort_order": sort_order,
+        }
         if category is not None:
             params["category"] = category
         if city is not None:
             params["city"] = city
-        if region is not None:
-            params["region"] = region
+        if state is not None:
+            # Backend uses "region" for the state/region field
+            params["region"] = state
         if min_score is not None:
             params["min_score"] = min_score
 
@@ -201,13 +212,17 @@ class OpportunitiesResource:
             response["data"] = [Opportunity.from_dict(o) for o in response["data"]]
         return response
 
-    def get(self, opportunity_id: int, include_sources: bool = False) -> Opportunity:
+    def get(
+        self,
+        opportunity_id: int,
+        include_sources: bool = False,
+    ) -> Opportunity:
         """
         Fetch a single opportunity by its integer ID.
 
         Args:
             opportunity_id: The integer ID of the opportunity.
-            include_sources: Reserved for Professional+ tier (currently no-op).
+            include_sources: Include raw source data (Professional+ tier).
 
         Returns:
             An :class:`Opportunity` instance.
@@ -216,7 +231,12 @@ class OpportunitiesResource:
             NotFoundError: If the opportunity does not exist or is not accessible
                            with your current API key tier.
         """
-        data = self._client._request("GET", f"/opportunities/{opportunity_id}")
+        params: Dict[str, Any] = {}
+        if include_sources:
+            params["include_sources"] = "true"
+        data = self._client._request(
+            "GET", f"/opportunities/{opportunity_id}", params=params or None
+        )
         return Opportunity.from_dict(data)
 
 
@@ -231,40 +251,38 @@ class TrendsResource:
         category: Optional[str] = None,
         region: Optional[str] = None,
         min_velocity: Optional[float] = None,
-        min_strength: Optional[int] = None,
-        days: Optional[int] = None,
+        days: int = 30,
         page: int = 1,
-        limit: int = 20,
+        per_page: int = 20,
     ) -> Dict[str, Any]:
         """
         List AI-detected market trends, ordered by trend strength.
 
         Args:
             category:     Filter by category (partial match).
-            region:       Filter hint by geographic region (informational).
-            min_velocity: Alias for ``min_strength`` (trend velocity threshold).
-            min_strength: Minimum trend strength (0–100).
-            days:         Look-back period in days (informational; backend uses all detected trends).
+            region:       Filter by geographic region (passed to backend).
+            min_velocity: Minimum trend velocity / strength threshold (0–100).
+            days:         Look-back period in days (default 30).
             page:         Page number, 1-indexed (default 1).
-            limit:        Results per page, max 100 (default 20).
+            per_page:     Results per page, max 100 (default 20).
 
         Returns:
             Dict with keys ``data`` (list of :class:`Trend`), ``total``,
             ``page``, ``limit``, and ``has_next``.
         """
-        params: Dict[str, Any] = {"page": page, "limit": limit}
+        # Map spec param names → backend param names
+        params: Dict[str, Any] = {
+            "page": page,
+            "limit": per_page,
+            "days": days,
+        }
         if category is not None:
             params["category"] = category
         if region is not None:
             params["region"] = region
-        if days is not None:
-            params["days"] = days
-        # min_strength wins; fall back to min_velocity alias
-        effective_strength = min_strength if min_strength is not None else (
-            int(min_velocity) if min_velocity is not None else None
-        )
-        if effective_strength is not None:
-            params["min_strength"] = effective_strength
+        if min_velocity is not None:
+            # Backend uses min_strength; min_velocity maps to it
+            params["min_strength"] = int(min_velocity)
 
         response = self._client._request("GET", "/trends", params=params)
         if isinstance(response.get("data"), list):
@@ -290,21 +308,35 @@ class MarketsResource:
             response["data"] = [Market.from_dict(m) for m in response["data"]]
         return response
 
-    def get(self, region: str) -> Dict[str, Any]:
+    def get(
+        self,
+        region: str,
+        category: Optional[str] = None,
+        include_heatmap: bool = False,
+    ) -> Dict[str, Any]:
         """
-        Get market intelligence for opportunities matching a specific region.
+        Get market intelligence for opportunities in a specific region.
 
         The ``region`` value is matched as a partial, case-insensitive string
-        against opportunity region fields (e.g. ``"north_america"``,
-        ``"europe"``, ``"california"``).
+        (e.g. ``"north_america"``, ``"europe"``, ``"california"``).
 
         Args:
-            region: Region string to filter by (partial match).
+            region:          Region string to filter by (partial match).
+            category:        Further filter by category (passed as query param).
+            include_heatmap: Request GeoJSON heatmap (Enterprise tier only).
 
         Returns:
             Dict with keys ``data`` (list of :class:`Market`) and ``total``.
         """
-        response = self._client._request("GET", f"/markets/{region}")
+        params: Dict[str, Any] = {}
+        if category is not None:
+            params["category"] = category
+        if include_heatmap:
+            params["include_heatmap"] = "true"
+
+        response = self._client._request(
+            "GET", f"/markets/{region}", params=params or None
+        )
         if isinstance(response.get("data"), list):
             response["data"] = [Market.from_dict(m) for m in response["data"]]
         return response
