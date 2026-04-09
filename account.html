@@ -823,6 +823,21 @@
                             <label for="bio">Bio (optional)</label>
                             <input type="text" id="bio" placeholder="A short description about you">
                         </div>
+                        <div class="form-group">
+                            <label for="company">Company (optional)</label>
+                            <input type="text" id="company" placeholder="Your company or organization">
+                        </div>
+                        <div class="form-group">
+                            <label for="role">Role</label>
+                            <select id="role">
+                                <option value="">Select a role</option>
+                                <option value="entrepreneur">Entrepreneur</option>
+                                <option value="investor">Investor</option>
+                                <option value="researcher">Researcher</option>
+                                <option value="product">Product Manager</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
                     </form>
                     <div id="profileFeedback" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px;"></div>
                     <div class="button-group">
@@ -1150,6 +1165,13 @@
             }
             const bioEl = document.getElementById('bio');
             if (bioEl && user.bio != null) bioEl.value = user.bio;
+            const companyEl = document.getElementById('company');
+            if (companyEl && user.company != null) companyEl.value = user.company;
+            const roleEl = document.getElementById('role');
+            if (roleEl && user.role) {
+                const opt = roleEl.querySelector(`option[value="${user.role}"]`);
+                if (opt) roleEl.value = user.role;
+            }
         }
 
         async function loadUserProfile() {
@@ -1371,9 +1393,13 @@
             const lastName = document.getElementById('lastName').value.trim();
             const name = [firstName, lastName].filter(Boolean).join(' ');
             if (!name) { showFeedback('profileFeedback', 'Please enter your name.', true); return; }
-            const bioVal = document.getElementById('bio')?.value?.trim() ?? undefined;
+            const bioVal = document.getElementById('bio')?.value?.trim();
+            const companyVal = document.getElementById('company')?.value?.trim();
+            const roleVal = document.getElementById('role')?.value;
             const payload = { name };
-            if (bioVal !== undefined) payload.bio = bioVal || null;
+            payload.bio = bioVal || null;
+            payload.company = companyVal || null;
+            payload.role = roleVal || null;
             btn.disabled = true; btn.textContent = 'Saving...';
             try {
                 const updated = await api.updateCurrentUser(payload);

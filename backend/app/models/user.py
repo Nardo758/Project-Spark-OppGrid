@@ -29,6 +29,8 @@ class User(Base):
     hashed_password = Column(String(255), nullable=True)  # Nullable for OAuth users
     name = Column(String(255), nullable=False)
     bio = Column(Text, nullable=True)
+    company = Column(String(255), nullable=True)
+    role = Column(String(100), nullable=True)
     avatar_url = Column(String(500), nullable=True)
 
     # OAuth

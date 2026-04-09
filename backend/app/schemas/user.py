@@ -24,6 +24,8 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     bio: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[str] = None
     avatar_url: Optional[str] = None
 
 
@@ -35,6 +37,9 @@ class UserLogin(BaseModel):
 class User(UserBase):
     id: int
     avatar_url: Optional[str] = None
+    bio: Optional[str] = None
+    company: Optional[str] = None
+    role: Optional[str] = None
     impact_points: int = 0
     badges: Optional[List[BadgeInfo]] = Field(default_factory=list)
     validation_count: int = 0
