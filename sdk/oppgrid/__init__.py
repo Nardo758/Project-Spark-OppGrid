@@ -8,7 +8,7 @@ Usage:
     client = OppGrid(api_key="og_live_...")
     result = client.opportunities.list(category="fintech", min_score=80)
     for opp in result["data"]:
-        print(f"{opp.title} (Score: {opp.signal_quality_score})")
+        print(f"{opp.title} (Score: {opp.ai_opportunity_score})")
 """
 
 import requests
@@ -255,6 +255,10 @@ class TrendsResource:
         params: Dict[str, Any] = {"page": page, "limit": limit}
         if category is not None:
             params["category"] = category
+        if region is not None:
+            params["region"] = region
+        if days is not None:
+            params["days"] = days
         # min_strength wins; fall back to min_velocity alias
         effective_strength = min_strength if min_strength is not None else (
             int(min_velocity) if min_velocity is not None else None
