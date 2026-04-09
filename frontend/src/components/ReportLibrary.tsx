@@ -584,6 +584,183 @@ export default function ReportLibrary({
     }
   }
 
+  const handlePrint = () => {
+    if (!viewingReport || !viewingReport.content) return
+    const reportType = (viewingReport.report_type || '').replace(/_/g, ' ').toUpperCase()
+    const title = viewingReport.title || reportType
+    const generatedDate = viewingReport.created_at && !isNaN(new Date(viewingReport.created_at).getTime())
+      ? new Date(viewingReport.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      : new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+    let reportContent = viewingReport.content
+    try {
+      const parsed = JSON.parse(reportContent)
+      const parts: string[] = []
+      if (parsed.verdict_summary) parts.push(`<h2>Recommendation</h2><p>${parsed.verdict_summary}</p>`)
+      if (parsed.verdict_detail) parts.push(`<p>${parsed.verdict_detail}</p>`)
+      if (parsed.viability_report?.summary) parts.push(`<h2>Analysis</h2><p>${parsed.viability_report.summary}</p>`)
+      if (parsed.advantages?.length) parts.push(`<h2>Advantages</h2><ul>${parsed.advantages.map((a: string) => `<li>${a}</li>`).join('')}</ul>`)
+      if (parsed.risks?.length) parts.push(`<h2>Risks</h2><ul>${parsed.risks.map((r: string) => `<li>${r}</li>`).join('')}</ul>`)
+      if (parts.length > 0) {
+        reportContent = parts.join('')
+      } else {
+        reportContent = `<pre>${JSON.stringify(parsed, null, 2)}</pre>`
+      }
+    } catch {
+      if (!reportContent.trim().startsWith('<')) {
+        reportContent = reportContent
+          .split(/\n(?=#{1,3}\s)/)
+          .map(section => {
+            const lines = section.trim().split('\n')
+            const heading = lines[0].replace(/^#+\s*/, '')
+            const body = lines.slice(1).join('\n').trim()
+            return `<h2>${heading}</h2><p>${body}</p>`
+          })
+          .join('')
+      }
+    }
+
+    const w = window.open('', '_blank')
+    if (!w) return
+    w.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${title} - ${reportType}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          html, body { height: auto !important; overflow: visible !important; }
+          body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 10.5pt;
+            line-height: 1.65;
+            color: #334155;
+            padding: 0.75in 0.85in;
+            max-width: 9in;
+            margin: 0 auto;
+          }
+          .accent-bar {
+            background-color: #10B981;
+            height: 5px;
+            margin: -0.75in -0.85in 0 -0.85in;
+          }
+          .masthead {
+            padding: 20px 0 16px 0;
+            border-bottom: 1px solid #E2E8F0;
+            margin-bottom: 20px;
+            line-height: 1;
+          }
+          .wordmark {
+            display: block;
+            font-size: 17pt;
+            font-weight: bold;
+            color: #0F172A;
+            letter-spacing: -0.3px;
+            margin: 0;
+            padding: 0;
+            line-height: 1;
+          }
+          .tagline {
+            display: block;
+            font-size: 8pt;
+            color: #64748B;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            margin: 0;
+            padding: 0;
+            line-height: 1;
+          }
+          .report-type-badge {
+            font-size: 8.5pt;
+            font-weight: bold;
+            color: #10B981;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+          }
+          .report-title {
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 22pt;
+            font-weight: normal;
+            color: #0F172A;
+            line-height: 1.2;
+            margin-bottom: 4px;
+          }
+          .meta-row {
+            margin-top: 14px;
+            padding: 8px 0;
+            border-top: 1px solid #F1F5F9;
+            border-bottom: 1px solid #F1F5F9;
+            margin-bottom: 24px;
+            font-size: 9pt;
+            color: #64748B;
+          }
+          h1, h2, h3, h4, h5, h6 { page-break-after: avoid; break-after: avoid; }
+          h1 {
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 15pt;
+            font-weight: normal;
+            color: #0F172A;
+            border-bottom: 2.5px solid #10B981;
+            padding-bottom: 5px;
+            margin-top: 28px;
+            margin-bottom: 12px;
+          }
+          h2 { font-size: 12pt; font-weight: bold; color: #0F172A; margin-top: 20px; margin-bottom: 8px; }
+          h3 { font-size: 11pt; font-weight: bold; color: #1E293B; margin-top: 16px; margin-bottom: 6px; }
+          p { margin: 6px 0; line-height: 1.65; color: #334155; orphans: 3; widows: 3; }
+          ul, ol { margin: 6px 0; padding-left: 22px; page-break-inside: avoid; break-inside: avoid; }
+          li { margin-bottom: 3px; color: #334155; }
+          strong, b { color: #0F172A; }
+          table { width: 100%; border-collapse: collapse; page-break-inside: avoid; margin: 12px 0; font-size: 9.5pt; }
+          th { background-color: #0F172A; color: white; font-weight: 500; padding: 7px 10px; text-align: left; border: none; }
+          td { padding: 6px 10px; border-bottom: 1px solid #F1F5F9; color: #334155; }
+          tr:nth-child(even) td { background-color: #F8FAFC; }
+          blockquote {
+            border-left: 3px solid #10B981;
+            margin: 12px 0;
+            padding: 8px 16px;
+            background-color: #ECFDF5;
+            font-style: italic;
+            color: #334155;
+          }
+          .print-footer {
+            margin-top: 40px;
+            padding-top: 12px;
+            border-top: 1px solid #E2E8F0;
+            font-size: 7.5pt;
+            color: #94A3B8;
+            display: flex;
+            justify-content: space-between;
+          }
+          @media print {
+            body { padding: 0; }
+            .accent-bar { margin: 0; }
+            @page { margin: 0.5in; size: letter; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="accent-bar"></div>
+        <div class="masthead">
+          <span class="wordmark">OppGrid</span>
+          <span class="tagline">Opportunity Intelligence</span>
+        </div>
+        <div class="report-type-badge">${reportType}</div>
+        <div class="report-title">${title}</div>
+        <div class="meta-row">Generated ${generatedDate} &nbsp;&bull;&nbsp; oppgrid.com</div>
+        ${reportContent}
+        <div class="print-footer">
+          <span>Confidential &mdash; Prepared by OppGrid AI</span>
+          <span>oppgrid.com</span>
+        </div>
+      </body>
+      </html>
+    `)
+    w.document.close()
+    w.print()
+  }
+
   const allReports = REPORT_CATEGORIES.flatMap(cat => cat.reports)
   const selectedSidebarReport = allReports.find(r => r.slug === sidebarReport)
 
@@ -1726,7 +1903,7 @@ export default function ReportLibrary({
                       {exportingFormat === 'docx' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} Word
                     </button>
                     <button
-                      onClick={() => window.print()}
+                      onClick={handlePrint}
                       className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-700 flex items-center gap-1.5 hover:bg-gray-50 hover:border-gray-300 transition-all"
                     >
                       <Printer className="w-3.5 h-3.5" /> Print
