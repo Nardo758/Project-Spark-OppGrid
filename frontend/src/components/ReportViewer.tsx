@@ -198,44 +198,136 @@ export default function ReportViewer({
         <head>
           <title>${opportunityTitle} - ${layerConfig[selectedLayer].title}</title>
           <style>
-            * { box-sizing: border-box; }
-            html, body { height: auto !important; overflow: visible !important; margin: 0; padding: 0; }
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            html, body { height: auto !important; overflow: visible !important; }
             body {
-              font-family: system-ui, -apple-system, sans-serif;
-              padding: 40px; max-width: 900px; margin: 0 auto; line-height: 1.6;
+              font-family: Helvetica, Arial, sans-serif;
+              font-size: 10.5pt;
+              line-height: 1.65;
+              color: #334155;
+              padding: 0.75in 0.85in;
+              max-width: 9in;
+              margin: 0 auto;
             }
-            .print-header {
-              background: #7c3aed; color: white; padding: 20px 28px;
-              margin: -40px -40px 32px -40px;
+            .accent-bar {
+              background-color: #10B981;
+              height: 5px;
+              margin: -0.75in -0.85in 0 -0.85in;
             }
-            .print-header h1 { color: white; font-size: 24px; margin: 0 0 4px 0; border: none; padding: 0; }
-            .print-header .meta { color: rgba(255,255,255,0.8); font-size: 12px; margin-top: 8px; }
-            h1, h2, h3, h4, h5, h6 { color: #1a1a1a; page-break-after: avoid; break-after: avoid; }
-            h1 { border-bottom: 2px solid #7c3aed; padding-bottom: 10px; margin-top: 0; }
-            h2 { color: #7c3aed; margin-top: 30px; }
-            h3 { margin-top: 24px; }
-            p { line-height: 1.7; color: #374151; orphans: 3; widows: 3; }
-            ul, ol { color: #374151; page-break-inside: avoid; break-inside: avoid; }
-            li { margin-bottom: 4px; }
-            table { width: 100%; border-collapse: collapse; page-break-inside: avoid; margin: 16px 0; }
-            th, td { border: 1px solid #d1d5db; padding: 8px 12px; text-align: left; }
-            th { background-color: #f3f4f6; font-weight: 600; }
-            .print-footer { text-align: center; font-size: 10px; color: #9ca3af; margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; }
+            .masthead {
+              padding: 20px 0 16px 0;
+              border-bottom: 1px solid #E2E8F0;
+              margin-bottom: 20px;
+            }
+            .wordmark {
+              font-size: 17pt;
+              font-weight: bold;
+              color: #0F172A;
+              letter-spacing: -0.3px;
+            }
+            .tagline {
+              font-size: 8pt;
+              color: #64748B;
+              letter-spacing: 1.5px;
+              text-transform: uppercase;
+              margin-top: 2px;
+            }
+            .report-type-badge {
+              font-size: 8.5pt;
+              font-weight: bold;
+              color: #10B981;
+              letter-spacing: 2px;
+              text-transform: uppercase;
+              margin-bottom: 6px;
+            }
+            .report-title {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 22pt;
+              font-weight: normal;
+              color: #0F172A;
+              line-height: 1.2;
+              margin-bottom: 4px;
+            }
+            .meta-row {
+              margin-top: 14px;
+              padding: 8px 0;
+              border-top: 1px solid #F1F5F9;
+              border-bottom: 1px solid #F1F5F9;
+              margin-bottom: 24px;
+              font-size: 9pt;
+              color: #64748B;
+            }
+            h1, h2, h3, h4, h5, h6 { page-break-after: avoid; break-after: avoid; }
+            h1 {
+              font-family: Georgia, 'Times New Roman', serif;
+              font-size: 15pt;
+              font-weight: normal;
+              color: #0F172A;
+              border-bottom: 2.5px solid #10B981;
+              padding-bottom: 5px;
+              margin-top: 28px;
+              margin-bottom: 12px;
+            }
+            h2 {
+              font-size: 12pt;
+              font-weight: bold;
+              color: #0F172A;
+              margin-top: 20px;
+              margin-bottom: 8px;
+            }
+            h3 {
+              font-size: 11pt;
+              font-weight: bold;
+              color: #1E293B;
+              margin-top: 16px;
+              margin-bottom: 6px;
+            }
+            p { margin: 6px 0; line-height: 1.65; color: #334155; orphans: 3; widows: 3; }
+            ul, ol { margin: 6px 0; padding-left: 22px; page-break-inside: avoid; break-inside: avoid; }
+            li { margin-bottom: 3px; color: #334155; }
+            strong, b { color: #0F172A; }
+            table { width: 100%; border-collapse: collapse; page-break-inside: avoid; margin: 12px 0; font-size: 9.5pt; }
+            th { background-color: #0F172A; color: white; font-weight: 500; padding: 7px 10px; text-align: left; border: none; }
+            td { padding: 6px 10px; border-bottom: 1px solid #F1F5F9; color: #334155; }
+            tr:nth-child(even) td { background-color: #F8FAFC; }
+            blockquote {
+              border-left: 3px solid #10B981;
+              margin: 12px 0;
+              padding: 8px 16px;
+              background-color: #ECFDF5;
+              font-style: italic;
+              color: #334155;
+            }
+            .print-footer {
+              margin-top: 40px;
+              padding-top: 12px;
+              border-top: 1px solid #E2E8F0;
+              font-size: 7.5pt;
+              color: #94A3B8;
+              display: flex;
+              justify-content: space-between;
+            }
             @media print {
               body { padding: 0; }
-              .print-header { margin: 0 0 24px 0; }
+              .accent-bar { margin: 0; }
               @page { margin: 0.5in; size: letter; }
             }
           </style>
         </head>
         <body>
-          <div class="print-header">
-            <h1>OppGrid</h1>
-            <div style="font-size: 16px;">${opportunityTitle}</div>
-            <div class="meta">${layerConfig[selectedLayer].title} &bull; Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+          <div class="accent-bar"></div>
+          <div class="masthead">
+            <div class="wordmark">OppGrid</div>
+            <div class="tagline">Opportunity Intelligence</div>
           </div>
+          <div class="report-type-badge">${layerConfig[selectedLayer].title}</div>
+          <div class="report-title">${opportunityTitle}</div>
+          <div class="meta-row">Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} &nbsp;&bull;&nbsp; oppgrid.com</div>
           ${reportContent}
-          <div class="print-footer">OppGrid &mdash; AI-Powered Opportunity Intelligence &mdash; oppgrid.com</div>
+          <div class="print-footer">
+            <span>Confidential &mdash; Prepared by OppGrid AI</span>
+            <span>oppgrid.com</span>
+          </div>
         </body>
         </html>
       `)
