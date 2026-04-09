@@ -96,6 +96,9 @@ def _branded_html_wrapper(content: str, title: str, report_type: str, generated_
     font-weight: bold;
     color: {NAVY};
     letter-spacing: -0.3px;
+    display: block;
+    margin: 0;
+    padding: 0;
   }}
   .masthead .tagline {{
     font-family: Helvetica, Arial, sans-serif;
@@ -103,7 +106,9 @@ def _branded_html_wrapper(content: str, title: str, report_type: str, generated_
     color: {SLATE_500};
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    margin-top: 2px;
+    display: block;
+    margin: 2px 0 0 0;
+    padding: 0;
   }}
 
   /* ── Title block ── */
@@ -240,8 +245,8 @@ def _branded_html_wrapper(content: str, title: str, report_type: str, generated_
 
   <!-- Masthead -->
   <div class="masthead">
-    <div class="wordmark">OppGrid</div>
-    <div class="tagline">Opportunity Intelligence</div>
+    <span class="wordmark">OppGrid</span><br/>
+    <span class="tagline">Opportunity Intelligence</span>
   </div>
 
   <!-- Title block -->
