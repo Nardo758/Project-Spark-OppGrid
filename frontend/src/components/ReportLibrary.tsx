@@ -717,6 +717,11 @@ export default function ReportLibrary({
             >
               {purchaseLoading || generatingReport ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><ShoppingCart className="w-4 h-4" /> Get Report</>}
             </button>
+            {isGuest && (
+              <Link to="/register" className="block text-center text-[11px] text-[#185FA5] hover:underline">
+                Create free account (save 20%) →
+              </Link>
+            )}
           </>
         )}
 
@@ -1143,9 +1148,15 @@ export default function ReportLibrary({
                             ))}
                           </select>
                         </div>
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-gray-500">Your price</span>
-                          <span className="text-[#0F6E56] font-bold">use 1 credit</span>
+                        <div className="bg-gray-50 rounded-lg p-2.5 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-gray-500">Report value</span>
+                            <span className="line-through text-gray-300">${(cs.base_price_cents / 100).toFixed(0)}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="text-gray-700 font-semibold">Your price</span>
+                            <span className="text-[#0F6E56] font-bold">$0 (included)</span>
+                          </div>
                         </div>
                         {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
                         <button
