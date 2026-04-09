@@ -2031,6 +2031,8 @@
                         <thead>
                             <tr>
                                 <th>User</th>
+                                <th>Billing Month</th>
+                                <th>Included Cap</th>
                                 <th>Included Used</th>
                                 <th>Overage Count</th>
                                 <th>Overage Total</th>
@@ -2039,7 +2041,7 @@
                             </tr>
                         </thead>
                         <tbody id="opp-access-summary-body">
-                            <tr><td colspan="6" class="loading">Loading...</td></tr>
+                            <tr><td colspan="8" class="loading">Loading...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -5557,11 +5559,16 @@
                                 <div>
                                     <label>Min Tier</label>
                                     <select name="min_tier" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
-                                        <optgroup label="Platform">
+                                        <optgroup label="Platform (v2.1)">
                                             <option value="explorer">Explorer</option>
                                             <option value="builder">Builder</option>
                                             <option value="scaler">Scaler</option>
                                             <option value="enterprise">Enterprise</option>
+                                        </optgroup>
+                                        <optgroup label="API-Only (v2.1)">
+                                            <option value="api_starter">API Starter</option>
+                                            <option value="api_professional">API Professional</option>
+                                            <option value="api_enterprise">API Enterprise</option>
                                         </optgroup>
                                         <optgroup label="Legacy">
                                             <option value="free">Free (legacy)</option>
@@ -5658,11 +5665,16 @@
                                 <div>
                                     <label>Min Tier</label>
                                     <select name="min_tier" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
-                                        <optgroup label="Platform">
+                                        <optgroup label="Platform (v2.1)">
                                             <option value="explorer" ${model.min_tier === 'explorer' ? 'selected' : ''}>Explorer</option>
                                             <option value="builder" ${model.min_tier === 'builder' ? 'selected' : ''}>Builder</option>
                                             <option value="scaler" ${model.min_tier === 'scaler' ? 'selected' : ''}>Scaler</option>
                                             <option value="enterprise" ${model.min_tier === 'enterprise' ? 'selected' : ''}>Enterprise</option>
+                                        </optgroup>
+                                        <optgroup label="API-Only (v2.1)">
+                                            <option value="api_starter" ${model.min_tier === 'api_starter' ? 'selected' : ''}>API Starter</option>
+                                            <option value="api_professional" ${model.min_tier === 'api_professional' ? 'selected' : ''}>API Professional</option>
+                                            <option value="api_enterprise" ${model.min_tier === 'api_enterprise' ? 'selected' : ''}>API Enterprise</option>
                                         </optgroup>
                                         <optgroup label="Legacy">
                                             <option value="free" ${model.min_tier === 'free' ? 'selected' : ''}>Free (legacy)</option>
@@ -5919,14 +5931,22 @@
                 const items = data.items || [];
 
                 if (items.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No opportunity access records found for this period.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No opportunity access records found for this period.</td></tr>';
                     return;
                 }
 
-                tbody.innerHTML = items.map(row => `
+                tbody.innerHTML = items.map(row => {
+                    const billingMonthDisplay = row.billing_month ? row.billing_month.substring(0, 7) : '—';
+                    const capDisplay = row.included_cap === 0 ? '0 (Explorer)' : row.included_cap;
+                    const usageBar = row.included_cap > 0
+                        ? `<small style="color:var(--stone-500)"> (${Math.min(100, Math.round(row.included_used / row.included_cap * 100))}%)</small>`
+                        : '';
+                    return `
                     <tr>
                         <td>${escapeHtml(row.email)}</td>
-                        <td>${row.included_used}</td>
+                        <td>${billingMonthDisplay}</td>
+                        <td>${capDisplay}</td>
+                        <td>${row.included_used}${usageBar}</td>
                         <td>${row.overage_count}</td>
                         <td>$${row.overage_total.toFixed(2)}</td>
                         <td>${row.total_accessed}</td>
@@ -5935,11 +5955,11 @@
                                 <button class="btn-sm btn-secondary" onclick="viewOppAccessDetails(${row.user_id}, '${escapeHtml(row.email)}', '${monthInput ? monthInput + '-01' : ''}')">View Details</button>
                             </div>
                         </td>
-                    </tr>
-                `).join('');
+                    </tr>`;
+                }).join('');
             } catch (error) {
                 console.error('Failed to load opportunity access summary:', error);
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load data.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load data.</td></tr>';
             }
         }
 

@@ -2856,6 +2856,8 @@ def get_opportunity_access_summary(
 ):
     """Per-user monthly opportunity usage aggregate, ordered by overage_total descending."""
     from app.models.opportunity_access import OpportunityAccess
+    from app.models.subscription import Subscription
+    from app.models.tier_config import TierConfig
     from datetime import date as date_type
     from sqlalchemy import case
 
@@ -2893,20 +2895,35 @@ def get_opportunity_access_summary(
 
     rows = q.order_by(desc(overage_total_col)).offset(skip).limit(limit).all()
 
+    # Build user_id -> subscription tier map for included_cap lookup
+    user_ids = [r.user_id for r in rows]
+    subs = {}
+    if user_ids:
+        sub_rows = db.query(Subscription.user_id, Subscription.tier).filter(
+            Subscription.user_id.in_(user_ids)
+        ).all()
+        subs = {s.user_id: s.tier for s in sub_rows}
+
+    items = []
+    for r in rows:
+        tier_val = subs.get(r.user_id)
+        tier_str = tier_val.value if tier_val and hasattr(tier_val, 'value') else (tier_val or "explorer")
+        included_cap = TierConfig.get_monthly_cap(tier_str)
+        items.append({
+            "user_id": r.user_id,
+            "email": r.email,
+            "billing_month": billing_month.isoformat(),
+            "included_cap": included_cap,
+            "included_used": r.included_used,
+            "overage_count": r.overage_count,
+            "overage_total": float(r.overage_total),
+            "total_accessed": r.total_accessed,
+        })
+
     return {
         "billing_month": billing_month.isoformat(),
         "total": total,
-        "items": [
-            {
-                "user_id": r.user_id,
-                "email": r.email,
-                "included_used": r.included_used,
-                "overage_count": r.overage_count,
-                "overage_total": float(r.overage_total),
-                "total_accessed": r.total_accessed,
-            }
-            for r in rows
-        ],
+        "items": items,
     }
 
 
