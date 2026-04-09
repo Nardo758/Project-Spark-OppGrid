@@ -167,7 +167,38 @@ async def handle_stripe_webhook(
     except stripe.error.SignatureVerificationError as e:
         logger.error(f"Invalid signature: {e}")
         raise HTTPException(status_code=400, detail="Invalid signature")
-    
+
+    from sqlalchemy.exc import IntegrityError as _IntegrityError
+    from app.models.stripe_event import StripeWebhookEvent, StripeWebhookEventStatus
+
+    event_id = event.get("id")
+    if event_id:
+        existing_event = db.query(StripeWebhookEvent).filter(
+            StripeWebhookEvent.stripe_event_id == event_id
+        ).first()
+        if existing_event and existing_event.status == StripeWebhookEventStatus.PROCESSED:
+            logger.info(f"Checkout webhook: duplicate event {event_id}, skipping")
+            return {"status": "already_processed"}
+
+        if not existing_event:
+            db.add(
+                StripeWebhookEvent(
+                    stripe_event_id=event_id,
+                    event_type=event.get("type", ""),
+                    livemode=bool(event.get("livemode", False)),
+                    status=StripeWebhookEventStatus.PROCESSING,
+                )
+            )
+        else:
+            existing_event.status = StripeWebhookEventStatus.PROCESSING
+            existing_event.attempt_count = (existing_event.attempt_count or 0) + 1
+
+        try:
+            db.commit()
+        except _IntegrityError:
+            db.rollback()
+            return {"status": "already_processed"}
+
     # Handle checkout.session.completed
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
@@ -176,10 +207,19 @@ async def handle_stripe_webhook(
             await process_payment_success(session, db)
         except Exception as e:
             logger.error(f"Error processing payment: {e}")
-            # Stripe expects 200 OK even if we fail (to avoid retries)
-            # But log it for manual review
             return {"status": "error", "message": str(e)}
-    
+
+    if event_id:
+        try:
+            evt = db.query(StripeWebhookEvent).filter(
+                StripeWebhookEvent.stripe_event_id == event_id
+            ).first()
+            if evt:
+                evt.status = StripeWebhookEventStatus.PROCESSED
+                db.commit()
+        except Exception:
+            pass
+
     return {"status": "success"}
 
 

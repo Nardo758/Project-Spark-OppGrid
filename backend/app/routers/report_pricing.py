@@ -1576,7 +1576,7 @@ async def generate_free_report(
             )
         free_check = {"is_free": True, "reason": "guest_free_report"}
     else:
-        free_check = report_usage_service.check_free_available(current_user, db)
+        free_check = report_usage_service.atomic_reserve_free_report(current_user, db)
         if not free_check["is_free"]:
             raise HTTPException(
                 status_code=402,
@@ -1585,6 +1585,8 @@ async def generate_free_report(
 
     if request_data.report_type not in REPORT_PRODUCTS:
         raise HTTPException(status_code=400, detail=f"Invalid report type: {request_data.report_type}")
+
+    reservation_used = current_user is not None and free_check.get("reserved", False)
 
     opportunity = None
     title_suffix = request_data.idea_description or "General Analysis"
@@ -1775,9 +1777,6 @@ Do NOT include <html>, <head>, or <body> tags - just the content HTML.
         report.generation_time_ms = generation_time_ms
         report.confidence_score = 85
 
-        if current_user:
-            report_usage_service.increment_usage(current_user.id, db)
-
         db.commit()
         db.refresh(report)
 
@@ -1785,6 +1784,11 @@ Do NOT include <html>, <head>, or <body> tags - just the content HTML.
         logger.error(f"Free report generation failed: {e}")
         report.status = ReportStatus.FAILED
         report.error_message = str(e)
+        if reservation_used:
+            try:
+                report_usage_service.release_free_report_reservation(current_user.id, db)
+            except Exception as release_err:
+                logger.warning(f"Failed to release free report reservation for user {current_user.id}: {release_err}")
         db.commit()
         raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
 

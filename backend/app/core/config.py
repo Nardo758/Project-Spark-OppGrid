@@ -37,9 +37,11 @@ class Settings(BaseSettings):
     AI_ANALYSIS_JOB_ENABLED: bool = True
     AI_ANALYSIS_BATCH_SIZE: int = 20
 
-    # Stripe subscription reconciliation (defense-in-depth for missed webhooks)
-    STRIPE_RECONCILE_JOB_ENABLED: bool = False
-    STRIPE_RECONCILE_JOB_INTERVAL_SECONDS: int = 21600  # 6 hours
+    # Stripe subscription reconciliation (defense-in-depth for missed webhooks).
+    # Set STRIPE_RECONCILE_JOB_ENABLED=false to disable (e.g. during local dev without Stripe keys).
+    # STRIPE_RECONCILE_JOB_INTERVAL_SECONDS controls how often subscriptions are re-synced from Stripe.
+    STRIPE_RECONCILE_JOB_ENABLED: bool = True
+    STRIPE_RECONCILE_JOB_INTERVAL_SECONDS: int = 3600  # 1 hour
 
     # Email Configuration (Resend)
     RESEND_API_KEY: Optional[str] = None

@@ -139,7 +139,8 @@ async def stripe_webhook(
             db.commit()
         except IntegrityError:
             db.rollback()
-    
+            return {"status": "already_processed", "event_type": event_type}
+
     try:
         if event_type == "payment_intent.succeeded":
             handle_payment_intent_succeeded(event_object, db)
@@ -413,12 +414,29 @@ def handle_checkout_completed(session: dict, db: Session):
 def _handle_slot_purchase(session: dict, user: User, db: Session):
     """Handle slot purchase completion."""
     from app.services.slot_service import slot_service
-    
+    from app.models.slot_purchase import SlotPurchase
+
+    session_id = session.get("id", "")
     metadata = session.get("metadata", {})
     quantity = int(metadata.get("quantity", 1))
-    
+
+    existing = db.query(SlotPurchase).filter(
+        SlotPurchase.stripe_session_id == session_id
+    ).first()
+    if existing:
+        logger.info(f"Slot purchase {session_id} already fulfilled, skipping")
+        return
+
     logger.info(f"Processing slot purchase for user {user.id}: {quantity} slots")
-    
+
+    slot_purchase = SlotPurchase(
+        stripe_session_id=session_id,
+        user_id=user.id,
+        slots=quantity,
+    )
+    db.add(slot_purchase)
+    db.flush()
+
     balance = slot_service.add_bonus_slots(user, quantity, db)
     
     tx = Transaction(

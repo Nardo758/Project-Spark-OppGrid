@@ -3,6 +3,7 @@ Report Usage Service
 Tracks and manages monthly report usage per user tier
 """
 from datetime import datetime
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -104,6 +105,79 @@ def check_free_report_available(user: User, db: Session) -> dict:
     }
 
 
+def atomic_reserve_free_report(user: User, db: Session) -> dict:
+    """
+    Atomically check and reserve a free report credit using SELECT FOR UPDATE.
+
+    Uses a PostgreSQL upsert to ensure the usage row exists, then locks it
+    with FOR UPDATE before incrementing. This prevents two simultaneous
+    requests from both passing the credit check (TOCTOU race condition).
+
+    Returns {"is_free": True, "reserved": True}  when a credit is consumed.
+    Returns {"is_free": True, "reserved": False} for unlimited-tier users.
+    Returns {"is_free": False} when the allocation is exhausted.
+
+    If the downstream AI generation fails, call release_free_report_reservation
+    to undo the credit deduction.
+    """
+    tier = get_user_tier(user, db)
+    free_reports_allocation = get_tier_free_reports(tier)
+
+    if free_reports_allocation == -1:
+        return {"reserved": False, "reason": "unlimited", "is_free": True}
+
+    year_month = get_current_year_month()
+
+    db.execute(
+        text(
+            "INSERT INTO monthly_report_usage (user_id, year_month, reports_used) "
+            "VALUES (:user_id, :year_month, 0) "
+            "ON CONFLICT (user_id, year_month) DO NOTHING"
+        ),
+        {"user_id": user.id, "year_month": year_month},
+    )
+
+    usage = (
+        db.query(MonthlyReportUsage)
+        .filter(
+            MonthlyReportUsage.user_id == user.id,
+            MonthlyReportUsage.year_month == year_month,
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if not usage or usage.reports_used >= free_reports_allocation:
+        return {"reserved": False, "reason": "allocation_exceeded", "is_free": False}
+
+    usage.reports_used += 1
+    db.commit()
+
+    return {"reserved": True, "reason": "within_allocation", "is_free": True}
+
+
+def release_free_report_reservation(user_id: int, db: Session) -> None:
+    """
+    Undo a credit previously reserved by atomic_reserve_free_report.
+
+    Called in the exception handler of generate_free_report when AI generation
+    fails after the credit was already incremented.  Idempotent — safe to call
+    even if the usage counter is already at zero.
+    """
+    year_month = get_current_year_month()
+    usage = (
+        db.query(MonthlyReportUsage)
+        .filter(
+            MonthlyReportUsage.user_id == user_id,
+            MonthlyReportUsage.year_month == year_month,
+        )
+        .with_for_update()
+        .first()
+    )
+    if usage and usage.reports_used > 0:
+        usage.reports_used -= 1
+
+
 def get_effective_price(base_price_cents: int, user: Optional[User], db: Session) -> dict:
     if not user:
         return {
@@ -142,6 +216,8 @@ report_usage_service = type('ReportUsageService', (), {
     'get_usage_status': staticmethod(get_report_usage_status),
     'increment_usage': staticmethod(increment_report_usage),
     'check_free_available': staticmethod(check_free_report_available),
+    'atomic_reserve_free_report': staticmethod(atomic_reserve_free_report),
+    'release_free_report_reservation': staticmethod(release_free_report_reservation),
     'get_effective_price': staticmethod(get_effective_price),
     'get_user_tier': staticmethod(get_user_tier),
 })()
