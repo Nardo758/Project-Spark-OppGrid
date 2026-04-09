@@ -413,6 +413,28 @@ def get_opportunity(
             },
         )
 
+    # Billing error (no payment method, Stripe failure, DB commit failure)
+    if result.get("billing_error"):
+        return JSONResponse(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            content={
+                "error": result["billing_error"],
+                "message": result.get("message", "Payment required."),
+                "overage_cost": result.get("overage_cost", 0.0),
+                "usage": result.get("usage", {}),
+            },
+        )
+
+    # Access denied for any other reason (should not happen in practice)
+    if not result.get("allowed"):
+        return JSONResponse(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            content={
+                "error": "access_denied",
+                "message": "Access to this opportunity was denied.",
+            },
+        )
+
     # Stash access result for the response middleware (monthly headers)
     request.state.monthly_usage = svc.get_usage(
         db, api_key.user_id, api_key.tier

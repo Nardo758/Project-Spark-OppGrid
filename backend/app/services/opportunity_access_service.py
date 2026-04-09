@@ -176,45 +176,75 @@ class OpportunityAccessService:
         )
         db.add(access)
 
-        # ---- 5. Stripe overage invoice item ------------------------------
-        stripe_item_id = None
-        stripe_billing_failed = False
-
+        # ---- 5. Stripe overage invoice item ----------------------------------
+        # BILLING CONTRACT: for overage access, a Stripe InvoiceItem MUST be
+        # created successfully before access is granted.  If billing fails,
+        # deny the request so no unbilled overage can accumulate.
         if overage_charged > 0:
             if not stripe_customer_id:
-                # No Stripe customer: overage granted but unbilled. Mark the
-                # record with a sentinel so it can be recovered later.
-                access.stripe_invoice_item_id = "PENDING_NO_CUSTOMER"
                 logger.error(
-                    "Overage granted without Stripe customer for user %s "
-                    "opportunity %s — no stripe_customer_id available",
+                    "Overage denied — no stripe_customer_id for user %s "
+                    "opportunity %s. User must add a payment method.",
                     user_id, opportunity_id,
                 )
-                stripe_billing_failed = True
-            else:
-                stripe_item_id = self._create_stripe_invoice_item(
-                    stripe_customer_id=stripe_customer_id,
-                    amount_usd=overage_charged,
-                    opportunity_id=opportunity_id,
-                )
-                if stripe_item_id:
-                    access.stripe_invoice_item_id = stripe_item_id
-                else:
-                    # Stripe call failed: mark for async recovery, log at ERROR.
-                    access.stripe_invoice_item_id = "PENDING_STRIPE_RETRY"
-                    stripe_billing_failed = True
-                    logger.error(
-                        "Stripe InvoiceItem creation FAILED for user %s "
-                        "opportunity %s (customer %s) — access granted, "
-                        "record marked PENDING_STRIPE_RETRY for recovery",
-                        user_id, opportunity_id, stripe_customer_id,
-                    )
+                return {
+                    "allowed": False,
+                    "requires_overage_confirmation": False,
+                    "billing_error": "no_payment_method",
+                    "message": (
+                        "A payment method is required to access additional "
+                        "opportunities. Please add a card in your account settings."
+                    ),
+                    "overage_cost": overage_charged,
+                    "usage": self.get_usage(db, user_id, tier),
+                }
 
+            stripe_item_id = self._create_stripe_invoice_item(
+                stripe_customer_id=stripe_customer_id,
+                amount_usd=overage_charged,
+                opportunity_id=opportunity_id,
+            )
+            if not stripe_item_id:
+                logger.error(
+                    "Overage denied — Stripe InvoiceItem creation FAILED for "
+                    "user %s opportunity %s (customer %s)",
+                    user_id, opportunity_id, stripe_customer_id,
+                )
+                return {
+                    "allowed": False,
+                    "requires_overage_confirmation": False,
+                    "billing_error": "stripe_error",
+                    "message": (
+                        "Unable to process payment for this opportunity. "
+                        "Please try again or contact support."
+                    ),
+                    "overage_cost": overage_charged,
+                    "usage": self.get_usage(db, user_id, tier),
+                }
+
+            access.stripe_invoice_item_id = stripe_item_id
+
+        # ---- 6. Persist the access record ------------------------------------
+        # DB commit is required for durable usage accounting.  If it fails,
+        # deny access rather than grant an unrecorded slot (cap enforcement
+        # depends on these rows).
         try:
             db.commit()
         except Exception as exc:
-            logger.error("Failed to commit opportunity_access record: %s", exc)
+            logger.error(
+                "DB commit failed recording opportunity_access for user %s "
+                "opportunity %s — access denied: %s",
+                user_id, opportunity_id, exc,
+            )
             db.rollback()
+            return {
+                "allowed": False,
+                "requires_overage_confirmation": False,
+                "billing_error": "persistence_error",
+                "message": "Unable to record access. Please retry.",
+                "overage_cost": 0.0,
+                "usage": self.get_usage(db, user_id, tier),
+            }
 
         return {
             "allowed": True,
@@ -222,7 +252,6 @@ class OpportunityAccessService:
             "is_included": is_included,
             "charged": overage_charged,
             "remaining": max(0, cap - current_usage - 1),
-            "stripe_billing_failed": stripe_billing_failed,
         }
 
     # ------------------------------------------------------------------

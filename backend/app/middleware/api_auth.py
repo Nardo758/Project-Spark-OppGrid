@@ -43,6 +43,10 @@ async def get_authenticated_key(
     """
     Validate the ``X-API-Key`` header and enforce RPM + daily rate limits.
 
+    Stashes ``request.state.api_key`` *before* raising any 429 so that the
+    UsageTrackingMiddleware can inject the full v2.1 header set on error
+    responses too.
+
     On failure, raises APIAuthError which is converted to a canonical
     {"error": "...", "detail": "..."} JSON response by the v1_app exception handler.
     """
@@ -68,6 +72,18 @@ async def get_authenticated_key(
     rpm_ok, rpm_remaining = api_key_service.check_rate_limit(
         str(api_key.id), api_key.rate_limit_rpm
     )
+
+    # --- Daily quota check --------------------------------------------------
+    daily_ok, daily_remaining = api_key_service.check_daily_limit(
+        api_key.id, api_key.daily_limit, db
+    )
+
+    # Stash api_key for middleware BEFORE any 429 raise so the response
+    # middleware can inject the full v2.1 header set even on error responses.
+    request.state.api_key = api_key
+    request.state.rpm_remaining = max(0, rpm_remaining) if rpm_ok else 0
+    request.state.daily_remaining = max(0, daily_remaining) if daily_ok else 0
+
     if not rpm_ok:
         raise APIAuthError(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -80,26 +96,20 @@ async def get_authenticated_key(
             },
         )
 
-    # --- Daily quota check --------------------------------------------------
-    daily_ok, daily_remaining = api_key_service.check_daily_limit(
-        api_key.id, api_key.daily_limit, db
-    )
     if not daily_ok:
         raise APIAuthError(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             error="daily_limit_exceeded",
             detail="Daily request limit exceeded. Quota resets at midnight UTC.",
             extra_headers={
-                "X-RateLimit-Limit-Daily": str(api_key.daily_limit),
+                # v2.1 header names (spec-compliant)
+                "X-Daily-Limit": str(api_key.daily_limit),
+                "X-Daily-Remaining": "0",
+                # Backward-compat alias
                 "X-RateLimit-Remaining-Daily": "0",
                 "Retry-After": "86400",
             },
         )
-
-    # Stash for the response middleware (rate-limit headers & usage logging).
-    request.state.api_key = api_key
-    request.state.rpm_remaining = rpm_remaining
-    request.state.daily_remaining = daily_remaining
 
     return api_key
 
