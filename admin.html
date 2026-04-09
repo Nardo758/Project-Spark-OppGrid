@@ -5913,7 +5913,7 @@
         async function loadOpportunityAccessSummary() {
             const tbody = document.getElementById('opp-access-summary-body');
             if (!tbody) return;
-            tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="loading">Loading...</td></tr>';
 
             try {
                 const emailSearch = document.getElementById('opp-access-email-search')?.value?.trim() || '';
