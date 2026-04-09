@@ -39,13 +39,15 @@ TIER_BACKFILL = [
 def upgrade() -> None:
     conn = op.get_bind()
     for tier, rpm, daily in TIER_BACKFILL:
+        # Match case-insensitively to handle any legacy rows stored with
+        # mixed/uppercase tier names.
         conn.execute(
             sa.text(
                 """
                 UPDATE api_keys
                 SET rate_limit_rpm = :rpm,
                     daily_limit    = :daily
-                WHERE tier = :tier
+                WHERE LOWER(tier) = LOWER(:tier)
                 """
             ),
             {"rpm": rpm, "daily": daily, "tier": tier},

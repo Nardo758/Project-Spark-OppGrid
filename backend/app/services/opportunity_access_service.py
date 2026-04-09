@@ -187,6 +187,7 @@ class OpportunityAccessService:
                     "opportunity %s. User must add a payment method.",
                     user_id, opportunity_id,
                 )
+                db.rollback()
                 return {
                     "allowed": False,
                     "requires_overage_confirmation": False,
@@ -210,6 +211,7 @@ class OpportunityAccessService:
                     "user %s opportunity %s (customer %s)",
                     user_id, opportunity_id, stripe_customer_id,
                 )
+                db.rollback()
                 return {
                     "allowed": False,
                     "requires_overage_confirmation": False,
