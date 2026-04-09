@@ -102,3 +102,4 @@ stripe==14.1.0
 openai
 cachetools
 google-generativeai
+beautifulsoup4

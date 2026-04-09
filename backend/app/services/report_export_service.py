@@ -128,6 +128,32 @@ def _branded_html_wrapper(content: str, title: str, report_type: str, generated_
 </html>"""
 
 
+def _ensure_html(content: str) -> str:
+    """Convert plain-text report content to basic HTML if needed.
+
+    Older reports stored in the database may contain plain ASCII text with
+    box-drawing characters (═══, ───) rather than HTML.  xhtml2pdf cannot
+    parse those characters cleanly, so we detect plain-text content and
+    convert it before handing it to the PDF/DOCX generators.
+
+    If the content already contains HTML tags it is returned unchanged.
+    """
+    if "<" in content and ">" in content:
+        return content
+
+    _BORDER_ONLY = re.compile(r"^[\s═─━━╔╗╚╝║╠╣╦╩╪╫▀▄█▌▐░▒▓\-=_~*+|]+$")
+    lines = content.splitlines()
+    html_parts: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _BORDER_ONLY.match(stripped):
+            continue
+        html_parts.append(f"<p>{stripped}</p>")
+    return "\n".join(html_parts)
+
+
 def generate_pdf(
     html_content: str,
     title: str = "OppGrid Report",
@@ -149,6 +175,7 @@ def generate_pdf(
     if not generated_at:
         generated_at = datetime.utcnow().strftime("%B %d, %Y")
 
+    html_content = _ensure_html(html_content)
     full_html = _branded_html_wrapper(html_content, title, report_type, generated_at)
 
     buffer = io.BytesIO()
@@ -216,6 +243,7 @@ def generate_docx(
     if not generated_at:
         generated_at = datetime.utcnow().strftime("%B %d, %Y")
 
+    html_content = _ensure_html(html_content)
     doc = Document()
 
     # Page margins

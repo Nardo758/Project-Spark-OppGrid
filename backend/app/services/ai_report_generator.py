@@ -197,34 +197,13 @@ CRITICAL FORMATTING REQUIREMENTS - Follow these exactly:
         report_type: str,
         report_id: str = None
     ) -> str:
-        """Wrap report content with institutional formatting."""
-        from datetime import datetime
-        
-        now = datetime.utcnow()
-        timestamp = now.strftime("%Y-%m-%d %H:%M UTC")
-        date_formatted = now.strftime("%B %d, %Y")  # e.g., "March 30, 2026"
-        year = now.year
-        
-        # Generate report ID if not provided
-        if not report_id:
-            report_id = self._generate_report_id(report_type)
-        
-        # Create report type header with prominent date
-        report_header = f"""
-{self.COMPANY_HEADER}
-REPORT TYPE: {report_type.upper().replace('_', ' ')}
-DATE: {date_formatted}
-REPORT ID: {report_id}
-────────────────────────────────────────────────────────────────────────────────
-"""
-        
-        footer = self.DOCUMENT_FOOTER.format(
-            report_id=report_id,
-            timestamp=timestamp,
-            year=year
-        )
-        
-        return f"{report_header}\n{content}\n{footer}"
+        """Return report HTML content as-is.
+
+        Branding (cover header, footer) is handled by the PDF/DOCX export
+        wrapper in report_export_service.py so we must NOT add a second header
+        here.  We preserve the method signature for backwards compatibility.
+        """
+        return content
     
     @retry(
         stop=stop_after_attempt(3),
@@ -1032,66 +1011,46 @@ Target Audience: {opportunity.get('target_audience', '')}
         system = f"""You are a senior market research analyst at OppGrid creating institutional-grade market analysis reports.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
-Structure your report with these numbered sections:
+CRITICAL OUTPUT RULES:
+- Output ONLY valid HTML using tags like <h2>, <h3>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <strong>, <em>.
+- Do NOT output plain text, ASCII art, or border characters (═══, ───, etc.).
+- Do NOT include any title block, header section, report ID, date stamp, or branding at the top. The document wrapper handles all of that. Start immediately with the first section heading.
+- Do NOT wrap the output in <html>, <head>, or <body> tags.
 
-1. EXECUTIVE SUMMARY
-   ────────────────────
-   Key market findings and opportunity assessment (2-3 sentences).
+Structure your report with these HTML sections:
 
-2. INDUSTRY OVERVIEW
-   ────────────────────
-   • Market Definition & Scope
-   • Current Industry Size (with source methodology)
-   • Historical Growth Rate (CAGR)
-   • Key Market Drivers
-   • Industry Lifecycle Stage
+<h2>1. Executive Summary</h2>
+Key market findings and opportunity assessment (2-3 sentences).
 
-3. MARKET SIZING (TAM/SAM/SOM)
-   ────────────────────
-   • Total Addressable Market (TAM): $X
-   • Serviceable Addressable Market (SAM): $X
-   • Serviceable Obtainable Market (SOM): $X
-   • Methodology & Assumptions
+<h2>2. Industry Overview</h2>
+<ul>
+  <li>Market Definition &amp; Scope</li>
+  <li>Current Industry Size (with source methodology)</li>
+  <li>Historical Growth Rate (CAGR)</li>
+  <li>Key Market Drivers</li>
+  <li>Industry Lifecycle Stage</li>
+</ul>
 
-4. MARKET SEGMENTATION
-   ────────────────────
-   • Primary Customer Segments
-   • Segment Characteristics & Size
-   • Geographic Distribution
-   • Growth Potential by Segment
+<h2>3. Market Sizing (TAM/SAM/SOM)</h2>
+Use a table for TAM, SAM, SOM with dollar values and methodology notes.
 
-5. COMPETITIVE LANDSCAPE
-   ────────────────────
-   • Market Structure & Concentration
-   • Key Players & Estimated Market Share
-   • Competitive Positioning Map
-   • Barriers to Entry
+<h2>4. Market Segmentation</h2>
+Primary customer segments, characteristics, geographic distribution, growth potential.
 
-6. MARKET TRENDS & DYNAMICS
-   ────────────────────
-   • Current Trends Shaping the Industry
-   • Emerging Opportunities
-   • Potential Disruptions
-   • Technology Impact
+<h2>5. Competitive Landscape</h2>
+Market structure, key players &amp; estimated share, barriers to entry.
 
-7. CONSUMER ANALYSIS
-   ────────────────────
-   • Buyer Behavior Patterns
-   • Purchase Decision Factors
-   • Price Sensitivity Analysis
-   • Unmet Needs & Pain Points
+<h2>6. Market Trends &amp; Dynamics</h2>
+Current trends, emerging opportunities, disruptions, technology impact.
 
-8. MARKET FORECAST (3-5 Year)
-   ────────────────────
-   • Growth Projections with Scenarios
-   • Key Assumptions
-   • Risk Factors & Sensitivities
+<h2>7. Consumer Analysis</h2>
+Buyer behavior, purchase decision factors, price sensitivity, unmet needs.
 
-9. OPPORTUNITY ASSESSMENT
-   ────────────────────
-   • Market Attractiveness Score
-   • Entry Timing Recommendation
-   • Strategic Positioning Options
+<h2>8. Market Forecast (3-5 Year)</h2>
+Growth projections with scenarios, key assumptions, risk factors.
+
+<h2>9. Opportunity Assessment</h2>
+Market attractiveness score, entry timing recommendation, strategic positioning options.
 
 Include specific data points and statistics. Reference OppGrid analysis methodology.
 When consumer demand data is provided, incorporate it into the Consumer Analysis section to show real local demand patterns."""
