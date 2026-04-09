@@ -224,13 +224,13 @@ export default function ReportViewer({
               font-weight: bold;
               color: #0F172A;
               letter-spacing: -0.3px;
+              line-height: 1.2;
             }
             .tagline {
               font-size: 8pt;
               color: #64748B;
               letter-spacing: 1.5px;
               text-transform: uppercase;
-              margin-top: 2px;
             }
             .report-type-badge {
               font-size: 8.5pt;
@@ -317,8 +317,8 @@ export default function ReportViewer({
         <body>
           <div class="accent-bar"></div>
           <div class="masthead">
-            <div class="wordmark">OppGrid</div>
-            <div class="tagline">Opportunity Intelligence</div>
+            <span class="wordmark">OppGrid</span><br>
+            <span class="tagline">Opportunity Intelligence</span>
           </div>
           <div class="report-type-badge">${layerConfig[selectedLayer].title}</div>
           <div class="report-title">${opportunityTitle}</div>
