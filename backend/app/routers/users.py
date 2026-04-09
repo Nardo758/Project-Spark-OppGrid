@@ -134,8 +134,19 @@ def delete_current_user(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Permanently delete the current user's account and all associated data"""
-    db.delete(current_user)
+    """
+    Deactivate (soft-delete) the current user's account.
+    Sets is_active=False and clears sensitive fields.
+    The account cannot be logged into after this action.
+    """
+    import secrets
+    current_user.is_active = False
+    current_user.email = f"deleted_{current_user.id}_{secrets.token_hex(6)}@deleted.oppgrid"
+    current_user.hashed_password = None
+    current_user.otp_secret = None
+    current_user.otp_enabled = False
+    current_user.backup_codes = None
+    current_user.notification_preferences = None
     db.commit()
     return {"message": "Account deleted successfully."}
 
