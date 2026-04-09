@@ -74,7 +74,7 @@ async def get_authenticated_key(
     if not is_valid:
         raise APIAuthError(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            error="invalid_api_key",
+            error="missing_api_key",
             detail=error,
             extra_headers={"WWW-Authenticate": "ApiKey"},
         )

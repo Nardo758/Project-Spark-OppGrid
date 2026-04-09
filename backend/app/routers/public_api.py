@@ -17,7 +17,7 @@ from typing import Optional, List
 from fastapi import FastAPI, Depends, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -32,6 +32,15 @@ from app.models.detected_trend import DetectedTrend
 from app.middleware.api_auth import get_authenticated_key, require_scope, APIAuthError
 from app.middleware.usage_tracking import UsageTrackingMiddleware
 from app.services import api_key_service
+from app.schemas.v1_public import (
+    ApiOpportunityResponse,
+    PaginatedOpportunities,
+    ApiTrendResponse,
+    PaginatedTrends,
+    ApiMarketResponse,
+    PaginatedMarkets,
+    UsageStatsResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -157,79 +166,6 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
         },
         headers={"Retry-After": "60"},
     )
-
-
-# ---------------------------------------------------------------------------
-# Schemas
-# ---------------------------------------------------------------------------
-
-class ApiOpportunityResponse(BaseModel):
-    id: int
-    title: str
-    description: Optional[str] = None
-    category: Optional[str] = None
-    city: Optional[str] = None
-    region: Optional[str] = None
-    ai_opportunity_score: Optional[int] = None
-    ai_market_size_estimate: Optional[str] = None
-    ai_target_audience: Optional[str] = None
-    ai_competition_level: Optional[str] = None
-    growth_rate: Optional[float] = None
-    created_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
-class PaginatedOpportunities(BaseModel):
-    data: List[ApiOpportunityResponse]
-    total: int
-    page: int
-    limit: int
-    has_next: bool
-
-
-class ApiTrendResponse(BaseModel):
-    id: int
-    trend_name: str
-    trend_strength: int
-    category: Optional[str] = None
-    opportunities_count: int = 0
-    growth_rate: Optional[float] = None
-    detected_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
-class PaginatedTrends(BaseModel):
-    data: List[ApiTrendResponse]
-    total: int
-    page: int
-    limit: int
-    has_next: bool
-
-
-class ApiMarketResponse(BaseModel):
-    category: str
-    total_opportunities: int
-    avg_score: Optional[float] = None
-    top_regions: List[str] = Field(default_factory=list)
-
-
-class PaginatedMarkets(BaseModel):
-    data: List[ApiMarketResponse]
-    total: int
-
-
-class UsageStatsResponse(BaseModel):
-    api_key_name: str
-    tier: str
-    rate_limit_rpm: int
-    daily_limit: int
-    usage_today: int
-    usage_remaining_today: int
-    scopes: List[str]
 
 
 # ---------------------------------------------------------------------------
@@ -644,9 +580,15 @@ def get_usage_stats(
 # ---------------------------------------------------------------------------
 
 @v1_app.get("/", include_in_schema=False)
-def v1_root():
+@limiter.limit(dynamic_rate_limit)
+def v1_root(
+    request: Request,
+    api_key: APIKey = Depends(get_authenticated_key),
+):
     return {
         "api": "OppGrid Public API",
         "version": "1.0.0",
         "docs": "/v1/docs",
+        "tier": api_key.tier,
+        "scopes": api_key.scopes or [],
     }
