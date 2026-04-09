@@ -5952,11 +5952,25 @@
                         <td>${row.total_accessed}</td>
                         <td>
                             <div class="action-btns">
-                                <button class="btn-sm btn-secondary" onclick="viewOppAccessDetails(${row.user_id}, '${escapeHtml(row.email)}', '${monthInput ? monthInput + '-01' : ''}')">View Details</button>
+                                <button class="btn-sm btn-secondary opp-access-detail-btn"
+                                    data-user-id="${row.user_id}"
+                                    data-email="${escapeHtml(row.email)}"
+                                    data-billing-month="${escapeHtml(row.billing_month || '')}">View Details</button>
                             </div>
                         </td>
                     </tr>`;
                 }).join('');
+
+                // Attach delegated event listeners (avoids inline JS XSS vector)
+                tbody.querySelectorAll('.opp-access-detail-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        viewOppAccessDetails(
+                            parseInt(btn.dataset.userId, 10),
+                            btn.dataset.email,
+                            btn.dataset.billingMonth
+                        );
+                    });
+                });
             } catch (error) {
                 console.error('Failed to load opportunity access summary:', error);
                 tbody.innerHTML = '<tr><td colspan="8" class="empty-state">Failed to load data.</td></tr>';
