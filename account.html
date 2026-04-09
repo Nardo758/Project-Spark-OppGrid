@@ -820,18 +820,8 @@
                             <input type="email" id="profileEmail" placeholder="Email" readonly style="background:#f5f5f4;cursor:not-allowed;">
                         </div>
                         <div class="form-group full-width">
-                            <label for="company">Company (optional)</label>
-                            <input type="text" id="company" placeholder="Your company or organization">
-                        </div>
-                        <div class="form-group full-width">
-                            <label for="role">Role</label>
-                            <select id="role">
-                                <option value="entrepreneur">Entrepreneur</option>
-                                <option value="investor">Investor</option>
-                                <option value="researcher">Researcher</option>
-                                <option value="product">Product Manager</option>
-                                <option value="other">Other</option>
-                            </select>
+                            <label for="bio">Bio (optional)</label>
+                            <input type="text" id="bio" placeholder="A short description about you">
                         </div>
                     </form>
                     <div id="profileFeedback" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px;"></div>
@@ -969,6 +959,7 @@
                     <p>Keep your account secure</p>
                 </div>
                 <div class="section-body">
+                    <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 16px; color: var(--stone-700);">Change Password</h4>
                     <form class="form-grid" id="securityForm">
                         <div class="form-group">
                             <label for="currentPassword">Current password</label>
@@ -986,6 +977,54 @@
                     <div id="passwordFeedback" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px;"></div>
                     <div class="button-group">
                         <button type="button" class="btn-save" id="changePassword">Update Password</button>
+                    </div>
+
+                    <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--stone-200);">
+                        <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 8px; color: var(--stone-700);">Two-Factor Authentication (2FA)</h4>
+                        <p style="font-size: 13px; color: var(--stone-500); margin-bottom: 16px;">Add an extra layer of security to your account using a TOTP authenticator app (e.g. Google Authenticator, Authy).</p>
+
+                        <div id="twoFAStatus" style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                            <span id="twoFAStatusBadge" style="padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; background: #f5f5f4; color: #57534e;">Loading...</span>
+                            <span id="twoFABackupCount" style="font-size: 13px; color: var(--stone-500); display: none;"></span>
+                        </div>
+
+                        <div id="twoFASetupCard" style="display: none; padding: 16px; border: 1px solid var(--stone-200); border-radius: 10px; background: var(--stone-50); margin-bottom: 16px;">
+                            <p style="font-size: 13px; color: var(--stone-600); margin-bottom: 12px;">Scan the QR code below with your authenticator app, then enter the 6-digit code to confirm setup.</p>
+                            <div id="twoFAQRCode" style="margin-bottom: 12px; text-align: center;">
+                                <img id="twoFAQRImg" src="" alt="2FA QR Code" style="max-width: 200px; border-radius: 8px; display: none;">
+                            </div>
+                            <div style="margin-bottom: 10px;">
+                                <label style="font-size: 13px; font-weight: 500; color: var(--stone-700); display: block; margin-bottom: 6px;">Or enter this secret manually:</label>
+                                <code id="twoFASecret" style="font-size: 12px; background: var(--stone-100); padding: 6px 10px; border-radius: 6px; display: inline-block; word-break: break-all;"></code>
+                            </div>
+                            <input type="text" id="twoFAOtpInput" placeholder="6-digit code" maxlength="6" style="width: 160px; padding: 10px 14px; border: 1px solid var(--stone-300); border-radius: 8px; font-size: 14px; margin-bottom: 10px; letter-spacing: 4px; text-align: center;">
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn-save" id="enable2FABtn" style="padding: 8px 18px; font-size: 13px;">Verify & Enable</button>
+                                <button class="btn-outline" id="cancel2FASetup" style="padding: 8px 18px; font-size: 13px;">Cancel</button>
+                            </div>
+                        </div>
+
+                        <div id="twoFADisableCard" style="display: none; padding: 16px; border: 1px solid #fca5a5; border-radius: 10px; background: #fef2f2; margin-bottom: 16px;">
+                            <p style="font-size: 13px; color: #991b1b; margin-bottom: 10px;">Enter your account password to disable 2FA.</p>
+                            <input type="password" id="twoFADisablePassword" placeholder="Your password" style="width: 100%; max-width: 320px; padding: 10px 14px; border: 1px solid var(--stone-300); border-radius: 8px; font-size: 14px; margin-bottom: 10px;">
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn-danger" id="confirm2FADisable" style="padding: 8px 18px; font-size: 13px;">Disable 2FA</button>
+                                <button class="btn-outline" id="cancel2FADisable" style="padding: 8px 18px; font-size: 13px;">Cancel</button>
+                            </div>
+                        </div>
+
+                        <div id="twoFABackupCard" style="display: none; padding: 16px; border: 1px solid var(--stone-200); border-radius: 10px; background: var(--stone-50); margin-bottom: 16px;">
+                            <p style="font-size: 13px; color: var(--stone-600); margin-bottom: 12px;"><strong>New backup codes (save these securely):</strong></p>
+                            <pre id="twoFABackupList" style="font-size: 13px; font-family: monospace; background: var(--stone-100); padding: 10px; border-radius: 6px; margin-bottom: 10px; white-space: pre-wrap;"></pre>
+                        </div>
+
+                        <div id="twoFAFeedback" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px;"></div>
+
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;" id="twoFAActions">
+                            <button class="btn-save" id="setup2FABtn" style="font-size: 13px;">Set Up 2FA</button>
+                            <button class="btn-danger" id="disable2FABtn" style="font-size: 13px; display: none;">Disable 2FA</button>
+                            <button class="btn-outline" id="regenerateBackupCodesBtn" style="font-size: 13px; display: none;">Regenerate Backup Codes</button>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -1009,10 +1048,11 @@
                                 Anthropic (Claude)
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border: 1px solid var(--stone-300); border-radius: 8px; font-size: 14px;">
-                                <input type="radio" name="aiProvider" value="oppgrid" id="aiProviderOppGrid" style="accent-color: var(--emerald-500);" checked>
-                                OppGrid AI (default)
+                                <input type="radio" name="aiProvider" value="claude" id="aiProviderClaude" style="accent-color: var(--emerald-500);">
+                                Claude (Legacy)
                             </label>
                         </div>
+                        <p style="font-size: 12px; color: var(--stone-500); margin-top: 8px;">When no provider is selected, OppGrid uses its default AI configuration.</p>
                     </div>
 
                     <div style="margin-bottom: 24px; padding: 16px; border: 1px solid var(--stone-200); border-radius: 10px; background: var(--stone-50);">
@@ -1092,7 +1132,7 @@
             el.style.background = isError ? '#fef2f2' : '#d1fae5';
             el.style.color = isError ? '#dc2626' : '#047857';
             el.style.border = isError ? '1px solid #fca5a5' : '1px solid #6ee7b7';
-            setTimeout(() => { el.style.display = 'none'; }, 4000);
+            setTimeout(() => { el.style.display = 'none'; }, 6000);
         }
 
         function populateUserUI(user) {
@@ -1108,6 +1148,8 @@
                 document.getElementById('profileEmail').value = user.email;
                 document.getElementById('userEmail').textContent = user.email;
             }
+            const bioEl = document.getElementById('bio');
+            if (bioEl && user.bio != null) bioEl.value = user.bio;
         }
 
         async function loadUserProfile() {
@@ -1143,7 +1185,7 @@
         async function loadAIPreferences() {
             try {
                 const prefs = await api.getAIPreferences();
-                const provider = prefs.preferred_provider || prefs.provider;
+                const provider = prefs.provider;
                 if (provider) {
                     const radio = document.querySelector(`input[name="aiProvider"][value="${provider}"]`);
                     if (radio) radio.checked = true;
@@ -1329,9 +1371,12 @@
             const lastName = document.getElementById('lastName').value.trim();
             const name = [firstName, lastName].filter(Boolean).join(' ');
             if (!name) { showFeedback('profileFeedback', 'Please enter your name.', true); return; }
+            const bioVal = document.getElementById('bio')?.value?.trim() ?? undefined;
+            const payload = { name };
+            if (bioVal !== undefined) payload.bio = bioVal || null;
             btn.disabled = true; btn.textContent = 'Saving...';
             try {
-                const updated = await api.updateCurrentUser({ name });
+                const updated = await api.updateCurrentUser(payload);
                 localStorage.setItem('user', JSON.stringify(updated));
                 populateUserUI(updated);
                 showFeedback('profileFeedback', 'Profile saved successfully.', false);
@@ -1463,6 +1508,127 @@
                 showFeedback('aiPrefFeedback', e?.detail || e?.message || 'Failed to save preferences.', true);
             } finally {
                 btn.disabled = false; btn.textContent = 'Save AI Preferences';
+            }
+        });
+
+        // ── 2FA ───────────────────────────────────────────────
+        async function load2FAStatus() {
+            try {
+                const status = await api.get2FAStatus();
+                const badge = document.getElementById('twoFAStatusBadge');
+                const backupCount = document.getElementById('twoFABackupCount');
+                const setup2FABtn = document.getElementById('setup2FABtn');
+                const disable2FABtn = document.getElementById('disable2FABtn');
+                const regenBtn = document.getElementById('regenerateBackupCodesBtn');
+                if (status.enabled) {
+                    badge.textContent = '2FA Enabled';
+                    badge.style.background = '#d1fae5';
+                    badge.style.color = '#047857';
+                    backupCount.textContent = `${status.backup_codes_count} backup code(s) remaining`;
+                    backupCount.style.display = 'inline';
+                    setup2FABtn.style.display = 'none';
+                    disable2FABtn.style.display = 'inline-flex';
+                    regenBtn.style.display = 'inline-flex';
+                } else {
+                    badge.textContent = '2FA Disabled';
+                    badge.style.background = '#f5f5f4';
+                    badge.style.color = '#57534e';
+                    backupCount.style.display = 'none';
+                    setup2FABtn.style.display = 'inline-flex';
+                    disable2FABtn.style.display = 'none';
+                    regenBtn.style.display = 'none';
+                }
+            } catch (e) {
+                console.warn('Could not load 2FA status:', e);
+                document.getElementById('twoFAStatusBadge').textContent = 'Status unavailable';
+            }
+        }
+        load2FAStatus();
+
+        document.getElementById('setup2FABtn').addEventListener('click', async () => {
+            const btn = document.getElementById('setup2FABtn');
+            btn.disabled = true; btn.textContent = 'Setting up...';
+            try {
+                const data = await api.setup2FA();
+                document.getElementById('twoFASetupCard').style.display = 'block';
+                document.getElementById('twoFASecret').textContent = data.secret || '';
+                if (data.qr_code) {
+                    const img = document.getElementById('twoFAQRImg');
+                    img.src = data.qr_code;
+                    img.style.display = 'block';
+                }
+                btn.style.display = 'none';
+            } catch (e) {
+                showFeedback('twoFAFeedback', e?.detail || e?.message || 'Failed to initiate 2FA setup.', true);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Set Up 2FA';
+            }
+        });
+
+        document.getElementById('cancel2FASetup').addEventListener('click', () => {
+            document.getElementById('twoFASetupCard').style.display = 'none';
+            document.getElementById('setup2FABtn').style.display = 'inline-flex';
+            document.getElementById('twoFAOtpInput').value = '';
+        });
+
+        document.getElementById('enable2FABtn').addEventListener('click', async () => {
+            const otpCode = document.getElementById('twoFAOtpInput').value.trim();
+            if (!otpCode || otpCode.length < 6) { showFeedback('twoFAFeedback', 'Please enter the 6-digit code from your authenticator.', true); return; }
+            const btn = document.getElementById('enable2FABtn');
+            btn.disabled = true; btn.textContent = 'Verifying...';
+            try {
+                const result = await api.enable2FA(otpCode);
+                document.getElementById('twoFASetupCard').style.display = 'none';
+                if (result.backup_codes && result.backup_codes.length) {
+                    document.getElementById('twoFABackupCard').style.display = 'block';
+                    document.getElementById('twoFABackupList').textContent = result.backup_codes.join('\n');
+                }
+                showFeedback('twoFAFeedback', '2FA enabled successfully! Save your backup codes.', false);
+                load2FAStatus();
+            } catch (e) {
+                showFeedback('twoFAFeedback', e?.detail || e?.message || 'Failed to enable 2FA. Check your code and try again.', true);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Verify & Enable';
+            }
+        });
+
+        document.getElementById('disable2FABtn').addEventListener('click', () => {
+            document.getElementById('twoFADisableCard').style.display = 'block';
+        });
+
+        document.getElementById('cancel2FADisable').addEventListener('click', () => {
+            document.getElementById('twoFADisableCard').style.display = 'none';
+            document.getElementById('twoFADisablePassword').value = '';
+        });
+
+        document.getElementById('confirm2FADisable').addEventListener('click', async () => {
+            const password = document.getElementById('twoFADisablePassword').value;
+            if (!password) { showFeedback('twoFAFeedback', 'Please enter your password to disable 2FA.', true); return; }
+            const btn = document.getElementById('confirm2FADisable');
+            btn.disabled = true; btn.textContent = 'Disabling...';
+            try {
+                await api.disable2FA(password);
+                document.getElementById('twoFADisableCard').style.display = 'none';
+                document.getElementById('twoFADisablePassword').value = '';
+                showFeedback('twoFAFeedback', '2FA has been disabled.', false);
+                load2FAStatus();
+            } catch (e) {
+                showFeedback('twoFAFeedback', e?.detail || e?.message || 'Failed to disable 2FA. Check your password.', true);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Disable 2FA';
+            }
+        });
+
+        document.getElementById('regenerateBackupCodesBtn').addEventListener('click', async () => {
+            if (!confirm('This will invalidate all existing backup codes. Continue?')) return;
+            try {
+                const result = await api.regenerateBackupCodes();
+                document.getElementById('twoFABackupCard').style.display = 'block';
+                document.getElementById('twoFABackupList').textContent = result.backup_codes.join('\n');
+                showFeedback('twoFAFeedback', 'New backup codes generated. Store them safely.', false);
+                load2FAStatus();
+            } catch (e) {
+                showFeedback('twoFAFeedback', e?.detail || e?.message || 'Failed to regenerate backup codes.', true);
             }
         });
 

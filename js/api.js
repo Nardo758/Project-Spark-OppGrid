@@ -244,20 +244,28 @@ class OppGridAPI {
         return this.handleResponse(response);
     }
 
-    async enable2FA(code) {
+    async enable2FA(otpCode) {
         const response = await fetch(`${this.baseURL}/2fa/enable`, {
             method: 'POST',
             headers: this.getHeaders(),
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ otp_code: otpCode })
         });
         return this.handleResponse(response);
     }
 
-    async disable2FA(code) {
+    async disable2FA(password) {
         const response = await fetch(`${this.baseURL}/2fa/disable`, {
             method: 'POST',
             headers: this.getHeaders(),
-            body: JSON.stringify({ code })
+            body: JSON.stringify({ password })
+        });
+        return this.handleResponse(response);
+    }
+
+    async regenerateBackupCodes() {
+        const response = await fetch(`${this.baseURL}/2fa/regenerate-backup-codes`, {
+            method: 'POST',
+            headers: this.getHeaders()
         });
         return this.handleResponse(response);
     }
