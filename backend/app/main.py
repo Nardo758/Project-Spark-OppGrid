@@ -72,6 +72,7 @@ from app.routers import (
     byok,
     affiliate_tools,
     public_api,
+    api_keys,
     ai_preferences,
     workspace_map,
     workspace_digital,
@@ -184,7 +185,7 @@ app.include_router(sba.router, prefix=f"{settings.API_V1_PREFIX}/sba", tags=["SB
 app.include_router(byok.router, tags=["BYOK"])
 app.include_router(affiliate_tools.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Affiliate Tools"])
 app.include_router(teams.router, prefix=f"{settings.API_V1_PREFIX}/teams", tags=["Teams"])
-app.include_router(public_api.router, prefix=f"{settings.API_V1_PREFIX}/public", tags=["Public API"])
+app.include_router(api_keys.router, prefix=f"{settings.API_V1_PREFIX}/api-keys", tags=["API Keys"])
 app.include_router(ai_preferences.router, prefix=f"{settings.API_V1_PREFIX}", tags=["AI Preferences"])
 app.include_router(workspace_map.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Workspace Map"])
 app.include_router(workspace_digital.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Workspace Digital"])
@@ -194,6 +195,11 @@ app.include_router(foot_traffic.router, prefix=f"{settings.API_V1_PREFIX}", tags
 app.include_router(enhanced_workspaces.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Enhanced Workspaces"])
 app.include_router(agent.router, tags=["Agent API"])
 app.include_router(market.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Market Intelligence"])
+
+# Mount the Public API v1 sub-application.
+# Swagger UI available at /v1/docs.
+# NOTE: This mount must come BEFORE the SPA catch-all route below.
+app.mount("/v1", public_api.v1_app)
 
 
 @app.on_event("startup")

@@ -1,265 +1,299 @@
 """
-API Key Service - January 2026
+Public API Key Service — OppGrid v1 API
 
-Manages API keys for Business Track teams:
-- Key generation with secure hashing
-- Key validation and rate limiting
-- Usage tracking
+Manages user-owned API keys for the OppGrid Public API v1.
+
+Key design decisions:
+- SHA-256 hashing only (no HMAC secret dependency; the random token is the secret)
+- Format: og_live_<token> (production) | og_test_<token> (sandbox)
+- In-memory RPM tracking (TODO: swap for Redis in multi-process production)
+- Daily usage checked against api_usage table (accurate across restarts)
 """
-
 import secrets
 import hashlib
-import hmac
-import os
-import json
 import logging
-from datetime import datetime, timedelta
-from typing import Optional, Tuple, Dict, Any, List
-from sqlalchemy.orm import Session
+from datetime import datetime, timedelta, timezone
+from typing import Optional, Tuple, List, Dict
 
-from app.models.team import Team, TeamApiKey, TeamMember, TeamRole
-from app.models.user import User
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+
+from app.models.api_key import APIKey
+from app.models.api_usage import APIUsage
 
 logger = logging.getLogger(__name__)
 
-# Rate limit tracking (in-memory for development; use Redis in production)
-_rate_limit_cache: Dict[str, List[datetime]] = {}
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-# Server secret for HMAC - must be configured for production
-# For development, we use a fixed default; in production, set API_KEY_HMAC_SECRET env var
-_API_KEY_SECRET = os.environ.get("API_KEY_HMAC_SECRET")
-if not _API_KEY_SECRET:
-    # Use a stable development secret so keys persist across restarts during development
-    _API_KEY_SECRET = "dev_oppgrid_api_key_secret_2026_stable"
-    logger.warning("API_KEY_HMAC_SECRET not set. Using development default. Set this in production!")
+TIER_LIMITS: Dict[str, Dict[str, int]] = {
+    "starter":      {"rpm": 10,    "daily": 1_000},
+    "professional": {"rpm": 100,   "daily": 10_000},
+    "enterprise":   {"rpm": 1_000, "daily": 100_000},
+}
+
+DEFAULT_SCOPES: List[str] = [
+    "read:opportunities",
+    "read:trends",
+    "read:markets",
+]
+
+# In-memory sliding-window RPM store.
+# TODO: Replace with Redis for multi-process / multi-instance deployments.
+_rpm_cache: Dict[str, List[datetime]] = {}
 
 
-def generate_api_key() -> Tuple[str, str, str]:
+# ---------------------------------------------------------------------------
+# Key generation & hashing
+# ---------------------------------------------------------------------------
+
+def generate_api_key(environment: str = "production") -> Tuple[str, str, str]:
     """
-    Generate a new API key with HMAC-based hash.
-    
+    Generate a new API key.
+
     Returns:
-        Tuple of (full_key, key_hash, key_prefix)
+        (plaintext_key, sha256_hash, 8-char display prefix)
+
+    The plaintext is returned exactly once and never stored.
+    Format: ``og_live_<43-char url-safe token>`` (production)
+             ``og_test_<43-char url-safe token>`` (sandbox)
     """
-    full_key = f"og_{secrets.token_urlsafe(32)}"
-    
-    # Use HMAC with server secret for secure hashing
-    key_hash = hmac.new(
-        _API_KEY_SECRET.encode(),
-        full_key.encode(),
-        hashlib.sha256
-    ).hexdigest()
-    
-    # Prefix for display (first 10 chars)
-    key_prefix = full_key[:10]
-    
-    return full_key, key_hash, key_prefix
+    env_tag = "live" if environment == "production" else "test"
+    token = secrets.token_urlsafe(32)
+    plaintext = f"og_{env_tag}_{token}"
+    key_hash = hashlib.sha256(plaintext.encode()).hexdigest()
+    prefix = plaintext[:8]
+    return plaintext, key_hash, prefix
 
 
 def hash_api_key(key: str) -> str:
-    """Hash an API key using HMAC with server secret."""
-    return hmac.new(
-        _API_KEY_SECRET.encode(),
-        key.encode(),
-        hashlib.sha256
-    ).hexdigest()
+    """Return the SHA-256 hex digest of a plaintext API key."""
+    return hashlib.sha256(key.encode()).hexdigest()
 
+
+# ---------------------------------------------------------------------------
+# CRUD
+# ---------------------------------------------------------------------------
 
 def create_api_key(
-    team: Team,
-    user: User,
+    user_id: int,
     name: str,
+    environment: str = "production",
+    tier: str = "starter",
     scopes: Optional[List[str]] = None,
     expires_in_days: Optional[int] = None,
-    db: Session = None
-) -> Tuple[bool, str, Optional[str]]:
+    db: Session = None,
+) -> Tuple[str, "APIKey"]:
     """
-    Create a new API key for a team.
-    
-    Args:
-        team: The team to create the key for
-        user: The user creating the key
-        name: A friendly name for the key
-        scopes: List of allowed scopes (e.g., ["opportunities:read", "reports:read"])
-        expires_in_days: Optional expiration in days
-        db: Database session
-        
+    Create and persist a new APIKey for *user_id*.
+
     Returns:
-        Tuple of (success, message, full_key or None)
+        (plaintext_key, APIKey ORM object)
+        — the plaintext_key is shown exactly once; store it securely.
     """
-    # Check if user has permission
-    member = db.query(TeamMember).filter(
-        TeamMember.team_id == team.id,
-        TeamMember.user_id == user.id,
-        TeamMember.is_active == True
-    ).first()
-    
-    if not member or member.role not in [TeamRole.OWNER, TeamRole.ADMIN]:
-        return False, "You don't have permission to create API keys", None
-    
-    # Check if team has API access enabled
-    if not team.api_enabled:
-        return False, "API access is not enabled for this team", None
-    
-    # Generate the key
-    full_key, key_hash, key_prefix = generate_api_key()
-    
-    # Calculate expiration
+    limits = TIER_LIMITS.get(tier, TIER_LIMITS["starter"])
+    plaintext, key_hash, prefix = generate_api_key(environment)
+
     expires_at = None
     if expires_in_days:
-        expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
-    
-    # Create the key record
-    api_key = TeamApiKey(
-        team_id=team.id,
-        name=name,
+        expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+
+    api_key = APIKey(
+        user_id=user_id,
+        key_prefix=prefix,
         key_hash=key_hash,
-        key_prefix=key_prefix,
-        scopes=json.dumps(scopes or ["opportunities:read"]),
+        name=name,
+        environment=environment,
+        tier=tier,
+        scopes=scopes or DEFAULT_SCOPES,
+        rate_limit_rpm=limits["rpm"],
+        daily_limit=limits["daily"],
         expires_at=expires_at,
-        created_by_id=user.id
     )
-    
+
     db.add(api_key)
     db.commit()
-    
-    logger.info(f"API key created for team {team.id} by user {user.id}")
-    
-    # Return the full key - this is the only time it will be visible
-    return True, "API key created successfully", full_key
+    db.refresh(api_key)
+
+    logger.info("API key created for user %s: prefix=%s tier=%s", user_id, prefix, tier)
+    return plaintext, api_key
 
 
-def validate_api_key(key: str, db: Session) -> Tuple[bool, Optional[Team], Optional[TeamApiKey], str]:
+def get_api_key_by_hash(key_hash: str, db: Session) -> Optional["APIKey"]:
+    """Look up an APIKey record by its SHA-256 hash."""
+    return db.query(APIKey).filter(APIKey.key_hash == key_hash).first()
+
+
+def validate_api_key(
+    plaintext: str, db: Session
+) -> Tuple[bool, Optional["APIKey"], str]:
     """
-    Validate an API key.
-    
+    Validate a plaintext API key supplied by an external caller.
+
     Returns:
-        Tuple of (is_valid, team, api_key, error_message)
+        (is_valid, api_key_or_None, error_message)
     """
-    if not key or not key.startswith("og_"):
-        return False, None, None, "Invalid API key format"
-    
-    key_hash = hash_api_key(key)
-    
-    api_key = db.query(TeamApiKey).filter(
-        TeamApiKey.key_hash == key_hash
-    ).first()
-    
+    if not plaintext:
+        return False, None, "API key is required"
+    if not (plaintext.startswith("og_live_") or plaintext.startswith("og_test_")):
+        return False, None, "Invalid API key format"
+
+    key_hash = hash_api_key(plaintext)
+    api_key = get_api_key_by_hash(key_hash, db)
+
     if not api_key:
-        return False, None, None, "Invalid API key"
-    
+        return False, None, "Invalid API key"
     if not api_key.is_active:
-        return False, None, None, "API key is disabled"
-    
-    if api_key.expires_at and api_key.expires_at < datetime.utcnow():
-        return False, None, None, "API key has expired"
-    
-    team = api_key.team
-    
-    if not team.api_enabled:
-        return False, None, None, "API access is disabled for this team"
-    
-    # Update usage tracking
-    api_key.last_used_at = datetime.utcnow()
-    api_key.usage_count += 1
-    db.commit()
-    
-    return True, team, api_key, ""
+        return False, None, "API key has been revoked"
+    if api_key.expires_at and api_key.expires_at < datetime.now(timezone.utc):
+        return False, None, "API key has expired"
+
+    # Best-effort last_used_at update — don't fail the request if this errors.
+    try:
+        api_key.last_used_at = datetime.now(timezone.utc)
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    return True, api_key, ""
 
 
-def check_rate_limit(team_id: int, rate_limit: int) -> Tuple[bool, int]:
+def list_user_api_keys(user_id: int, db: Session) -> List["APIKey"]:
+    """Return all APIKey records owned by *user_id*, newest first."""
+    return (
+        db.query(APIKey)
+        .filter(APIKey.user_id == user_id)
+        .order_by(APIKey.created_at.desc())
+        .all()
+    )
+
+
+def revoke_api_key(key_id, user_id: int, db: Session) -> Tuple[bool, str]:
     """
-    Check if a team has exceeded their rate limit.
-    
-    Args:
-        team_id: The team ID
-        rate_limit: Requests per minute limit
-        
-    Returns:
-        Tuple of (is_allowed, requests_remaining)
+    Revoke an API key.  Only the owning user may revoke their own key.
+
+    *key_id* may be a UUID object or a UUID string.
     """
-    cache_key = f"team_{team_id}"
-    now = datetime.utcnow()
-    window_start = now - timedelta(minutes=1)
-    
-    # Clean old entries and get current count
-    if cache_key in _rate_limit_cache:
-        _rate_limit_cache[cache_key] = [
-            ts for ts in _rate_limit_cache[cache_key]
-            if ts > window_start
-        ]
-        current_count = len(_rate_limit_cache[cache_key])
-    else:
-        _rate_limit_cache[cache_key] = []
-        current_count = 0
-    
-    if current_count >= rate_limit:
-        return False, 0
-    
-    # Add this request
-    _rate_limit_cache[cache_key].append(now)
-    
-    return True, rate_limit - current_count - 1
+    from uuid import UUID
 
+    if isinstance(key_id, str):
+        try:
+            key_id = UUID(key_id)
+        except ValueError:
+            return False, "Invalid key ID format"
 
-def revoke_api_key(key_id: int, user: User, db: Session) -> Tuple[bool, str]:
-    """Revoke (disable) an API key."""
-    api_key = db.query(TeamApiKey).filter(TeamApiKey.id == key_id).first()
-    
+    api_key = (
+        db.query(APIKey)
+        .filter(APIKey.id == key_id, APIKey.user_id == user_id)
+        .first()
+    )
+
     if not api_key:
         return False, "API key not found"
-    
-    # Check permission
-    member = db.query(TeamMember).filter(
-        TeamMember.team_id == api_key.team_id,
-        TeamMember.user_id == user.id,
-        TeamMember.is_active == True
-    ).first()
-    
-    if not member or member.role not in [TeamRole.OWNER, TeamRole.ADMIN]:
-        return False, "You don't have permission to revoke this key"
-    
+    if not api_key.is_active:
+        return False, "API key is already revoked"
+
     api_key.is_active = False
+    api_key.revoked_at = datetime.now(timezone.utc)
     db.commit()
-    
-    logger.info(f"API key {key_id} revoked by user {user.id}")
+
+    logger.info("API key %s revoked by user %s", key_id, user_id)
     return True, "API key revoked successfully"
 
 
-def list_api_keys(team_id: int, db: Session) -> List[Dict[str, Any]]:
-    """List all API keys for a team (without revealing the actual keys)."""
-    keys = db.query(TeamApiKey).filter(
-        TeamApiKey.team_id == team_id
-    ).order_by(TeamApiKey.created_at.desc()).all()
-    
-    return [
-        {
-            "id": k.id,
-            "name": k.name,
-            "key_prefix": k.key_prefix,
-            "is_active": k.is_active,
-            "scopes": json.loads(k.scopes) if k.scopes else [],
-            "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
-            "usage_count": k.usage_count,
-            "expires_at": k.expires_at.isoformat() if k.expires_at else None,
-            "created_at": k.created_at.isoformat() if k.created_at else None,
-        }
-        for k in keys
-    ]
+# ---------------------------------------------------------------------------
+# Rate limiting
+# ---------------------------------------------------------------------------
+
+def check_rate_limit(key_id: str, rpm_limit: int) -> Tuple[bool, int]:
+    """
+    Sliding-window in-memory RPM rate limit check.
+
+    Returns:
+        (is_allowed, requests_remaining_in_current_window)
+
+    TODO: Replace ``_rpm_cache`` with Redis for multi-process deployments.
+    """
+    cache_key = str(key_id)
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(minutes=1)
+
+    _rpm_cache.setdefault(cache_key, [])
+    _rpm_cache[cache_key] = [ts for ts in _rpm_cache[cache_key] if ts > window_start]
+
+    current = len(_rpm_cache[cache_key])
+    if current >= rpm_limit:
+        return False, 0
+
+    _rpm_cache[cache_key].append(now)
+    return True, rpm_limit - current - 1
 
 
-def enable_team_api_access(team: Team, rate_limit: int = 100, db: Session = None) -> bool:
-    """Enable API access for a team."""
-    team.api_enabled = True
-    team.api_rate_limit = rate_limit
-    db.commit()
-    logger.info(f"API access enabled for team {team.id}")
-    return True
+def check_daily_limit(
+    key_id, daily_limit: int, db: Session
+) -> Tuple[bool, int]:
+    """
+    Count today's requests against *daily_limit* using the api_usage table.
+
+    Returns:
+        (is_allowed, requests_remaining_today)
+    """
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+
+    count = (
+        db.query(func.count(APIUsage.id))
+        .filter(
+            APIUsage.api_key_id == key_id,
+            APIUsage.created_at >= today_start,
+        )
+        .scalar()
+        or 0
+    )
+
+    remaining = daily_limit - count
+    if remaining <= 0:
+        return False, 0
+    return True, remaining
 
 
-def disable_team_api_access(team: Team, db: Session) -> bool:
-    """Disable API access for a team."""
-    team.api_enabled = False
-    db.commit()
-    logger.info(f"API access disabled for team {team.id}")
-    return True
+# ---------------------------------------------------------------------------
+# Usage recording
+# ---------------------------------------------------------------------------
+
+def record_usage(
+    api_key_id,
+    endpoint: str,
+    method: str,
+    status_code: int,
+    response_time_ms: Optional[int] = None,
+    ip_address: Optional[str] = None,
+    user_agent: Optional[str] = None,
+    db: Session = None,
+) -> None:
+    """
+    Persist a single API request record to api_usage.
+
+    Failures are logged and swallowed — usage recording must never
+    break the primary response path.
+    """
+    try:
+        usage = APIUsage(
+            api_key_id=api_key_id,
+            endpoint=endpoint,
+            method=method,
+            status_code=status_code,
+            response_time_ms=response_time_ms,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        db.add(usage)
+        db.commit()
+    except Exception as exc:
+        logger.warning("Failed to record API usage: %s", exc)
+        try:
+            db.rollback()
+        except Exception:
+            pass
