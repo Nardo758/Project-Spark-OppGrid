@@ -81,9 +81,10 @@ export default function GeneratedReportViewer({ report }: GeneratedReportViewerP
             padding: 20px 0 16px 0;
             border-bottom: 1px solid #E2E8F0;
             margin-bottom: 20px;
+            line-height: 1;
           }
-          .wordmark { font-size: 17pt; font-weight: bold; color: #0F172A; letter-spacing: -0.3px; line-height: 1.2; }
-          .tagline { font-size: 8pt; color: #64748B; letter-spacing: 1.5px; text-transform: uppercase; }
+          .wordmark { display: block; font-size: 17pt; font-weight: bold; color: #0F172A; letter-spacing: -0.3px; margin: 0; padding: 0; line-height: 1; }
+          .tagline { display: block; font-size: 8pt; color: #64748B; letter-spacing: 1.5px; text-transform: uppercase; margin: 0; padding: 0; line-height: 1; }
           .report-type-badge {
             font-size: 8.5pt; font-weight: bold; color: #10B981;
             letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px;
@@ -133,7 +134,7 @@ export default function GeneratedReportViewer({ report }: GeneratedReportViewerP
       <body>
         <div class="accent-bar"></div>
         <div class="masthead">
-          <span class="wordmark">OppGrid</span><br>
+          <span class="wordmark">OppGrid</span>
           <span class="tagline">Opportunity Intelligence</span>
         </div>
         <div class="report-type-badge">${reportType}</div>
