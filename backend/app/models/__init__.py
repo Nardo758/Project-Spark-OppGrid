@@ -74,6 +74,8 @@ from .data_hub import (
     HubOpportunityEnriched, HubMarketByGeography, HubIndustryInsight,
     HubMarketSignal, HubValidationInsight, HubUserCohort, HubFinancialSnapshot
 )
+from .api_key import APIKey
+from .api_usage import APIUsage
 
 __all__ = [
     "User",
@@ -219,4 +221,6 @@ __all__ = [
     "HubValidationInsight",
     "HubUserCohort",
     "HubFinancialSnapshot",
+    "APIKey",
+    "APIUsage",
 ]
