@@ -60,5 +60,7 @@ class APIKey(Base):
 
     user = relationship("User", back_populates="api_keys")
     usage = relationship(
-        "APIUsage", back_populates="api_key", cascade="all, delete-orphan"
+        "APIUsage",
+        back_populates="api_key",
+        passive_deletes=True,
     )
