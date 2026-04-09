@@ -53,25 +53,32 @@ def _key_identifier(request: Request) -> str:
     """
     Unique identifier for the slowapi bucket.
 
-    Uses the API key ID (UUID string) for authenticated requests so each key
-    gets its own independent rate-limit bucket.  Falls back to client IP for
-    unauthenticated requests.
+    Uses the API key ID *and* its rpm limit encoded as "{uuid}:{rpm}" so that
+    ``dynamic_rate_limit`` can parse the limit without needing a DB look-up.
+    Falls back to the client IP address for unauthenticated requests.
     """
     api_key: Optional[APIKey] = getattr(request.state, "api_key", None)
     if api_key is not None:
-        return str(api_key.id)
+        # Encode the rpm into the key so dynamic_rate_limit can read it.
+        return f"{api_key.id}:{api_key.rate_limit_rpm}"
     return get_remote_address(request)
 
 
-def dynamic_rate_limit(request: Request) -> str:
+def dynamic_rate_limit(key: str) -> str:
     """
-    Return the per-endpoint rate-limit string based on the authenticated API
-    key's tier.  Called by ``@limiter.limit(dynamic_rate_limit)``.
+    Return the per-endpoint rate-limit string based on the API key tier.
+
+    slowapi calls this with the return value of ``_key_identifier`` when the
+    callable has a parameter named exactly ``key``.  We encode the rpm into
+    the bucket key string so we can recover it here without a DB look-up.
     """
-    api_key: Optional[APIKey] = getattr(request.state, "api_key", None)
-    if api_key is None:
-        return "60/minute"
-    return f"{api_key.rate_limit_rpm}/minute"
+    if ":" in key:
+        try:
+            _uuid, rpm = key.rsplit(":", 1)
+            return f"{int(rpm)}/minute"
+        except (ValueError, AttributeError):
+            pass
+    return "60/minute"
 
 
 # key_func identifies *who* is making the request (bucket key).
