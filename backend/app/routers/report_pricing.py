@@ -823,9 +823,10 @@ async def create_studio_report_checkout(
         "metadata": metadata,
     }
     
-    # Pre-fill email for guests
-    if checkout_data.email and not current_user:
-        session_params["customer_email"] = checkout_data.email
+    # Pre-fill email: use authenticated user's email or provided guest email
+    prefill_email = (current_user.email if current_user else None) or checkout_data.email
+    if prefill_email:
+        session_params["customer_email"] = prefill_email
     
     session = stripe_client.checkout.Session.create(**session_params)
     
@@ -1436,38 +1437,41 @@ def get_checkout_state_endpoint(
     """Return checkout panel config for the 3-state report generation flow."""
     from app.core.report_pricing import get_tier_free_reports, calculate_discounted_price
 
-    if report_type not in REPORT_PRODUCTS:
-        report_type = "business_plan"
+    if report_type not in STUDIO_REPORT_PRICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid report type: {report_type}. Valid types: {list(STUDIO_REPORT_PRICES.keys())}",
+        )
 
-    product = REPORT_PRODUCTS[report_type]
-    base_price = product.price_cents
+    studio_product = STUDIO_REPORT_PRICES[report_type]
+    base_price = studio_product["price_cents"]
+    report_name = studio_product["name"]
 
-    def build_options(tier: Optional[str]) -> List[ReportOptionItem]:
+    def build_options(credits_remaining: int, is_paid: bool) -> List[ReportOptionItem]:
+        use_credits = is_paid and credits_remaining > 0
         items = []
-        for rtype, prod in REPORT_PRODUCTS.items():
-            included = is_report_included_for_tier(rtype, tier or "free")
-            if included:
-                items.append(ReportOptionItem(
-                    report_type=rtype,
-                    label=f"{prod.name} — included",
-                    price_cents=prod.price_cents,
-                    is_included=True,
-                    display_price="included",
-                ))
+        for rtype, info in STUDIO_REPORT_PRICES.items():
+            if use_credits:
+                display = "use 1 credit"
+                label = f"{info['name']} — use 1 credit"
+                is_included = True
             else:
-                items.append(ReportOptionItem(
-                    report_type=rtype,
-                    label=f"{prod.name} — ${prod.price_cents // 100}",
-                    price_cents=prod.price_cents,
-                    is_included=False,
-                    display_price=f"${prod.price_cents // 100}",
-                ))
+                display = f"${info['price_cents'] // 100}"
+                label = f"{info['name']} — ${info['price_cents'] // 100}"
+                is_included = False
+            items.append(ReportOptionItem(
+                report_type=rtype,
+                label=label,
+                price_cents=info["price_cents"],
+                is_included=is_included,
+                display_price=display,
+            ))
         return items
 
     if not current_user:
         return CheckoutPanelConfig(
             state="guest",
-            report_options=build_options(None),
+            report_options=build_options(0, False),
             selected_report=report_type,
             base_price_cents=base_price,
             discount_pct=0,
@@ -1483,10 +1487,13 @@ def get_checkout_state_endpoint(
     free_total = usage_status["free_reports_allocation"]
     discount_pct = usage_status["discount_percent"]
 
+    is_paid_tier = tier != "free"
+    has_credits = is_unlimited or free_remaining > 0
+
     if tier == "free":
         return CheckoutPanelConfig(
             state="free_tier",
-            report_options=build_options(tier),
+            report_options=build_options(0, False),
             email_on_file=current_user.email,
             selected_report=report_type,
             base_price_cents=base_price,
@@ -1494,18 +1501,15 @@ def get_checkout_state_endpoint(
             final_price_cents=base_price,
             primary_cta=f"Pay ${base_price // 100} & generate",
             secondary_cta="Subscribe & save 20%+",
-            upsell_message="Subscribe to get included reports each month.",
+            upsell_message="Subscribe to get monthly report credits.",
         )
 
-    report_is_included = is_report_included_for_tier(report_type, tier)
-    has_credits = is_unlimited or free_remaining > 0
-
-    if has_credits and report_is_included:
+    if is_paid_tier and has_credits:
         remaining = -1 if is_unlimited else free_remaining
         total = -1 if is_unlimited else free_total
         return CheckoutPanelConfig(
             state="subscriber_has_credits",
-            report_options=build_options(tier),
+            report_options=build_options(free_remaining if not is_unlimited else 1, True),
             reports_remaining=remaining,
             reports_total=total,
             email_on_file=current_user.email,
@@ -1517,16 +1521,15 @@ def get_checkout_state_endpoint(
         )
 
     final_price = calculate_discounted_price(base_price, tier)
-    if not is_unlimited and free_remaining == 0 and free_total > 0:
-        upsell = f"You've used all {free_total} reports this month. Upgrade for more."
-    elif not report_is_included:
-        upsell = f"This report is not included in your {tier.title()} plan. Upgrade to access it."
-    else:
-        upsell = "Upgrade your plan to access more reports."
+    upsell = (
+        f"You've used all {free_total} reports this month. Upgrade for more."
+        if not is_unlimited and free_remaining == 0 and free_total > 0
+        else "Upgrade your plan to get more monthly report credits."
+    )
 
     return CheckoutPanelConfig(
         state="subscriber_no_credits",
-        report_options=build_options(tier),
+        report_options=build_options(0, True),
         reports_remaining=free_remaining if not is_unlimited else None,
         reports_total=free_total if not is_unlimited else None,
         email_on_file=current_user.email,

@@ -1,0 +1,46 @@
+Your agent is overcomplicating this by conflating two concepts:
+Concept 1: "Included in tier" (which reports are formally part of a subscription tier's benefits)
+Concept 2: "Has credits to spend" (whether user can generate without paying right now)
+For OppGrid's model, you don't need Concept 1 at all. Here's why:
+Your tiers give credit allocations, not report-type restrictions. A Starter user with 1 credit can use it on a Deep Clone or a Feasibility Study — their choice. The credit is fungible.
+The agent is trying to preserve is_report_included_for_tier() which checks if included_in_tier="pro" applies to a starter user. That's the wrong question. The right question is just: does this user have credits remaining?
+The fix is simpler than the agent thinks:
+python# OLD (overcomplicated)
+report_is_included = is_report_included_for_tier(report_type, tier)
+has_credits = is_unlimited or free_remaining > 0
+if has_credits and report_is_included:  # ← wrong, fails for starter/growth/team
+    state = "subscriber_has_credits"
+
+# NEW (correct)
+has_credits = is_unlimited or free_remaining > 0
+is_paid_tier = tier != "free"
+
+if has_credits and is_paid_tier:
+    state = "subscriber_has_credits"
+elif is_paid_tier and not has_credits:
+    state = "subscriber_no_credits"  # exhausted allocation
+elif tier == "free" and current_user:
+    state = "free_tier"
+else:
+    state = "guest"
+Delete is_report_included_for_tier() entirely — it's solving a problem you don't have. Your pricing model is "X credits/month, spend them on anything" not "Pro tier gets Business Plans, Enterprise gets Deep Clones."
+For the dropdown labeling in build_options():
+pythondef build_options(tier: str, credits_remaining: int) -> list:
+    options = []
+    for report_type, config in STUDIO_REPORT_PRICES.items():
+        if credits_remaining > 0 and tier != "free":
+            label = f"{config['name']} — use 1 credit"
+            display_price = "included"
+        else:
+            label = f"{config['name']} — ${config['price_cents'] / 100:.0f}"
+            display_price = f"${config['price_cents'] / 100:.0f}"
+        
+        options.append({...})
+    return options
+On the Stripe email fix: The agent is correct. Change:
+python# Wrong
+if checkout_data.email and not current_user:
+
+# Right  
+customer_email = current_user.email if current_user else checkout_data.email
+Tell your agent to simplify — the included_in_tier field and tier_order logic can be removed. Credits are credits.
