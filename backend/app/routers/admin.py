@@ -1402,7 +1402,7 @@ def list_subscriptions(
 
     if tier_filter:
         try:
-            tier = SubscriptionTier(tier_filter)
+            tier = SubscriptionTier(tier_filter.upper())
             query = query.filter(Subscription.tier == tier)
         except ValueError:
             pass
@@ -2834,6 +2834,194 @@ def create_stripe_meter(
         return {"status": "created", **result}
     else:
         return {"error": "Failed to create meter"}
+
+
+@router.get("/tier-config")
+def get_tier_config(
+    admin_user: User = Depends(get_current_admin_user),
+):
+    """Return read-only tier configuration for all 7 v2.1 tiers."""
+    from app.models.tier_config import TierConfig
+    return {"tiers": TierConfig.as_list()}
+
+
+@router.get("/opportunity-access/summary")
+def get_opportunity_access_summary(
+    billing_month: Optional[date] = Query(None, description="Filter by billing month (YYYY-MM-DD). Defaults to current month."),
+    search_email: Optional[str] = Query(None, description="Substring match on user email"),
+    limit: int = Query(50, ge=1, le=200),
+    skip: int = Query(0, ge=0),
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Per-user monthly opportunity usage aggregate, ordered by overage_total descending."""
+    from app.models.opportunity_access import OpportunityAccess
+    from datetime import date as date_type
+    from sqlalchemy import case
+
+    if billing_month is None:
+        today = date_type.today()
+        billing_month = date_type(today.year, today.month, 1)
+
+    included_used_col = func.count(
+        case((OpportunityAccess.is_included == True, OpportunityAccess.id))
+    ).label("included_used")
+    overage_count_col = func.count(
+        case((OpportunityAccess.is_included == False, OpportunityAccess.id))
+    ).label("overage_count")
+    overage_total_col = func.coalesce(func.sum(OpportunityAccess.overage_charged), 0).label("overage_total")
+    total_col = func.count(OpportunityAccess.id).label("total_accessed")
+
+    q = (
+        db.query(
+            User.id.label("user_id"),
+            User.email.label("email"),
+            included_used_col,
+            overage_count_col,
+            overage_total_col,
+            total_col,
+        )
+        .join(OpportunityAccess, OpportunityAccess.user_id == User.id)
+        .filter(OpportunityAccess.billing_month == billing_month)
+        .group_by(User.id, User.email)
+    )
+
+    if search_email:
+        q = q.filter(User.email.ilike(f"%{search_email}%"))
+
+    total = db.query(func.count()).select_from(q.subquery()).scalar() or 0
+
+    rows = q.order_by(desc(overage_total_col)).offset(skip).limit(limit).all()
+
+    return {
+        "billing_month": billing_month.isoformat(),
+        "total": total,
+        "items": [
+            {
+                "user_id": r.user_id,
+                "email": r.email,
+                "included_used": r.included_used,
+                "overage_count": r.overage_count,
+                "overage_total": float(r.overage_total),
+                "total_accessed": r.total_accessed,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/opportunity-access")
+def list_opportunity_access(
+    user_id: Optional[int] = Query(None),
+    billing_month: Optional[date] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    skip: int = Query(0, ge=0),
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """List opportunity_access records with user email and opportunity title."""
+    from app.models.opportunity_access import OpportunityAccess
+
+    q = (
+        db.query(
+            OpportunityAccess,
+            User.email.label("user_email"),
+            Opportunity.title.label("opportunity_title"),
+        )
+        .join(User, OpportunityAccess.user_id == User.id)
+        .join(Opportunity, OpportunityAccess.opportunity_id == Opportunity.id)
+    )
+
+    if user_id is not None:
+        q = q.filter(OpportunityAccess.user_id == user_id)
+
+    if billing_month is not None:
+        q = q.filter(OpportunityAccess.billing_month == billing_month)
+
+    total = q.count()
+    rows = q.order_by(desc(OpportunityAccess.first_accessed_at)).offset(skip).limit(limit).all()
+
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": str(rec.id),
+                "user_id": rec.user_id,
+                "user_email": user_email,
+                "opportunity_id": rec.opportunity_id,
+                "opportunity_title": opportunity_title,
+                "access_type": rec.access_type,
+                "billing_month": rec.billing_month.isoformat() if rec.billing_month else None,
+                "is_included": rec.is_included,
+                "overage_charged": float(rec.overage_charged),
+                "stripe_invoice_item_id": rec.stripe_invoice_item_id,
+                "access_count": rec.access_count,
+                "first_accessed_at": rec.first_accessed_at,
+                "last_accessed_at": rec.last_accessed_at,
+            }
+            for rec, user_email, opportunity_title in rows
+        ],
+    }
+
+
+@router.patch("/opportunity-access/{record_id}")
+def patch_opportunity_access(
+    record_id: str,
+    is_included: Optional[bool] = None,
+    reset_overage: Optional[bool] = Query(None, description="Set overage_charged to 0"),
+    request: Request = None,
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Manually correct an opportunity_access record.
+    - is_included=true: mark record as within monthly allowance
+    - reset_overage=true: zero out the overage_charged amount
+    """
+    import uuid as _uuid
+    from app.models.opportunity_access import OpportunityAccess
+
+    try:
+        rec_uuid = _uuid.UUID(record_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid record_id format (must be UUID)")
+
+    record = db.query(OpportunityAccess).filter(OpportunityAccess.id == rec_uuid).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Opportunity access record not found")
+
+    changed = {}
+    if is_included is not None:
+        record.is_included = is_included
+        changed["is_included"] = is_included
+    if reset_overage:
+        record.overage_charged = 0
+        changed["overage_charged"] = 0
+
+    if not changed:
+        raise HTTPException(status_code=400, detail="No changes requested. Pass is_included or reset_overage=true")
+
+    db.commit()
+
+    log_event(
+        db,
+        action="admin.opportunity_access.patch",
+        actor=admin_user,
+        actor_type="admin",
+        request=request,
+        resource_type="opportunity_access",
+        resource_id=str(record_id),
+        metadata={"changes": changed, "user_id": record.user_id, "opportunity_id": record.opportunity_id},
+    )
+
+    return {
+        "id": str(record.id),
+        "user_id": record.user_id,
+        "opportunity_id": record.opportunity_id,
+        "is_included": record.is_included,
+        "overage_charged": float(record.overage_charged),
+        "billing_month": record.billing_month.isoformat() if record.billing_month else None,
+    }
 
 
 @router.get("/stripe-token-billing/config")

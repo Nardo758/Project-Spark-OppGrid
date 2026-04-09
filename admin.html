@@ -799,6 +799,22 @@
                         AI Models
                     </a>
                 </li>
+                <li>
+                    <a href="#opportunity-access" data-section="opportunity-access">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Opp Access
+                    </a>
+                </li>
+                <li>
+                    <a href="#tier-config" data-section="tier-config">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        </svg>
+                        Tier Config
+                    </a>
+                </li>
             </ul>
         </aside>
 
@@ -1037,10 +1053,23 @@
                         <div class="section-actions">
                             <select class="filter-select" id="sub-tier-filter">
                                 <option value="">All Tiers</option>
-                                <option value="free">Free</option>
-                                <option value="pro">Pro</option>
-                                <option value="business">Business</option>
-                                <option value="enterprise">Enterprise</option>
+                                <optgroup label="Platform Tiers (v2.1)">
+                                    <option value="explorer">Explorer</option>
+                                    <option value="builder">Builder</option>
+                                    <option value="scaler">Scaler</option>
+                                    <option value="enterprise">Enterprise</option>
+                                </optgroup>
+                                <optgroup label="API-Only Tiers">
+                                    <option value="api_starter">API Starter</option>
+                                    <option value="api_professional">API Professional</option>
+                                    <option value="api_enterprise">API Enterprise</option>
+                                </optgroup>
+                                <optgroup label="Legacy">
+                                    <option value="free">Free (legacy)</option>
+                                    <option value="starter">Starter (legacy)</option>
+                                    <option value="pro">Pro (legacy)</option>
+                                    <option value="business">Business (legacy)</option>
+                                </optgroup>
                             </select>
                         </div>
                     </div>
@@ -1982,6 +2011,72 @@
                     </table>
                 </div>
             </section>
+
+            <!-- ===== OPPORTUNITY ACCESS SECTION ===== -->
+            <section id="section-opportunity-access" class="hidden">
+                <div class="page-header">
+                    <h1 class="spektral">Opportunity Access</h1>
+                    <p>Monthly opportunity usage per user — included slots and overage charges</p>
+                </div>
+
+                <div class="content-section">
+                    <div class="section-header">
+                        <h2>Monthly Usage Summary</h2>
+                        <div class="section-actions">
+                            <input type="text" class="search-input" id="opp-access-email-search" placeholder="Search by email..." oninput="loadOpportunityAccessSummary()">
+                            <input type="month" id="opp-access-month" class="search-input" style="width:160px;" onchange="loadOpportunityAccessSummary()">
+                        </div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Included Used</th>
+                                <th>Overage Count</th>
+                                <th>Overage Total</th>
+                                <th>Total Accessed</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="opp-access-summary-body">
+                            <tr><td colspan="6" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ===== TIER CONFIG SECTION ===== -->
+            <section id="section-tier-config" class="hidden">
+                <div class="page-header">
+                    <h1 class="spektral">Tier Configuration</h1>
+                    <p>Read-only view of all 7 OppGrid v2.1 tier settings</p>
+                </div>
+
+                <div class="content-section">
+                    <div class="section-header">
+                        <h2>Tier Limits &amp; Pricing</h2>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Tier</th>
+                                <th>Monthly Opps</th>
+                                <th>Overage/Opp</th>
+                                <th>RPM</th>
+                                <th>Daily Req</th>
+                                <th>Freshness (days)</th>
+                                <th>Price/mo</th>
+                                <th>API</th>
+                                <th>Dashboard</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tier-config-body">
+                            <tr><td colspan="9" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
         </main>
     </div>
 
@@ -2074,6 +2169,8 @@
                 case 'command-center': loadCommandCenter(); break;
                 case 'google-scraping': loadGoogleScraping(); break;
                 case 'ai-models': loadAIModels(); loadPricingTiers(); loadStripeMeters(); break;
+                case 'opportunity-access': loadOpportunityAccessSummary(); break;
+                case 'tier-config': loadTierConfig(); break;
             }
         }
 
@@ -2346,40 +2443,46 @@
         async function loadSubscriptions() {
             const tierFilter = document.getElementById('sub-tier-filter').value;
             const tbody = document.getElementById('subscriptions-table-body');
-            
+
             try {
                 let url = '/api/v1/admin/subscriptions?limit=50';
                 if (tierFilter) url += `&tier_filter=${tierFilter}`;
 
                 const response = await fetchWithAuth(url);
-                const subscriptions = await response.json();
+                const data = await response.json();
+                const subscriptions = data.subscriptions || [];
 
                 if (subscriptions.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No subscriptions found</td></tr>';
                     return;
                 }
 
-                tbody.innerHTML = subscriptions.map(sub => `
+                tbody.innerHTML = subscriptions.map(sub => {
+                    const displayName = sub.name || sub.email || 'Unknown';
+                    const initial = displayName.charAt(0).toUpperCase();
+                    const tier = (sub.tier || 'unknown').toLowerCase();
+                    const status = (sub.status || 'unknown').toLowerCase();
+                    return `
                     <tr>
                         <td>
                             <div class="user-cell">
-                                <div class="user-avatar">${sub.user_name.charAt(0).toUpperCase()}</div>
+                                <div class="user-avatar">${escapeHtml(initial)}</div>
                                 <div class="user-info">
-                                    <span class="user-name">${escapeHtml(sub.user_name)}</span>
-                                    <span class="user-email">${escapeHtml(sub.user_email)}</span>
+                                    <span class="user-name">${escapeHtml(displayName)}</span>
+                                    <span class="user-email">${escapeHtml(sub.email || '')}</span>
                                 </div>
                             </div>
                         </td>
-                        <td><span class="badge badge-${sub.tier}">${sub.tier.toUpperCase()}</span></td>
-                        <td><span class="badge badge-${sub.status}">${sub.status}</span></td>
+                        <td><span class="badge badge-${escapeHtml(tier)}">${escapeHtml(tier.toUpperCase())}</span></td>
+                        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
                         <td>${sub.current_period_end ? formatDate(sub.current_period_end) : 'N/A'}</td>
                         <td>
                             <div class="action-btns">
-                                <button class="btn-sm btn-secondary" onclick="showTierModal(${sub.id}, ${sub.user_id}, '${sub.tier}')">Change Tier</button>
+                                <button class="btn-sm btn-secondary" onclick="showTierModal(${sub.id}, ${sub.user_id}, '${escapeHtml(tier)}')">Change Tier</button>
                             </div>
                         </td>
-                    </tr>
-                `).join('');
+                    </tr>`;
+                }).join('');
             } catch (error) {
                 console.error('Failed to load subscriptions:', error);
                 tbody.innerHTML = '<tr><td colspan="5" class="empty-state">Failed to load subscriptions</td></tr>';
@@ -2512,6 +2615,8 @@
         }
 
         function showTierModal(subscriptionId, userId, currentTier) {
+            const ct = (currentTier || '').toLowerCase();
+            const opt = (val, label) => `<option value="${val}" ${ct === val ? 'selected' : ''}>${label}</option>`;
             const modal = document.createElement('div');
             modal.className = 'modal-overlay';
             modal.innerHTML = `
@@ -2524,10 +2629,23 @@
                         <div class="form-group">
                             <label for="new-tier">New Tier</label>
                             <select id="new-tier">
-                                <option value="free" ${currentTier === 'free' ? 'selected' : ''}>Free</option>
-                                <option value="pro" ${currentTier === 'pro' ? 'selected' : ''}>Pro</option>
-                                <option value="business" ${currentTier === 'business' ? 'selected' : ''}>Business</option>
-                                <option value="enterprise" ${currentTier === 'enterprise' ? 'selected' : ''}>Enterprise</option>
+                                <optgroup label="Platform Tiers (v2.1)">
+                                    ${opt('explorer','Explorer ($0/mo)')}
+                                    ${opt('builder','Builder ($99/mo)')}
+                                    ${opt('scaler','Scaler ($499/mo)')}
+                                    ${opt('enterprise','Enterprise ($2500/mo)')}
+                                </optgroup>
+                                <optgroup label="API-Only Tiers">
+                                    ${opt('api_starter','API Starter ($99/mo)')}
+                                    ${opt('api_professional','API Professional ($499/mo)')}
+                                    ${opt('api_enterprise','API Enterprise ($2500/mo)')}
+                                </optgroup>
+                                <optgroup label="Legacy Tiers">
+                                    ${opt('free','Free (legacy)')}
+                                    ${opt('starter','Starter (legacy)')}
+                                    ${opt('pro','Pro (legacy)')}
+                                    ${opt('business','Business (legacy)')}
+                                </optgroup>
                             </select>
                         </div>
                     </div>
@@ -5439,11 +5557,17 @@
                                 <div>
                                     <label>Min Tier</label>
                                     <select name="min_tier" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
-                                        <option value="free">Free</option>
-                                        <option value="starter">Starter</option>
-                                        <option value="growth">Growth</option>
-                                        <option value="pro">Pro</option>
-                                        <option value="enterprise">Enterprise</option>
+                                        <optgroup label="Platform">
+                                            <option value="explorer">Explorer</option>
+                                            <option value="builder">Builder</option>
+                                            <option value="scaler">Scaler</option>
+                                            <option value="enterprise">Enterprise</option>
+                                        </optgroup>
+                                        <optgroup label="Legacy">
+                                            <option value="free">Free (legacy)</option>
+                                            <option value="starter">Starter (legacy)</option>
+                                            <option value="pro">Pro (legacy)</option>
+                                        </optgroup>
                                     </select>
                                 </div>
                                 <div>
@@ -5534,11 +5658,17 @@
                                 <div>
                                     <label>Min Tier</label>
                                     <select name="min_tier" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--stone-300);">
-                                        <option value="free" ${model.min_tier === 'free' ? 'selected' : ''}>Free</option>
-                                        <option value="starter" ${model.min_tier === 'starter' ? 'selected' : ''}>Starter</option>
-                                        <option value="growth" ${model.min_tier === 'growth' ? 'selected' : ''}>Growth</option>
-                                        <option value="pro" ${model.min_tier === 'pro' ? 'selected' : ''}>Pro</option>
-                                        <option value="enterprise" ${model.min_tier === 'enterprise' ? 'selected' : ''}>Enterprise</option>
+                                        <optgroup label="Platform">
+                                            <option value="explorer" ${model.min_tier === 'explorer' ? 'selected' : ''}>Explorer</option>
+                                            <option value="builder" ${model.min_tier === 'builder' ? 'selected' : ''}>Builder</option>
+                                            <option value="scaler" ${model.min_tier === 'scaler' ? 'selected' : ''}>Scaler</option>
+                                            <option value="enterprise" ${model.min_tier === 'enterprise' ? 'selected' : ''}>Enterprise</option>
+                                        </optgroup>
+                                        <optgroup label="Legacy">
+                                            <option value="free" ${model.min_tier === 'free' ? 'selected' : ''}>Free (legacy)</option>
+                                            <option value="starter" ${model.min_tier === 'starter' ? 'selected' : ''}>Starter (legacy)</option>
+                                            <option value="pro" ${model.min_tier === 'pro' ? 'selected' : ''}>Pro (legacy)</option>
+                                        </optgroup>
                                     </select>
                                 </div>
                                 <div>
@@ -5765,6 +5895,192 @@
         }
 
         // ===== END AI MODELS FUNCTIONS =====
+
+        // ===== OPPORTUNITY ACCESS FUNCTIONS =====
+
+        async function loadOpportunityAccessSummary() {
+            const tbody = document.getElementById('opp-access-summary-body');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">Loading...</td></tr>';
+
+            try {
+                const emailSearch = document.getElementById('opp-access-email-search')?.value?.trim() || '';
+                const monthInput = document.getElementById('opp-access-month')?.value;
+
+                let url = '/api/v1/admin/opportunity-access/summary?limit=50';
+                if (emailSearch) url += `&search_email=${encodeURIComponent(emailSearch)}`;
+                if (monthInput) {
+                    // monthInput is YYYY-MM, convert to YYYY-MM-01
+                    url += `&billing_month=${monthInput}-01`;
+                }
+
+                const response = await fetchWithAuth(url);
+                const data = await response.json();
+                const items = data.items || [];
+
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No opportunity access records found for this period.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = items.map(row => `
+                    <tr>
+                        <td>${escapeHtml(row.email)}</td>
+                        <td>${row.included_used}</td>
+                        <td>${row.overage_count}</td>
+                        <td>$${row.overage_total.toFixed(2)}</td>
+                        <td>${row.total_accessed}</td>
+                        <td>
+                            <div class="action-btns">
+                                <button class="btn-sm btn-secondary" onclick="viewOppAccessDetails(${row.user_id}, '${escapeHtml(row.email)}', '${monthInput ? monthInput + '-01' : ''}')">View Details</button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load opportunity access summary:', error);
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Failed to load data.</td></tr>';
+            }
+        }
+
+        async function viewOppAccessDetails(userId, email, billingMonth) {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.style.zIndex = '1000';
+            modal.innerHTML = `
+                <div class="modal" style="max-width: 900px;">
+                    <div class="modal-header">
+                        <h3>Access Details — ${escapeHtml(email)}</h3>
+                        <button onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                    </div>
+                    <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Opportunity</th>
+                                    <th>Type</th>
+                                    <th>Included</th>
+                                    <th>Overage $</th>
+                                    <th>Accesses</th>
+                                    <th>First Accessed</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="opp-access-detail-body">
+                                <tr><td colspan="7" class="loading">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn-sm btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            try {
+                let url = `/api/v1/admin/opportunity-access?user_id=${userId}&limit=100`;
+                if (billingMonth) url += `&billing_month=${billingMonth}`;
+
+                const response = await fetchWithAuth(url);
+                const data = await response.json();
+                const items = data.items || [];
+                const tbody = document.getElementById('opp-access-detail-body');
+
+                if (items.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No records found.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = items.map(rec => `
+                    <tr>
+                        <td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(rec.opportunity_title || '')}">#${rec.opportunity_id} ${escapeHtml((rec.opportunity_title || '').substring(0, 50))}</td>
+                        <td>${escapeHtml(rec.access_type || 'api')}</td>
+                        <td><span class="badge ${rec.is_included ? 'badge-verified' : 'badge-pending'}">${rec.is_included ? 'Yes' : 'No'}</span></td>
+                        <td>$${rec.overage_charged.toFixed(2)}</td>
+                        <td>${rec.access_count}</td>
+                        <td>${rec.first_accessed_at ? formatDate(rec.first_accessed_at) : '—'}</td>
+                        <td>
+                            <div class="action-btns">
+                                ${!rec.is_included ? `<button class="btn-sm btn-secondary" onclick="markOppAccessIncluded('${rec.id}')">Mark Included</button>` : ''}
+                                ${rec.overage_charged > 0 ? `<button class="btn-sm btn-danger" onclick="resetOppOverage('${rec.id}')">Reset Overage</button>` : ''}
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) {
+                const tbody = document.getElementById('opp-access-detail-body');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load records.</td></tr>';
+            }
+        }
+
+        async function markOppAccessIncluded(recordId) {
+            try {
+                await fetchWithAuth(`/api/v1/admin/opportunity-access/${recordId}?is_included=true`, { method: 'PATCH' });
+                showToast('Record marked as included', 'success');
+                // Refresh the detail modal body
+                const tbody = document.getElementById('opp-access-detail-body');
+                if (tbody) {
+                    tbody.querySelectorAll('button').forEach(b => {
+                        if (b.textContent.includes('Mark Included')) b.closest('tr').querySelector('td:nth-child(3) span').textContent = 'Yes';
+                    });
+                }
+                loadOpportunityAccessSummary();
+            } catch (error) {
+                showToast('Failed to update record', 'error');
+            }
+        }
+
+        async function resetOppOverage(recordId) {
+            try {
+                await fetchWithAuth(`/api/v1/admin/opportunity-access/${recordId}?reset_overage=true`, { method: 'PATCH' });
+                showToast('Overage reset to $0', 'success');
+                loadOpportunityAccessSummary();
+            } catch (error) {
+                showToast('Failed to reset overage', 'error');
+            }
+        }
+
+        // ===== TIER CONFIG FUNCTIONS =====
+
+        async function loadTierConfig() {
+            const tbody = document.getElementById('tier-config-body');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="9" class="loading">Loading...</td></tr>';
+
+            try {
+                const response = await fetchWithAuth('/api/v1/admin/tier-config');
+                const data = await response.json();
+                const tiers = data.tiers || [];
+
+                if (tiers.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No tier config found.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = tiers.map(t => {
+                    const freshness = t.freshness_days === 0 ? 'Real-time' : `${t.freshness_days}d`;
+                    const price = t.price_monthly === 0 ? 'Free' : `$${t.price_monthly}`;
+                    return `
+                    <tr>
+                        <td><strong>${escapeHtml(t.display_name || t.tier)}</strong><br><small style="color:var(--stone-500)">${escapeHtml(t.tier)}</small></td>
+                        <td>${t.monthly_included_opps}</td>
+                        <td>$${t.overage_per_opp.toFixed(2)}</td>
+                        <td>${t.api_rpm}</td>
+                        <td>${t.api_daily}</td>
+                        <td>${freshness}</td>
+                        <td>${price}</td>
+                        <td>${t.has_api ? '<span class="badge badge-verified">Yes</span>' : '<span class="badge badge-free">No</span>'}</td>
+                        <td>${t.has_dashboard ? '<span class="badge badge-verified">Yes</span>' : '<span class="badge badge-free">No</span>'}</td>
+                    </tr>`;
+                }).join('');
+            } catch (error) {
+                console.error('Failed to load tier config:', error);
+                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Failed to load tier config.</td></tr>';
+            }
+        }
+
+        // ===== END TIER CONFIG FUNCTIONS =====
 
         init();
     </script>
