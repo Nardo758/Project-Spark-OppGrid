@@ -211,6 +211,7 @@ export default function ReportLibrary({
   const [checkoutState, setCheckoutState] = useState<CheckoutPanelConfig | null>(null)
   const [checkoutStateLoading, setCheckoutStateLoading] = useState(false)
   const [sidebarCheckoutState, setSidebarCheckoutState] = useState<CheckoutPanelConfig | null>(null)
+  const [intelCardReportType, setIntelCardReportType] = useState<string>('business_plan')
 
   const isGuest = !isAuthenticated
 
@@ -344,18 +345,23 @@ export default function ReportLibrary({
     }
   }
 
+  const CTA_SLUG_MAP: Record<string, string> = {
+    'Feasibility Study': 'feasibility_study',
+    'Business Plan': 'business_plan',
+    'Deep Clone Analysis': 'competitive_analysis',
+    'Subscription': 'market_analysis',
+  }
+
   useEffect(() => {
     if (consultantResult?.intel_cta?.report_type) {
-      const ctaSlugMap: Record<string, string> = {
-        'Feasibility Study': 'feasibility_study',
-        'Business Plan': 'business_plan',
-        'Deep Clone Analysis': 'competitive_analysis',
-        'Subscription': 'market_analysis',
-      }
-      const slug = ctaSlugMap[consultantResult.intel_cta.report_type] || 'market_analysis'
-      fetchCheckoutState(slug, setCheckoutState)
+      const slug = CTA_SLUG_MAP[consultantResult.intel_cta.report_type] || 'market_analysis'
+      setIntelCardReportType(slug)
     }
-  }, [consultantResult?.intel_cta?.report_type, token])
+  }, [consultantResult?.intel_cta?.report_type])
+
+  useEffect(() => {
+    fetchCheckoutState(intelCardReportType, setCheckoutState)
+  }, [intelCardReportType, token])
 
   useEffect(() => {
     fetchCheckoutState(sidebarReport, setSidebarCheckoutState)
@@ -445,9 +451,9 @@ export default function ReportLibrary({
     }
   }
 
-  const handleCtaCheckout = async (report: ReportItem) => {
+  const handleCtaCheckout = async (reportSlug: string) => {
     if (checkoutState?.state === 'subscriber_has_credits') {
-      await handleSubscriberGenerate(report.slug)
+      await handleSubscriberGenerate(reportSlug)
       return
     }
     setPurchaseLoading(true)
@@ -458,13 +464,13 @@ export default function ReportLibrary({
       const email = isAuthenticated ? '' : guestEmail.trim()
       const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}${email ? `&email=${encodeURIComponent(email)}` : ''}`
       const cancelUrl = `${baseUrl}/billing/return?status=canceled&return_to=${encodeURIComponent(returnPath)}`
-      const body: Record<string, any> = {
-        report_type: report.slug,
+      const body: Record<string, string | Record<string, string>> = {
+        report_type: reportSlug,
         success_url: successUrl,
         cancel_url: cancelUrl,
-        report_context: { idea_description: ideaDescription },
+        report_context: { idea_description: ideaDescription ?? '' },
       }
-      if (email) body.email = email
+      if (email) (body as Record<string, string>).email = email
       const res = await fetch('/api/v1/report-pricing/studio-report-checkout', {
         method: 'POST',
         headers: headers(),
@@ -1108,16 +1114,8 @@ export default function ReportLibrary({
 
               {/* CTA — 3-state checkout panel */}
               {consultantResult.intel_cta && (() => {
-                const ctaSlugMap: Record<string, string> = {
-                  'Feasibility Study': 'feasibility_study',
-                  'Business Plan': 'business_plan',
-                  'Deep Clone Analysis': 'competitive_analysis',
-                  'Subscription': 'market_analysis',
-                }
-                const ctaSlug = ctaSlugMap[consultantResult.intel_cta.report_type] || 'market_analysis'
-                const ctaReport = allReports.find(r => r.slug === ctaSlug)
                 const cs = checkoutState
-                const selectedOpt: ReportOptionItem | undefined = cs?.report_options?.find(o => o.report_type === ctaSlug)
+                const selectedOpt: ReportOptionItem | undefined = cs?.report_options?.find(o => o.report_type === intelCardReportType)
 
                 return (
                   <div className="pt-3 border-t border-gray-100 space-y-3">
@@ -1133,19 +1131,25 @@ export default function ReportLibrary({
                               : `${cs.reports_remaining} of ${cs.reports_total} reports remaining this month`}
                           </span>
                         </div>
-                        <div className="space-y-1 text-[11px]">
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-500">Report value</span>
-                            <span className="line-through text-gray-300">${(cs.base_price_cents / 100).toFixed(0)}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-gray-700 font-medium">Your price</span>
-                            <span className="text-[#0F6E56] font-bold">$0 (included)</span>
-                          </div>
+                        <div>
+                          <label className="text-[10px] font-medium text-gray-500 mb-1 block">Select report to generate</label>
+                          <select
+                            value={intelCardReportType}
+                            onChange={e => setIntelCardReportType(e.target.value)}
+                            className="w-full text-[12px] p-2 border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
+                          >
+                            {cs.report_options.map(opt => (
+                              <option key={opt.report_type} value={opt.report_type}>{opt.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-gray-500">Your price</span>
+                          <span className="text-[#0F6E56] font-bold">use 1 credit</span>
                         </div>
                         {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
                         <button
-                          onClick={() => ctaReport && handleSubscriberGenerate(ctaReport.slug)}
+                          onClick={() => handleSubscriberGenerate(intelCardReportType)}
                           disabled={purchaseLoading || !!generatingReport}
                           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white text-[12px] font-semibold disabled:opacity-50 transition-all hover:shadow-md"
                           style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
@@ -1175,8 +1179,8 @@ export default function ReportLibrary({
                             {cs ? `${selectedOpt?.label ?? consultantResult.intel_cta.report_type}` : consultantResult.intel_cta.text}
                           </span>
                           <button
-                            onClick={() => { if (ctaReport) handleCtaCheckout(ctaReport) }}
-                            disabled={purchaseLoading || !ctaReport || !isValidGuestEmail}
+                            onClick={() => handleCtaCheckout(intelCardReportType)}
+                            disabled={purchaseLoading || !isValidGuestEmail}
                             className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-40 transition-all"
                             style={{ background: '#0F6E56' }}
                           >
@@ -1214,8 +1218,8 @@ export default function ReportLibrary({
                         </div>
                         {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
                         <button
-                          onClick={() => { if (ctaReport) handleCtaCheckout(ctaReport) }}
-                          disabled={purchaseLoading || !ctaReport}
+                          onClick={() => handleCtaCheckout(intelCardReportType)}
+                          disabled={purchaseLoading}
                           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white text-[12px] font-semibold disabled:opacity-50 transition-all hover:shadow-md"
                           style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
                         >
