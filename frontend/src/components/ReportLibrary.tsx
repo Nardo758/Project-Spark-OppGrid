@@ -402,6 +402,10 @@ export default function ReportLibrary({
       await handleSubscriberGenerate(report.slug)
       return
     }
+    if (isGuest && !sidebarEmail.trim()) {
+      setGenerateError('Please enter your email above to receive your report.')
+      return
+    }
     setSidebarEmailError(null)
     setPurchaseLoading(true)
     setGenerateError(null)
@@ -429,7 +433,7 @@ export default function ReportLibrary({
         success_url: successUrl,
         cancel_url: cancelUrl,
       }
-      if (isGuest || sidebarEmail.trim()) {
+      if (sidebarEmail.trim()) {
         checkoutBody.email = sidebarEmail.trim()
       }
       checkoutBody.report_context = { idea_description: ideaDescription }
@@ -607,7 +611,7 @@ export default function ReportLibrary({
             <div className="bg-gray-50 rounded-xl p-3.5 space-y-2">
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-gray-500">Report value</span>
-                <span className="line-through text-gray-300">${(sidebarCheckoutState.base_price_cents / 100).toFixed(0)}</span>
+                <span className="line-through text-gray-300">${((selectedSidebarReport?.priceCents ?? sidebarCheckoutState.base_price_cents) / 100).toFixed(0)}</span>
               </div>
               <div className="flex items-center justify-between text-[11px]">
                 <span className="text-gray-700 font-semibold">Your price</span>
@@ -645,7 +649,7 @@ export default function ReportLibrary({
               {sidebarCheckoutState.discount_pct > 0 && (
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="text-gray-500">Base price</span>
-                  <span className="line-through text-gray-300">${(sidebarCheckoutState.base_price_cents / 100).toFixed(0)}</span>
+                  <span className="line-through text-gray-300">${((selectedSidebarReport?.priceCents ?? sidebarCheckoutState.base_price_cents) / 100).toFixed(0)}</span>
                 </div>
               )}
               <div className="flex items-center justify-between text-[11px]">
@@ -1476,7 +1480,22 @@ export default function ReportLibrary({
             </div>
             <span className="text-[10px] px-2.5 py-1 rounded-full font-semibold bg-amber-50 text-amber-700 border border-amber-200 hidden sm:inline">Save up to 30% with bundles</span>
           </div>
-          <p className="text-xs text-gray-500 mb-5">Purchase additional reports tailored to your business context. Each uses your analysis data for personalized insights.</p>
+          <p className="text-xs text-gray-500 mb-4">Purchase additional reports tailored to your business context. Each uses your analysis data for personalized insights.</p>
+
+          {isGuest && (
+            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl">
+              <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">
+                Email for report delivery <span className="text-red-400 font-normal">(required)</span>
+              </label>
+              <input
+                type="email"
+                value={sidebarEmail}
+                onChange={(e) => { setSidebarEmail(e.target.value); setGenerateError(null) }}
+                placeholder="your@email.com"
+                className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56] transition-all placeholder:text-gray-400"
+              />
+            </div>
+          )}
 
           {generateError && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
