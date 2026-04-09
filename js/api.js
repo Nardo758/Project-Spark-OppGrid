@@ -145,6 +145,123 @@ class OppGridAPI {
         return this.handleResponse(response);
     }
 
+    async changePassword(currentPassword, newPassword) {
+        const response = await fetch(`${this.baseURL}/users/me/change-password`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+        });
+        return this.handleResponse(response);
+    }
+
+    async getNotificationPreferences() {
+        const response = await fetch(`${this.baseURL}/users/me/preferences`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    }
+
+    async updateNotificationPreferences(prefs) {
+        const response = await fetch(`${this.baseURL}/users/me/preferences`, {
+            method: 'PUT',
+            headers: this.getHeaders(),
+            body: JSON.stringify(prefs)
+        });
+        return this.handleResponse(response);
+    }
+
+    async deleteCurrentUser() {
+        const response = await fetch(`${this.baseURL}/users/me`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        if (response.status === 200) return this.handleResponse(response);
+        return this.handleResponse(response);
+    }
+
+    async getAIPreferences() {
+        const response = await fetch(`${this.baseURL}/ai-preferences`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    }
+
+    async updateAIPreferences(prefs) {
+        const response = await fetch(`${this.baseURL}/ai-preferences`, {
+            method: 'PUT',
+            headers: this.getHeaders(),
+            body: JSON.stringify(prefs)
+        });
+        return this.handleResponse(response);
+    }
+
+    async saveOpenAIKey(apiKey) {
+        const response = await fetch(`${this.baseURL}/ai-preferences/openai-key`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ api_key: apiKey })
+        });
+        return this.handleResponse(response);
+    }
+
+    async deleteOpenAIKey() {
+        const response = await fetch(`${this.baseURL}/ai-preferences/openai-key`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    }
+
+    async saveClaudeKey(apiKey) {
+        const response = await fetch(`${this.baseURL}/ai-preferences/claude-key`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ api_key: apiKey })
+        });
+        return this.handleResponse(response);
+    }
+
+    async deleteClaudeKey() {
+        const response = await fetch(`${this.baseURL}/ai-preferences/claude-key`, {
+            method: 'DELETE',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    }
+
+    async get2FAStatus() {
+        const response = await fetch(`${this.baseURL}/2fa/status`, {
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    }
+
+    async setup2FA() {
+        const response = await fetch(`${this.baseURL}/2fa/setup`, {
+            method: 'POST',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    }
+
+    async enable2FA(code) {
+        const response = await fetch(`${this.baseURL}/2fa/enable`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ code })
+        });
+        return this.handleResponse(response);
+    }
+
+    async disable2FA(code) {
+        const response = await fetch(`${this.baseURL}/2fa/disable`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ code })
+        });
+        return this.handleResponse(response);
+    }
+
     async getUser(userId) {
         const response = await fetch(`${this.baseURL}/users/${userId}`, {
             headers: this.getHeaders(false)

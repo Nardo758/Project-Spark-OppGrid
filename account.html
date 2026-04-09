@@ -787,6 +787,13 @@
                     </svg>
                     Security
                 </a>
+                <a href="#ai-preferences" class="sidebar-link" data-section="ai-preferences">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 8v4l3 3"/>
+                    </svg>
+                    AI Preferences
+                </a>
             </nav>
         </aside>
 
@@ -802,15 +809,15 @@
                     <form class="form-grid" id="profileForm">
                         <div class="form-group">
                             <label for="firstName">First name</label>
-                            <input type="text" id="firstName" value="Jane" placeholder="First name">
+                            <input type="text" id="firstName" placeholder="First name">
                         </div>
                         <div class="form-group">
                             <label for="lastName">Last name</label>
-                            <input type="text" id="lastName" value="Doe" placeholder="Last name">
+                            <input type="text" id="lastName" placeholder="Last name">
                         </div>
                         <div class="form-group full-width">
                             <label for="profileEmail">Email address</label>
-                            <input type="email" id="profileEmail" value="jane@example.com" placeholder="Email">
+                            <input type="email" id="profileEmail" placeholder="Email" readonly style="background:#f5f5f4;cursor:not-allowed;">
                         </div>
                         <div class="form-group full-width">
                             <label for="company">Company (optional)</label>
@@ -827,6 +834,7 @@
                             </select>
                         </div>
                     </form>
+                    <div id="profileFeedback" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px;"></div>
                     <div class="button-group">
                         <button type="button" class="btn-save" id="saveProfile">Save Changes</button>
                     </div>
@@ -975,8 +983,75 @@
                             <input type="password" id="confirmPassword" placeholder="Confirm new password">
                         </div>
                     </form>
+                    <div id="passwordFeedback" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px;"></div>
                     <div class="button-group">
                         <button type="button" class="btn-save" id="changePassword">Update Password</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI Preferences Section -->
+            <section id="ai-preferences" class="section-card fade-in-up">
+                <div class="section-header">
+                    <h2>AI Preferences</h2>
+                    <p>Configure your AI model settings and API keys for the Dual-Realm Workspace</p>
+                </div>
+                <div class="section-body">
+                    <div style="margin-bottom: 24px;">
+                        <h4 style="font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--stone-700);">Preferred AI Provider</h4>
+                        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border: 1px solid var(--stone-300); border-radius: 8px; font-size: 14px;">
+                                <input type="radio" name="aiProvider" value="openai" id="aiProviderOpenAI" style="accent-color: var(--emerald-500);">
+                                OpenAI (GPT-4)
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border: 1px solid var(--stone-300); border-radius: 8px; font-size: 14px;">
+                                <input type="radio" name="aiProvider" value="anthropic" id="aiProviderAnthropic" style="accent-color: var(--emerald-500);">
+                                Anthropic (Claude)
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 16px; border: 1px solid var(--stone-300); border-radius: 8px; font-size: 14px;">
+                                <input type="radio" name="aiProvider" value="oppgrid" id="aiProviderOppGrid" style="accent-color: var(--emerald-500);" checked>
+                                OppGrid AI (default)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 24px; padding: 16px; border: 1px solid var(--stone-200); border-radius: 10px; background: var(--stone-50);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                            <div>
+                                <h4 style="font-size: 14px; font-weight: 600; color: var(--stone-800);">OpenAI API Key (BYOK)</h4>
+                                <p style="font-size: 13px; color: var(--stone-500);" id="openaiKeyStatus">No key saved</p>
+                            </div>
+                            <button class="btn-outline" id="toggleOpenAIKeyForm" style="font-size: 13px; padding: 6px 14px;">Add Key</button>
+                        </div>
+                        <div id="openaiKeyForm" style="display: none;">
+                            <input type="password" id="openaiKeyInput" placeholder="sk-..." style="width: 100%; padding: 10px 14px; border: 1px solid var(--stone-300); border-radius: 8px; font-size: 14px; margin-bottom: 10px;">
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn-save" id="saveOpenAIKey" style="padding: 8px 18px; font-size: 13px;">Save Key</button>
+                                <button class="btn-danger" id="deleteOpenAIKey" style="padding: 8px 18px; font-size: 13px; display: none;">Remove Key</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 24px; padding: 16px; border: 1px solid var(--stone-200); border-radius: 10px; background: var(--stone-50);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                            <div>
+                                <h4 style="font-size: 14px; font-weight: 600; color: var(--stone-800);">Anthropic API Key (BYOK)</h4>
+                                <p style="font-size: 13px; color: var(--stone-500);" id="claudeKeyStatus">No key saved</p>
+                            </div>
+                            <button class="btn-outline" id="toggleClaudeKeyForm" style="font-size: 13px; padding: 6px 14px;">Add Key</button>
+                        </div>
+                        <div id="claudeKeyForm" style="display: none;">
+                            <input type="password" id="claudeKeyInput" placeholder="sk-ant-..." style="width: 100%; padding: 10px 14px; border: 1px solid var(--stone-300); border-radius: 8px; font-size: 14px; margin-bottom: 10px;">
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn-save" id="saveClaudeKey" style="padding: 8px 18px; font-size: 13px;">Save Key</button>
+                                <button class="btn-danger" id="deleteClaudeKey" style="padding: 8px 18px; font-size: 13px; display: none;">Remove Key</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="aiPrefFeedback" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 12px;"></div>
+                    <div class="button-group">
+                        <button type="button" class="btn-save" id="saveAIPrefs">Save AI Preferences</button>
                     </div>
                 </div>
             </section>
@@ -1005,42 +1080,118 @@
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>
     <script>
-        // Check authentication
         const token = localStorage.getItem('access_token');
-        let user = {};
-        try {
-            const userStr = localStorage.getItem('user');
-            if (userStr && userStr !== 'undefined') {
-                user = JSON.parse(userStr);
-            }
-        } catch (e) {
-            console.warn('Failed to parse user data:', e);
-        }
-
-        if (!token) {
-            window.location.href = 'signin.html';
-        }
-
+        if (!token) { window.location.href = 'signin.html'; }
         api.token = token;
+
+        function showFeedback(elId, message, isError) {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            el.textContent = message;
+            el.style.display = 'block';
+            el.style.background = isError ? '#fef2f2' : '#d1fae5';
+            el.style.color = isError ? '#dc2626' : '#047857';
+            el.style.border = isError ? '1px solid #fca5a5' : '1px solid #6ee7b7';
+            setTimeout(() => { el.style.display = 'none'; }, 4000);
+        }
+
+        function populateUserUI(user) {
+            if (user.name) {
+                const parts = user.name.split(' ');
+                document.getElementById('firstName').value = parts[0] || '';
+                document.getElementById('lastName').value = parts.slice(1).join(' ') || '';
+                document.getElementById('userName').textContent = user.name;
+                const initials = (parts[0]?.[0] || '') + (parts[1]?.[0] || '');
+                document.getElementById('userAvatar').textContent = initials.toUpperCase();
+            }
+            if (user.email) {
+                document.getElementById('profileEmail').value = user.email;
+                document.getElementById('userEmail').textContent = user.email;
+            }
+        }
+
+        async function loadUserProfile() {
+            try {
+                const user = await api.getCurrentUser();
+                localStorage.setItem('user', JSON.stringify(user));
+                populateUserUI(user);
+            } catch (e) {
+                console.warn('Could not load profile from API:', e);
+                try {
+                    const cached = localStorage.getItem('user');
+                    if (cached && cached !== 'undefined') {
+                        populateUserUI(JSON.parse(cached));
+                    }
+                } catch (_) {}
+            }
+        }
+
+        async function loadNotificationPrefs() {
+            try {
+                const prefs = await api.getNotificationPreferences();
+                Object.entries(prefs).forEach(([key, value]) => {
+                    const toggle = document.querySelector(`.toggle-switch[data-toggle="${key}"]`);
+                    if (toggle) {
+                        toggle.classList.toggle('active', !!value);
+                    }
+                });
+            } catch (e) {
+                console.warn('Could not load notification prefs:', e);
+            }
+        }
+
+        async function loadAIPreferences() {
+            try {
+                const prefs = await api.getAIPreferences();
+                const provider = prefs.preferred_provider || prefs.provider;
+                if (provider) {
+                    const radio = document.querySelector(`input[name="aiProvider"][value="${provider}"]`);
+                    if (radio) radio.checked = true;
+                }
+                const openaiStatus = document.getElementById('openaiKeyStatus');
+                const claudeStatus = document.getElementById('claudeKeyStatus');
+                const deleteOpenAI = document.getElementById('deleteOpenAIKey');
+                const deleteClaude = document.getElementById('deleteClaudeKey');
+                if (prefs.has_openai_key) {
+                    openaiStatus.textContent = 'Key saved (validated ' + (prefs.openai_key_validated_at ? new Date(prefs.openai_key_validated_at).toLocaleDateString() : 'recently') + ')';
+                    openaiStatus.style.color = '#047857';
+                    document.getElementById('toggleOpenAIKeyForm').textContent = 'Update Key';
+                    if (deleteOpenAI) deleteOpenAI.style.display = 'inline-flex';
+                }
+                if (prefs.has_claude_key) {
+                    claudeStatus.textContent = 'Key saved (validated ' + (prefs.claude_key_validated_at ? new Date(prefs.claude_key_validated_at).toLocaleDateString() : 'recently') + ')';
+                    claudeStatus.style.color = '#047857';
+                    document.getElementById('toggleClaudeKeyForm').textContent = 'Update Key';
+                    if (deleteClaude) deleteClaude.style.display = 'inline-flex';
+                }
+            } catch (e) {
+                console.warn('Could not load AI preferences:', e);
+            }
+        }
 
         const tierDescriptions = {
             'free': 'Browse opportunities and view basic insights',
+            'explorer': 'Browse opportunities and view basic insights',
+            'builder': 'Access validated opportunities with early access',
+            'scaler': 'Full access with AI assistant and deep dive analysis',
+            'enterprise': 'Exclusive real-time access with custom features',
             'pro': 'Access validated opportunities with 60-day early access',
             'business': 'Full access with AI assistant and deep dive analysis',
-            'enterprise': 'Exclusive real-time access with custom features'
         };
-
         const tierBadgeStyles = {
             'free': { bg: '#f5f5f4', color: '#57534e' },
+            'explorer': { bg: '#f5f5f4', color: '#57534e' },
+            'builder': { bg: '#ede9fe', color: '#7c3aed' },
+            'scaler': { bg: '#ffedd5', color: '#c2410c' },
+            'enterprise': { bg: '#1c1917', color: '#ffffff' },
             'pro': { bg: '#ede9fe', color: '#7c3aed' },
             'business': { bg: '#ffedd5', color: '#c2410c' },
-            'enterprise': { bg: '#1c1917', color: '#ffffff' }
         };
 
         async function loadSubscriptionData() {
             try {
                 const subscription = await api.getMySubscription();
-                const tier = subscription.tier || 'free';
+                const tier = (subscription.tier || 'free').toLowerCase();
                 const planBadge = document.getElementById('planBadge');
                 const planDescription = document.getElementById('planDescription');
                 const upgradePlanBtn = document.getElementById('upgradePlanBtn');
@@ -1051,34 +1202,27 @@
 
                 planBadge.textContent = tier.charAt(0).toUpperCase() + tier.slice(1);
                 planDescription.textContent = tierDescriptions[tier] || tierDescriptions['free'];
-
                 const style = tierBadgeStyles[tier] || tierBadgeStyles['free'];
                 planBadge.style.background = style.bg;
                 planBadge.style.color = style.color;
 
-                if (tier !== 'free') {
+                if (tier !== 'free' && tier !== 'explorer') {
                     upgradePlanBtn.textContent = tier === 'enterprise' ? 'Enterprise Plan' : 'Change Plan';
                     manageBillingBtn.style.display = 'inline-flex';
                 }
-
                 if (subscription.period_end) {
                     const endDate = new Date(subscription.period_end);
                     periodEndText.textContent = `Renews on ${endDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
                     periodEndText.style.display = 'block';
                 }
-
                 const remaining = subscription.views_remaining ?? subscription.unlocks_remaining ?? '-';
                 const limit = subscription.views_limit ?? subscription.unlocks_limit;
                 unlocksRemaining.textContent = remaining;
                 unlocksLimit.textContent = limit !== undefined ? (limit === -1 ? 'Unlimited' : limit) : '-';
-                
                 const viewedEl = document.getElementById('opportunitiesViewed');
-                if (viewedEl && subscription.views_used !== undefined) {
-                    viewedEl.textContent = subscription.views_used;
-                } else if (viewedEl && subscription.opportunity_views !== undefined) {
-                    viewedEl.textContent = subscription.opportunity_views;
+                if (viewedEl) {
+                    viewedEl.textContent = subscription.views_used ?? subscription.opportunity_views ?? '-';
                 }
-
             } catch (error) {
                 console.error('Failed to load subscription:', error);
             }
@@ -1090,78 +1234,44 @@
             if (!container) return;
             container.innerHTML = '';
             if (empty) empty.style.display = 'none';
-
             try {
-                const token = localStorage.getItem('access_token');
-                if (!token) return;
                 const res = await fetch(`${API_BASE_URL}/agreements/?limit=5`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 const data = await res.json().catch(() => ([]));
-                if (!res.ok) throw new Error(data?.detail || 'Failed to load agreements');
+                if (!res.ok) throw new Error(data?.detail || 'Failed');
                 const agreements = Array.isArray(data) ? data : [];
-                if (agreements.length === 0) {
-                    if (empty) empty.style.display = 'block';
-                    return;
-                }
-
+                if (agreements.length === 0) { if (empty) empty.style.display = 'block'; return; }
                 agreements.forEach(a => {
                     const title = a.title || `Agreement #${a.id}`;
                     const row = document.createElement('div');
                     row.style.cssText = 'border:1px solid #e7e5e4;border-radius:12px;padding:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:white;';
-                    row.innerHTML = `
-                        <div>
-                            <div style="font-weight: 700; color:#1c1917; margin-bottom: 2px;">${title}</div>
-                            <div style="font-size: 12px; color:#78716c; display:flex; gap:10px; flex-wrap:wrap;">
-                                <span>Status: ${a.status}</span>
-                                <span>Type: ${a.agreement_type}</span>
-                                <span>Trigger: ${a.trigger_type}</span>
-                            </div>
-                        </div>
-                        <a class="btn-outline" href="agreement.html?id=${encodeURIComponent(String(a.id))}">Open</a>
-                    `;
+                    row.innerHTML = `<div><div style="font-weight:700;color:#1c1917;margin-bottom:2px;">${title}</div><div style="font-size:12px;color:#78716c;display:flex;gap:10px;flex-wrap:wrap;"><span>Status: ${a.status}</span><span>Type: ${a.agreement_type}</span><span>Trigger: ${a.trigger_type}</span></div></div><a class="btn-outline" href="agreement.html?id=${encodeURIComponent(String(a.id))}">Open</a>`;
                     container.appendChild(row);
                 });
-            } catch (e) {
-                // Non-fatal; keep section usable.
-                console.warn('Failed to load agreements summary:', e);
-            }
+            } catch (e) { console.warn('Failed to load agreements summary:', e); }
         }
 
         async function openBillingPortal() {
-            const manageBillingBtn = document.getElementById('manageBillingBtn');
-            manageBillingBtn.disabled = true;
-            manageBillingBtn.textContent = 'Loading...';
-
+            const btn = document.getElementById('manageBillingBtn');
+            btn.disabled = true; btn.textContent = 'Loading...';
             try {
                 const data = await api.createPortalSession(window.location.href);
                 window.location.href = data.url;
             } catch (error) {
-                manageBillingBtn.disabled = false;
-                manageBillingBtn.textContent = 'Manage Billing';
-                alert(error?.message || error?.detail || 'Unable to open billing portal. Please try again.');
+                btn.disabled = false; btn.textContent = 'Manage Billing';
+                alert(error?.message || error?.detail || 'Unable to open billing portal.');
             }
         }
 
-        // Populate user data
-        if (user.full_name) {
-            const names = user.full_name.split(' ');
-            document.getElementById('firstName').value = names[0] || '';
-            document.getElementById('lastName').value = names.slice(1).join(' ') || '';
-            document.getElementById('userAvatar').textContent = 
-                (names[0]?.[0] || '') + (names[1]?.[0] || '');
-            document.getElementById('userName').textContent = user.full_name;
-        }
-        if (user.email) {
-            document.getElementById('profileEmail').value = user.email;
-            document.getElementById('userEmail').textContent = user.email;
-        }
-
-        // Load subscription data
+        // ── Init ──────────────────────────────────────────────
+        loadUserProfile();
+        loadNotificationPrefs();
         loadSubscriptionData();
         loadAgreementsSummary();
+        loadAIPreferences();
 
-        // Check for checkout success
+        // Checkout success banner
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('checkout') === 'success') {
             document.getElementById('successMessage').style.display = 'block';
@@ -1169,22 +1279,14 @@
             window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
         }
 
-        // Handle pending checkout plan (from signup flow)
+        // Pending checkout
         async function handlePendingCheckout() {
             const checkoutPlan = urlParams.get('checkout_plan') || localStorage.getItem('pending_plan');
             if (checkoutPlan && (checkoutPlan === 'pro' || checkoutPlan === 'business')) {
-                // Clear URL parameter but keep pending_plan until checkout completes
-                if (urlParams.get('checkout_plan')) {
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                }
-                
-                // Auto-initiate checkout
+                if (urlParams.get('checkout_plan')) window.history.replaceState({}, document.title, window.location.pathname);
                 try {
                     const origin = window.location.origin;
-                    const successUrl = `${origin}/account.html?checkout=success#subscription`;
-                    const cancelUrl = `${origin}/pricing.html?checkout=cancelled`;
-                    
-                    const data = await api.createCheckoutSession(checkoutPlan, successUrl, cancelUrl);
+                    const data = await api.createCheckoutSession(checkoutPlan, `${origin}/account.html?checkout=success#subscription`, `${origin}/pricing.html?checkout=cancelled`);
                     localStorage.removeItem('pending_plan');
                     window.location.href = data.url || data.checkout_url;
                 } catch (error) {
@@ -1194,14 +1296,9 @@
                 }
             }
         }
-
-        // Run pending checkout check after a brief delay to ensure auth is ready
         setTimeout(handlePendingCheckout, 500);
 
-        // Manage billing button click
-        document.getElementById('manageBillingBtn').addEventListener('click', openBillingPortal);
-
-        // Sidebar navigation
+        // ── Sidebar navigation ────────────────────────────────
         document.querySelectorAll('.sidebar-link').forEach(link => {
             link.addEventListener('click', (e) => {
                 document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
@@ -1209,48 +1306,170 @@
             });
         });
 
-        // Toggle switches
+        // ── Notification toggles (persist on click) ───────────
         document.querySelectorAll('.toggle-switch').forEach(toggle => {
-            toggle.addEventListener('click', () => {
+            toggle.addEventListener('click', async () => {
                 toggle.classList.toggle('active');
+                const key = toggle.dataset.toggle;
+                if (!key) return;
+                const val = toggle.classList.contains('active');
+                try {
+                    await api.updateNotificationPreferences({ [key]: val });
+                } catch (e) {
+                    console.warn('Failed to save notification pref:', e);
+                    toggle.classList.toggle('active');
+                }
             });
         });
 
-        // Save profile
-        document.getElementById('saveProfile').addEventListener('click', () => {
-            alert('Profile saved successfully!');
+        // ── Save profile ──────────────────────────────────────
+        document.getElementById('saveProfile').addEventListener('click', async () => {
+            const btn = document.getElementById('saveProfile');
+            const firstName = document.getElementById('firstName').value.trim();
+            const lastName = document.getElementById('lastName').value.trim();
+            const name = [firstName, lastName].filter(Boolean).join(' ');
+            if (!name) { showFeedback('profileFeedback', 'Please enter your name.', true); return; }
+            btn.disabled = true; btn.textContent = 'Saving...';
+            try {
+                const updated = await api.updateCurrentUser({ name });
+                localStorage.setItem('user', JSON.stringify(updated));
+                populateUserUI(updated);
+                showFeedback('profileFeedback', 'Profile saved successfully.', false);
+            } catch (e) {
+                showFeedback('profileFeedback', e?.detail || e?.message || 'Failed to save profile.', true);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Save Changes';
+            }
         });
 
-        // Change password
-        document.getElementById('changePassword').addEventListener('click', () => {
+        // ── Change password ───────────────────────────────────
+        document.getElementById('changePassword').addEventListener('click', async () => {
+            const btn = document.getElementById('changePassword');
             const current = document.getElementById('currentPassword').value;
             const newPass = document.getElementById('newPassword').value;
             const confirm = document.getElementById('confirmPassword').value;
-
-            if (!current || !newPass || !confirm) {
-                alert('Please fill in all password fields.');
-                return;
-            }
-
-            if (newPass !== confirm) {
-                alert('New passwords do not match.');
-                return;
-            }
-
-            alert('Password updated successfully!');
-            document.getElementById('securityForm').reset();
-        });
-
-        // Delete account
-        document.getElementById('deleteAccount').addEventListener('click', () => {
-            if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
-                if (confirm('This will permanently delete all your data. Type "DELETE" to confirm.')) {
-                    alert('Account deletion requested. You will receive a confirmation email.');
-                }
+            if (!current || !newPass || !confirm) { showFeedback('passwordFeedback', 'Please fill in all password fields.', true); return; }
+            if (newPass !== confirm) { showFeedback('passwordFeedback', 'New passwords do not match.', true); return; }
+            if (newPass.length < 8) { showFeedback('passwordFeedback', 'Password must be at least 8 characters.', true); return; }
+            btn.disabled = true; btn.textContent = 'Updating...';
+            try {
+                await api.changePassword(current, newPass);
+                showFeedback('passwordFeedback', 'Password updated successfully.', false);
+                document.getElementById('securityForm').reset();
+            } catch (e) {
+                showFeedback('passwordFeedback', e?.detail || e?.message || 'Failed to update password.', true);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Update Password';
             }
         });
 
-        // Sign out button
+        // ── Delete account ────────────────────────────────────
+        document.getElementById('deleteAccount').addEventListener('click', async () => {
+            if (!confirm('Are you sure you want to delete your account? This action cannot be undone.')) return;
+            const confirmText = prompt('Type DELETE to permanently remove your account and all data:');
+            if (confirmText !== 'DELETE') { alert('Account deletion cancelled.'); return; }
+            try {
+                await api.deleteCurrentUser();
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                alert('Your account has been deleted.');
+                window.location.href = 'index.html';
+            } catch (e) {
+                alert(e?.detail || e?.message || 'Failed to delete account. Please contact support.');
+            }
+        });
+
+        // ── AI Preferences ────────────────────────────────────
+        document.getElementById('toggleOpenAIKeyForm').addEventListener('click', () => {
+            const form = document.getElementById('openaiKeyForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        });
+        document.getElementById('toggleClaudeKeyForm').addEventListener('click', () => {
+            const form = document.getElementById('claudeKeyForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        });
+
+        document.getElementById('saveOpenAIKey').addEventListener('click', async () => {
+            const key = document.getElementById('openaiKeyInput').value.trim();
+            if (!key) { showFeedback('aiPrefFeedback', 'Please enter an OpenAI API key.', true); return; }
+            try {
+                await api.saveOpenAIKey(key);
+                document.getElementById('openaiKeyStatus').textContent = 'Key saved successfully.';
+                document.getElementById('openaiKeyStatus').style.color = '#047857';
+                document.getElementById('openaiKeyInput').value = '';
+                document.getElementById('openaiKeyForm').style.display = 'none';
+                document.getElementById('deleteOpenAIKey').style.display = 'inline-flex';
+                document.getElementById('toggleOpenAIKeyForm').textContent = 'Update Key';
+                showFeedback('aiPrefFeedback', 'OpenAI key saved.', false);
+            } catch (e) {
+                showFeedback('aiPrefFeedback', e?.detail || e?.message || 'Failed to save OpenAI key.', true);
+            }
+        });
+
+        document.getElementById('deleteOpenAIKey').addEventListener('click', async () => {
+            if (!confirm('Remove your OpenAI API key?')) return;
+            try {
+                await api.deleteOpenAIKey();
+                document.getElementById('openaiKeyStatus').textContent = 'No key saved';
+                document.getElementById('openaiKeyStatus').style.color = '';
+                document.getElementById('deleteOpenAIKey').style.display = 'none';
+                document.getElementById('toggleOpenAIKeyForm').textContent = 'Add Key';
+                showFeedback('aiPrefFeedback', 'OpenAI key removed.', false);
+            } catch (e) {
+                showFeedback('aiPrefFeedback', e?.detail || e?.message || 'Failed to remove key.', true);
+            }
+        });
+
+        document.getElementById('saveClaudeKey').addEventListener('click', async () => {
+            const key = document.getElementById('claudeKeyInput').value.trim();
+            if (!key) { showFeedback('aiPrefFeedback', 'Please enter a Claude API key.', true); return; }
+            try {
+                await api.saveClaudeKey(key);
+                document.getElementById('claudeKeyStatus').textContent = 'Key saved successfully.';
+                document.getElementById('claudeKeyStatus').style.color = '#047857';
+                document.getElementById('claudeKeyInput').value = '';
+                document.getElementById('claudeKeyForm').style.display = 'none';
+                document.getElementById('deleteClaudeKey').style.display = 'inline-flex';
+                document.getElementById('toggleClaudeKeyForm').textContent = 'Update Key';
+                showFeedback('aiPrefFeedback', 'Claude key saved.', false);
+            } catch (e) {
+                showFeedback('aiPrefFeedback', e?.detail || e?.message || 'Failed to save Claude key.', true);
+            }
+        });
+
+        document.getElementById('deleteClaudeKey').addEventListener('click', async () => {
+            if (!confirm('Remove your Claude API key?')) return;
+            try {
+                await api.deleteClaudeKey();
+                document.getElementById('claudeKeyStatus').textContent = 'No key saved';
+                document.getElementById('claudeKeyStatus').style.color = '';
+                document.getElementById('deleteClaudeKey').style.display = 'none';
+                document.getElementById('toggleClaudeKeyForm').textContent = 'Add Key';
+                showFeedback('aiPrefFeedback', 'Claude key removed.', false);
+            } catch (e) {
+                showFeedback('aiPrefFeedback', e?.detail || e?.message || 'Failed to remove key.', true);
+            }
+        });
+
+        document.getElementById('saveAIPrefs').addEventListener('click', async () => {
+            const btn = document.getElementById('saveAIPrefs');
+            const provider = document.querySelector('input[name="aiProvider"]:checked')?.value;
+            btn.disabled = true; btn.textContent = 'Saving...';
+            try {
+                await api.updateAIPreferences({ provider: provider });
+                showFeedback('aiPrefFeedback', 'AI preferences saved.', false);
+            } catch (e) {
+                showFeedback('aiPrefFeedback', e?.detail || e?.message || 'Failed to save preferences.', true);
+            } finally {
+                btn.disabled = false; btn.textContent = 'Save AI Preferences';
+            }
+        });
+
+        // ── Billing portal ────────────────────────────────────
+        document.getElementById('manageBillingBtn').addEventListener('click', openBillingPortal);
+
+        // ── Sign out ──────────────────────────────────────────
         document.getElementById('signOutBtn').addEventListener('click', () => {
             localStorage.removeItem('access_token');
             localStorage.removeItem('token');

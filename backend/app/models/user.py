@@ -62,6 +62,9 @@ class User(Base):
     encrypted_claude_api_key = Column(Text, nullable=True)  # Fernet-encrypted Claude API key
     claude_key_validated_at = Column(DateTime(timezone=True), nullable=True)  # When key was last validated
 
+    # Notification preferences (JSON stored as Text)
+    notification_preferences = Column(Text, nullable=True)
+
     # Account settings
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
