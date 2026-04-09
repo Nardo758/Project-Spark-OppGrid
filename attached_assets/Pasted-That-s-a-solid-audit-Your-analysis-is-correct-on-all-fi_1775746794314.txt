@@ -1,0 +1,151 @@
+That's a solid audit. Your analysis is correct on all five. Let me give you the fixes:
+
+🔴 Fix 1: Race condition on free report credits
+report_pricing.py around line 1579
+python# BEFORE (broken)
+async def generate_free_report(...):
+    if not await check_free_available(user_id):
+        raise HTTPException(403, "No free reports remaining")
+    
+    report = await create_report(...)
+    result = await run_ai_generation(report)  # 30-60s
+    await increment_usage(user_id)  # Too late — race window here
+    return result
+
+# AFTER (atomic)
+async def generate_free_report(..., db):
+    async with db.transaction():
+        # Lock the row and check+increment atomically
+        row = await db.fetch_one("""
+            SELECT free_reports_used, free_reports_limit 
+            FROM user_usage 
+            WHERE user_id = :user_id
+            FOR UPDATE
+        """, {"user_id": user_id})
+        
+        if row["free_reports_used"] >= row["free_reports_limit"]:
+            raise HTTPException(403, "No free reports remaining")
+        
+        # Increment BEFORE generation
+        await db.execute("""
+            UPDATE user_usage 
+            SET free_reports_used = free_reports_used + 1
+            WHERE user_id = :user_id
+        """, {"user_id": user_id})
+    
+    # Now generate (outside transaction — don't hold lock during AI call)
+    try:
+        report = await create_report(...)
+        result = await run_ai_generation(report)
+        return result
+    except Exception as e:
+        # Rollback the credit on failure
+        await db.execute("""
+            UPDATE user_usage 
+            SET free_reports_used = free_reports_used - 1
+            WHERE user_id = :user_id
+        """, {"user_id": user_id})
+        raise
+
+🔴 Fix 2: Slot purchase has no idempotency
+stripe_webhook.py around line 413
+python# BEFORE (broken)
+async def _handle_slot_purchase(session: dict, db):
+    user_id = session["metadata"]["user_id"]
+    slots = int(session["metadata"]["slots"])
+    await slot_service.add_bonus_slots(user_id, slots)  # No guard!
+
+# AFTER (idempotent)
+async def _handle_slot_purchase(session: dict, db):
+    session_id = session["id"]
+    user_id = session["metadata"]["user_id"]
+    slots = int(session["metadata"]["slots"])
+    
+    # Check if already fulfilled
+    existing = await db.fetch_one("""
+        SELECT id FROM slot_purchases 
+        WHERE stripe_session_id = :session_id
+    """, {"session_id": session_id})
+    
+    if existing:
+        logger.info(f"Slot purchase {session_id} already fulfilled, skipping")
+        return
+    
+    # Record fulfillment BEFORE adding slots
+    await db.execute("""
+        INSERT INTO slot_purchases (stripe_session_id, user_id, slots, created_at)
+        VALUES (:session_id, :user_id, :slots, NOW())
+    """, {"session_id": session_id, "user_id": user_id, "slots": slots})
+    
+    await slot_service.add_bonus_slots(user_id, slots)
+You may need to create the table:
+sqlCREATE TABLE slot_purchases (
+    id SERIAL PRIMARY KEY,
+    stripe_session_id VARCHAR(255) UNIQUE NOT NULL,
+    user_id INTEGER NOT NULL,
+    slots INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+🟡 Fix 3: IntegrityError doesn't halt
+stripe_webhook.py around line 140
+python# BEFORE (broken)
+try:
+    await db.execute("""
+        INSERT INTO stripe_webhook_events (stripe_event_id, event_type, ...)
+        VALUES (:event_id, :event_type, ...)
+    """, {...})
+except IntegrityError:
+    logger.info(f"Duplicate event {event_id}, skipping")
+    await db.rollback()
+    # Falls through to handler! ← BUG
+
+# AFTER (fixed)
+try:
+    await db.execute("""
+        INSERT INTO stripe_webhook_events (stripe_event_id, event_type, ...)
+        VALUES (:event_id, :event_type, ...)
+    """, {...})
+except IntegrityError:
+    logger.info(f"Duplicate event {event_id}, skipping")
+    return {"status": "already_processed"}  # ← HALT HERE
+
+🟡 Fix 4: Old checkout webhook has no idempotency
+stripe_checkout.py around line 136
+Two options:
+Option A: Remove it (if not in use)
+python# Check your Stripe dashboard → Webhooks
+# If /checkout/webhook isn't listed, delete the endpoint entirely
+Option B: Add the same guard
+python@router.post("/checkout/webhook")
+async def checkout_webhook(request: Request, db = Depends(get_db)):
+    payload = await request.body()
+    sig = request.headers.get("stripe-signature")
+    
+    event = stripe.Webhook.construct_event(payload, sig, CHECKOUT_WEBHOOK_SECRET)
+    
+    # Add idempotency check
+    try:
+        await db.execute("""
+            INSERT INTO stripe_webhook_events (stripe_event_id, event_type, created_at)
+            VALUES (:event_id, :event_type, NOW())
+        """, {"event_id": event["id"], "event_type": event["type"]})
+    except IntegrityError:
+        return {"status": "already_processed"}
+    
+    # ... rest of handler
+
+🟢 Fix 5: Verify reconcile job cadence
+bash# Check your job_runner.py or cron config
+grep -n "reconcile\|schedule\|interval" job_runner.py
+Should run at least hourly. If it's daily, tighten it:
+python# In job_runner.py or scheduler config
+scheduler.add_job(
+    stripe_subscription_reconcile_job,
+    'interval',
+    hours=1,  # Not 24!
+    id='stripe_reconcile'
+)
+
+Summary:
+PriorityIssueFix🔴Free report raceSELECT FOR UPDATE + increment before AI🔴Slot purchase idempotencyCheck slot_purchases table before adding🟡IntegrityError continuesAdd return after rollback🟡Old webhook unprotectedRemove or add event table check🟢Reconcile cadenceVerify hourly
