@@ -9,6 +9,7 @@ Usage:
         ...
 """
 import logging
+from typing import Optional
 from fastapi import Depends, HTTPException, Header, Request, status
 from sqlalchemy.orm import Session
 
@@ -21,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 async def get_authenticated_key(
     request: Request,
-    x_api_key: str = Header(
-        ...,
+    x_api_key: Optional[str] = Header(
+        None,
         alias="X-API-Key",
         description="Your OppGrid API key (og_live_… or og_test_…)",
     ),
@@ -35,12 +36,21 @@ async def get_authenticated_key(
         401 — key missing, malformed, revoked, or expired
         429 — RPM or daily quota exceeded
     """
+    from fastapi.responses import JSONResponse
+
+    if not x_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"error": "missing_api_key", "detail": "X-API-Key header is required"},
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
     is_valid, api_key, error = api_key_service.validate_api_key(x_api_key, db)
 
     if not is_valid:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=error,
+            detail={"error": "invalid_api_key", "detail": error},
             headers={"WWW-Authenticate": "ApiKey"},
         )
 
@@ -51,7 +61,7 @@ async def get_authenticated_key(
     if not rpm_ok:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Rate limit exceeded. Slow down and retry in 60 seconds.",
+            detail={"error": "rate_limit_exceeded", "detail": "Rate limit exceeded. Slow down and retry in 60 seconds."},
             headers={
                 "X-RateLimit-Limit": str(api_key.rate_limit_rpm),
                 "X-RateLimit-Remaining": "0",
@@ -66,7 +76,7 @@ async def get_authenticated_key(
     if not daily_ok:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Daily request limit exceeded. Quota resets at midnight UTC.",
+            detail={"error": "daily_limit_exceeded", "detail": "Daily request limit exceeded. Quota resets at midnight UTC."},
             headers={
                 "X-RateLimit-Limit-Daily": str(api_key.daily_limit),
                 "X-RateLimit-Remaining-Daily": "0",
@@ -100,7 +110,7 @@ def require_scope(scope: str):
         if scope not in granted and "*" not in granted:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"API key does not have the required scope: {scope}",
+                detail={"error": "insufficient_scope", "detail": f"API key does not have the required scope: {scope}"},
             )
         return api_key
 

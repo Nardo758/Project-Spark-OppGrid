@@ -587,7 +587,7 @@ def create_api_key(
     if not team:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")
     
-    success, message, full_key = api_key_service.create_api_key(
+    success, message, full_key = api_key_service._create_team_api_key(
         team=team,
         user=current_user,
         name=payload.name,
@@ -615,7 +615,7 @@ def revoke_api_key(
     db: Session = Depends(get_db)
 ):
     """Revoke an API key"""
-    success, message = api_key_service.revoke_api_key(key_id, current_user, db)
+    success, message = api_key_service._revoke_team_api_key(key_id, current_user, db)
     
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)

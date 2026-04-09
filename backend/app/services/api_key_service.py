@@ -24,6 +24,13 @@ from app.models.api_usage import APIUsage
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Backward-compatibility imports (TeamApiKey-based legacy team endpoints)
+# ---------------------------------------------------------------------------
+# These are used by teams.py which predates the new public API key system.
+# They operate on the TeamApiKey model (team_api_keys table), not APIKey.
+from app.models.team import TeamApiKey, Team
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
@@ -297,3 +304,101 @@ def record_usage(
             db.rollback()
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Legacy TeamApiKey wrappers (used by teams.py)
+# ---------------------------------------------------------------------------
+
+import hashlib as _hashlib
+import secrets as _secrets
+import json as _json
+
+
+def list_api_keys(team_id: int, db: Session) -> list:
+    """Return team API keys as dicts (legacy TeamApiKey-based)."""
+    keys = db.query(TeamApiKey).filter(TeamApiKey.team_id == team_id).all()
+    result = []
+    for k in keys:
+        scopes = []
+        if k.scopes:
+            try:
+                scopes = _json.loads(k.scopes)
+            except Exception:
+                scopes = []
+        result.append({
+            "id": k.id,
+            "name": k.name,
+            "key_prefix": k.key_prefix,
+            "is_active": k.is_active,
+            "scopes": scopes,
+            "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+            "usage_count": k.usage_count,
+            "expires_at": k.expires_at.isoformat() if k.expires_at else None,
+            "created_at": k.created_at.isoformat() if k.created_at else None,
+        })
+    return result
+
+
+def enable_team_api_access(team: "Team", rate_limit: int, db: Session) -> None:
+    """Enable API access for a team (legacy)."""
+    team.api_enabled = True
+    team.api_rate_limit = rate_limit
+    db.commit()
+
+
+def disable_team_api_access(team: "Team", db: Session) -> None:
+    """Disable API access for a team (legacy)."""
+    team.api_enabled = False
+    db.commit()
+
+
+def _create_team_api_key(
+    team: "Team",
+    user,
+    name: str,
+    scopes=None,
+    expires_in_days=None,
+    db: Session = None,
+) -> Tuple[bool, str, Optional[str]]:
+    """Create a legacy TeamApiKey for a team. Returns (success, message, full_key)."""
+    from datetime import datetime, timedelta, timezone
+
+    if not team.api_enabled:
+        return False, "API access is not enabled for this team", None
+
+    token = _secrets.token_urlsafe(32)
+    full_key = f"og_live_{token}"
+    key_hash = _hashlib.sha256(full_key.encode()).hexdigest()
+    key_prefix = full_key[:8]
+
+    scopes_json = _json.dumps(scopes or ["read:opportunities", "read:trends", "read:markets"])
+
+    expires_at = None
+    if expires_in_days:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+
+    key = TeamApiKey(
+        team_id=team.id,
+        name=name,
+        key_hash=key_hash,
+        key_prefix=key_prefix,
+        scopes=scopes_json,
+        expires_at=expires_at,
+        created_by_id=user.id,
+    )
+    db.add(key)
+    db.commit()
+    return True, "API key created successfully", full_key
+
+
+def _revoke_team_api_key(key_id: int, user, db: Session) -> Tuple[bool, str]:
+    """Revoke a legacy TeamApiKey by integer ID."""
+    key = db.query(TeamApiKey).filter(TeamApiKey.id == key_id).first()
+    if not key:
+        return False, "API key not found"
+    if not key.is_active:
+        return False, "API key is already revoked"
+    key.is_active = False
+    db.commit()
+    return True, "API key revoked successfully"

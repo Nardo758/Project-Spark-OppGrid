@@ -103,25 +103,25 @@ async def response_middleware(request: Request, call_next):
             request.state.daily_remaining
         )
 
-    # Record usage for authenticated requests.
+    # Record usage for all v1 requests (authenticated or not).
+    # api_key_id is None for unauthenticated requests (still recorded for audit).
     # Uses a dedicated SessionLocal so we never touch the request's session
     # after the response has already been sent.
     api_key: Optional[APIKey] = getattr(request.state, "api_key", None)
-    if api_key is not None:
-        db = SessionLocal()
-        try:
-            api_key_service.record_usage(
-                api_key_id=api_key.id,
-                endpoint=str(request.url.path),
-                method=request.method,
-                status_code=response.status_code,
-                response_time_ms=elapsed_ms,
-                ip_address=request.client.host if request.client else None,
-                user_agent=request.headers.get("user-agent"),
-                db=db,
-            )
-        finally:
-            db.close()
+    db = SessionLocal()
+    try:
+        api_key_service.record_usage(
+            api_key_id=api_key.id if api_key is not None else None,
+            endpoint=str(request.url.path),
+            method=request.method,
+            status_code=response.status_code,
+            response_time_ms=elapsed_ms,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+            db=db,
+        )
+    finally:
+        db.close()
 
     return response
 
@@ -437,6 +437,74 @@ def list_markets(
         Opportunity.status == "active",
         Opportunity.moderation_status == "approved",
         Opportunity.category.isnot(None),
+    ]
+
+    freshness = _freshness_filter(api_key.tier)
+    if freshness is not None:
+        base_filters.append(freshness)
+
+    rows = (
+        db.query(
+            Opportunity.category,
+            sqlfunc.count(Opportunity.id).label("total_opportunities"),
+            sqlfunc.avg(Opportunity.ai_opportunity_score).label("avg_score"),
+        )
+        .filter(*base_filters)
+        .group_by(Opportunity.category)
+        .order_by(sqlfunc.count(Opportunity.id).desc())
+        .all()
+    )
+
+    markets: List[ApiMarketResponse] = []
+    for row in rows:
+        region_rows = (
+            db.query(Opportunity.region)
+            .filter(
+                *base_filters,
+                Opportunity.category == row.category,
+                Opportunity.region.isnot(None),
+            )
+            .group_by(Opportunity.region)
+            .order_by(sqlfunc.count(Opportunity.id).desc())
+            .limit(3)
+            .all()
+        )
+        markets.append(
+            ApiMarketResponse(
+                category=row.category,
+                total_opportunities=row.total_opportunities,
+                avg_score=(
+                    round(float(row.avg_score), 1) if row.avg_score else None
+                ),
+                top_regions=[r[0] for r in region_rows if r[0]],
+            )
+        )
+
+    return PaginatedMarkets(data=markets, total=len(markets))
+
+
+@v1_app.get(
+    "/markets/{region}",
+    response_model=PaginatedMarkets,
+    tags=["Markets"],
+    summary="List market intelligence for a specific region",
+)
+def get_market_by_region(
+    region: str,
+    api_key: APIKey = Depends(require_scope("read:markets")),
+    db: Session = Depends(get_db),
+):
+    """
+    Return aggregated opportunity counts, average AI scores, and top
+    categories for a specific region.
+
+    **Requires scope:** `read:markets`
+    """
+    base_filters = [
+        Opportunity.status == "active",
+        Opportunity.moderation_status == "approved",
+        Opportunity.category.isnot(None),
+        Opportunity.region.ilike(f"%{region}%"),
     ]
 
     freshness = _freshness_filter(api_key.tier)
