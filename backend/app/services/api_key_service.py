@@ -392,9 +392,12 @@ def _create_team_api_key(
     return True, "API key created successfully", full_key
 
 
-def _revoke_team_api_key(key_id: int, user, db: Session) -> Tuple[bool, str]:
-    """Revoke a legacy TeamApiKey by integer ID."""
-    key = db.query(TeamApiKey).filter(TeamApiKey.id == key_id).first()
+def _revoke_team_api_key(key_id: int, user, db: Session, team_id: int = None) -> Tuple[bool, str]:
+    """Revoke a legacy TeamApiKey by integer ID. Ownership is verified via team membership."""
+    filters = [TeamApiKey.id == key_id]
+    if team_id is not None:
+        filters.append(TeamApiKey.team_id == team_id)
+    key = db.query(TeamApiKey).filter(*filters).first()
     if not key:
         return False, "API key not found"
     if not key.is_active:

@@ -615,7 +615,16 @@ def revoke_api_key(
     db: Session = Depends(get_db)
 ):
     """Revoke an API key"""
-    success, message = api_key_service._revoke_team_api_key(key_id, current_user, db)
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.is_active == True
+    ).first()
+
+    if not member or member.role not in [TeamRole.OWNER, TeamRole.ADMIN]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have permission to revoke API keys")
+
+    success, message = api_key_service._revoke_team_api_key(key_id, current_user, db, team_id=team_id)
     
     if not success:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)

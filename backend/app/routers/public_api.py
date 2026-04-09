@@ -17,6 +17,7 @@ from typing import Optional, List
 
 from fastapi import FastAPI, Depends, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
@@ -26,7 +27,7 @@ from app.models.api_key import APIKey
 from app.models.api_usage import APIUsage
 from app.models.opportunity import Opportunity
 from app.models.detected_trend import DetectedTrend
-from app.middleware.api_auth import get_authenticated_key, require_scope
+from app.middleware.api_auth import get_authenticated_key, require_scope, APIAuthError
 from app.services import api_key_service
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,18 @@ v1_app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
+
+
+@v1_app.exception_handler(APIAuthError)
+async def api_auth_error_handler(request: Request, exc: APIAuthError):
+    """Convert APIAuthError into the canonical public API error shape: {"error": ..., "detail": ...}."""
+    headers = {"Content-Type": "application/json"}
+    headers.update(exc.extra_headers)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.error, "detail": exc.detail},
+        headers=headers,
+    )
 
 
 # ---------------------------------------------------------------------------
