@@ -8,13 +8,10 @@ Usage:
     def foo(api_key: APIKey = Depends(require_scope("read:opportunities"))):
         ...
 """
-import json
 import logging
 from typing import Optional
 
 from fastapi import Depends, Header, Request, status
-from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -22,18 +19,6 @@ from app.models.api_key import APIKey
 from app.services import api_key_service
 
 logger = logging.getLogger(__name__)
-
-
-def _api_error(status_code: int, error: str, detail: str, extra_headers: dict = None) -> JSONResponse:
-    """Return a JSONResponse with the canonical public API error shape: {error, detail}."""
-    headers = {"Content-Type": "application/json"}
-    if extra_headers:
-        headers.update(extra_headers)
-    return JSONResponse(
-        status_code=status_code,
-        content={"error": error, "detail": detail},
-        headers=headers,
-    )
 
 
 class APIAuthError(Exception):

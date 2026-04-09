@@ -41,6 +41,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         }
 
         # Do not rate-limit provider callbacks/webhooks (providers will retry).
+        # Skip /v1 entirely — the public API has its own per-key slowapi limiter
+        # (tier-aware, 10/100/1000 rpm), so the global middleware must not cap it.
         self._skip_prefixes = (
             "/health",
             "/docs",
@@ -49,6 +51,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             "/api/v1/webhook/",
             "/api/v1/replit-auth/",
             "/auth/",
+            "/v1",
         )
 
     def _client_ip(self, request: Request) -> str:
