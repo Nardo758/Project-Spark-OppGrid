@@ -614,6 +614,7 @@ export default function Settings() {
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'ai', label: 'AI Settings', icon: Bot },
     { id: 'network', label: 'Join Our Network', icon: Users },
+    { id: 'api-keys', label: 'API Keys', icon: Key, href: '/settings/api' },
   ]
 
   return (
@@ -625,20 +626,31 @@ export default function Settings() {
           {/* Sidebar */}
           <div className="w-full md:w-64 bg-white rounded-xl border border-gray-200 p-4">
             <nav className="space-y-1">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'bg-gray-900 text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <tab.icon className="w-5 h-5" />
-                  {tab.label}
-                </button>
-              ))}
+              {tabs.map((tab) => {
+                const cls = `w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-gray-900 text-white'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`
+                if ('href' in tab && tab.href) {
+                  return (
+                    <Link key={tab.id} to={tab.href} className={cls}>
+                      <tab.icon className="w-5 h-5" />
+                      {tab.label}
+                    </Link>
+                  )
+                }
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cls}
+                  >
+                    <tab.icon className="w-5 h-5" />
+                    {tab.label}
+                  </button>
+                )
+              })}
             </nav>
           </div>
           

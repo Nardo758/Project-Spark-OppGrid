@@ -39,6 +39,7 @@ import ReportStudio from './pages/build/ReportStudio'
 import ConsultantStudio from './pages/build/ConsultantStudio'
 import ApiPortal from './pages/ApiPortal'
 import Settings from './pages/Settings'
+import SettingsApiKeys from './pages/SettingsApiKeys'
 import Projects from './pages/Projects'
 import MyWorkspaces from './pages/MyWorkspaces'
 import WorkspacePage from './pages/Workspace'
@@ -202,6 +203,14 @@ function App() {
           element={
             <RequireAuth>
               <Settings />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="settings/api"
+          element={
+            <RequireAuth>
+              <SettingsApiKeys />
             </RequireAuth>
           }
         />

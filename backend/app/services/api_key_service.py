@@ -167,10 +167,10 @@ def validate_api_key(
 
 
 def list_user_api_keys(user_id: int, db: Session) -> List["APIKey"]:
-    """Return all APIKey records owned by *user_id*, newest first."""
+    """Return active APIKey records owned by *user_id*, newest first."""
     return (
         db.query(APIKey)
-        .filter(APIKey.user_id == user_id)
+        .filter(APIKey.user_id == user_id, APIKey.is_active == True)
         .order_by(APIKey.created_at.desc())
         .all()
     )
