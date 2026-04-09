@@ -461,7 +461,7 @@ export default function ReportLibrary({
     try {
       const baseUrl = window.location.origin
       const returnPath = window.location.pathname
-      const email = isAuthenticated ? '' : guestEmail.trim()
+      const email = (isAuthenticated && checkoutState?.state !== 'guest') ? '' : guestEmail.trim()
       const successUrl = `${baseUrl}/billing/return?status=success&return_to=${encodeURIComponent(returnPath)}${email ? `&email=${encodeURIComponent(email)}` : ''}`
       const cancelUrl = `${baseUrl}/billing/return?status=canceled&return_to=${encodeURIComponent(returnPath)}`
       const body: Record<string, string | Record<string, string>> = {
@@ -1191,7 +1191,7 @@ export default function ReportLibrary({
                           </span>
                           <button
                             onClick={() => handleCtaCheckout(intelCardReportType)}
-                            disabled={purchaseLoading || !isValidGuestEmail}
+                            disabled={purchaseLoading || !EMAIL_REGEX.test(guestEmail.trim())}
                             className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-40 transition-all"
                             style={{ background: '#0F6E56' }}
                           >
