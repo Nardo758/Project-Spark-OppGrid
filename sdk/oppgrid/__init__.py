@@ -444,7 +444,10 @@ class OppGrid:
             raise NotFoundError(msg)
 
         if response.status_code == 429:
-            retry_after = int(response.headers.get("Retry-After", 60))
+            try:
+                retry_after = int(response.headers.get("Retry-After", 60))
+            except (ValueError, TypeError):
+                retry_after = 60
             body = _safe_json(response)
             msg = body.get("detail") or body.get("message") or "Rate limit exceeded"
             raise RateLimitError(msg, retry_after=retry_after)

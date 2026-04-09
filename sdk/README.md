@@ -68,7 +68,9 @@ Returns a dict with `data` (list of `Opportunity`), `total`, `page`, `limit`, `h
 
 #### `.get(opportunity_id, include_sources=False)` → `Opportunity`
 
-Fetch a single opportunity by its ID (integer in the live API).
+Fetch a single opportunity by its ID. The live v1 API uses integer IDs
+(e.g. `42`). The parameter type is `Any` so string values (e.g. from JSON
+or a future UUID-based API) are forwarded as-is to the path.
 
 ---
 
