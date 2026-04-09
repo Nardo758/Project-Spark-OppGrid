@@ -6,17 +6,29 @@ import enum
 
 
 class SubscriptionTier(str, enum.Enum):
-    """Subscription tier levels - New 6-tier pricing model (Jan 2026)"""
-    # Individual Track
-    STARTER = "STARTER"      # $20/month - 1 slot, 0% discount
-    GROWTH = "GROWTH"        # $50/month - 3 slots, 10% discount
-    PRO = "PRO"              # $99/month - 5 slots, 15% discount
-    # Business Track
-    TEAM = "TEAM"            # $250/month - 3 seats, 5 slots, white-label
-    BUSINESS = "BUSINESS"    # $750/month - 10 seats, 15 slots, 20% discount + white-label
-    ENTERPRISE = "ENTERPRISE" # $2500/month - unlimited seats, 30 slots, 50% discount + white-label
-    
-    # Legacy tier (for migration)
+    """Subscription tier levels - v2.1 unified access model (Apr 2026)"""
+    # -------- v2.1 Platform tiers (dashboard + optional API) --------
+    EXPLORER = "EXPLORER"           # $0/mo   — 0 opps, dashboard only
+    BUILDER = "BUILDER"             # $99/mo  — 3 opps, 10 RPM, 250/day
+    SCALER = "SCALER"               # $499/mo — 15 opps, 50 RPM, 1250/day
+    # ENTERPRISE reused below (value unchanged, limits updated)
+
+    # -------- v2.1 API-only tiers (no dashboard) --------------------
+    API_STARTER = "API_STARTER"           # $99/mo  — 3 opps, 10 RPM, 250/day
+    API_PROFESSIONAL = "API_PROFESSIONAL" # $499/mo — 15 opps, 50 RPM, 1250/day
+    API_ENTERPRISE = "API_ENTERPRISE"     # $2500/mo — 75 opps, 500 RPM, 10000/day
+
+    # -------- Shared across v2.1 platform + API ----------------------
+    ENTERPRISE = "ENTERPRISE"  # $2500/mo — 75 opps, 500 RPM, 10000/day
+
+    # -------- Legacy tiers (Jan 2026 model — kept for compat) --------
+    STARTER = "STARTER"      # maps to BUILDER equivalent
+    GROWTH = "GROWTH"        # maps to BUILDER equivalent
+    PRO = "PRO"              # maps to SCALER equivalent
+    TEAM = "TEAM"            # maps to BUILDER equivalent
+    BUSINESS = "BUSINESS"    # maps to SCALER equivalent
+
+    # Legacy free tier (deprecated)
     FREE = "FREE"            # Deprecated - map to blocked access
 
 

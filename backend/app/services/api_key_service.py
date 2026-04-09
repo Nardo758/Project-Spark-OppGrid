@@ -35,9 +35,23 @@ from app.models.team import TeamApiKey, Team
 # ---------------------------------------------------------------------------
 
 TIER_LIMITS: Dict[str, Dict[str, int]] = {
-    "starter":      {"rpm": 10,    "daily": 1_000},
-    "professional": {"rpm": 100,   "daily": 10_000},
-    "enterprise":   {"rpm": 1_000, "daily": 100_000},
+    # ---- v2.1 platform tiers ----
+    "explorer":         {"rpm": 0,   "daily": 0},
+    "builder":          {"rpm": 10,  "daily": 250},
+    "scaler":           {"rpm": 50,  "daily": 1_250},
+    "enterprise":       {"rpm": 500, "daily": 10_000},
+    # ---- v2.1 API-only tiers ----
+    "api_starter":      {"rpm": 10,  "daily": 250},
+    "api_professional": {"rpm": 50,  "daily": 1_250},
+    "api_enterprise":   {"rpm": 500, "daily": 10_000},
+    # ---- legacy tier names (mapped to nearest v2.1 equivalent) ----
+    "starter":      {"rpm": 10,  "daily": 250},
+    "professional": {"rpm": 50,  "daily": 1_250},
+    "growth":       {"rpm": 10,  "daily": 250},
+    "pro":          {"rpm": 50,  "daily": 1_250},
+    "team":         {"rpm": 10,  "daily": 250},
+    "business":     {"rpm": 50,  "daily": 1_250},
+    "free":         {"rpm": 0,   "daily": 0},
 }
 
 DEFAULT_SCOPES: List[str] = [

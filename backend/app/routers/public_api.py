@@ -5,10 +5,15 @@ Mounted at /v1 by the main FastAPI app.
 Swagger UI: /v1/docs
 Auth: X-API-Key header (og_live_… or og_test_…)
 
-Rate limits by tier (enforced via slowapi):
-  starter:      10 rpm /  1 000 req/day  — opportunities > 30 days old
-  professional: 100 rpm / 10 000 req/day  — opportunities > 7 days old
-  enterprise:   1 000 rpm / 100 000 req/day — all opportunities
+Rate limits by tier (Spec v2.1):
+  builder / api_starter:      10 rpm /  250 req/day   — opportunities > 31 days old
+  scaler  / api_professional: 50 rpm /  1 250 req/day — opportunities > 8 days old
+  enterprise / api_enterprise: 500 rpm / 10 000 req/day — all opportunities
+
+Monthly opportunity caps (hard caps with $30/opp overage):
+  builder / api_starter:       3 opps / month
+  scaler  / api_professional: 15 opps / month
+  enterprise / api_enterprise: 75 opps / month
 """
 import logging
 from datetime import datetime, timedelta, timezone
@@ -29,9 +34,11 @@ from app.models.api_key import APIKey
 from app.models.api_usage import APIUsage
 from app.models.opportunity import Opportunity
 from app.models.detected_trend import DetectedTrend
+from app.models.tier_config import TierConfig
 from app.middleware.api_auth import get_authenticated_key, require_scope, APIAuthError
 from app.middleware.usage_tracking import UsageTrackingMiddleware
 from app.services import api_key_service
+from app.services.opportunity_access_service import OpportunityAccessService
 from app.schemas.v1_public import (
     ApiOpportunityResponse,
     PaginatedOpportunities,
@@ -105,21 +112,41 @@ X-API-Key: og_live_your_key_here
 ```
 Keys are created from your OppGrid account settings.
 
-### Rate Limits
-| Tier         | Requests / min | Requests / day |
-|--------------|---------------|----------------|
-| starter      | 10            | 1,000          |
-| professional | 100           | 10,000         |
-| enterprise   | 1,000         | 100,000        |
+### Rate Limits (v2.1)
+| Tier                | RPM | Daily  |
+|---------------------|-----|--------|
+| builder / api_starter      | 10  | 250    |
+| scaler / api_professional  | 50  | 1,250  |
+| enterprise / api_enterprise | 500 | 10,000 |
 
 Rate limit headers are included in every response:
+- `X-RateLimit-Limit` — RPM ceiling
 - `X-RateLimit-Remaining` — RPM window remaining
-- `X-RateLimit-Remaining-Daily` — daily quota remaining
+- `X-Daily-Limit` — daily ceiling
+- `X-Daily-Remaining` — daily quota remaining
+
+### Monthly Opportunity Allowance (Hard Caps)
+| Tier                | Included / Month | Overage |
+|---------------------|-----------------|---------|
+| explorer            | 0               | $30/opp |
+| builder / api_starter      | 3               | $30/opp |
+| scaler / api_professional  | 15              | $30/opp |
+| enterprise / api_enterprise | 75              | $30/opp |
+
+Accessing `GET /v1/opportunities/{id}` consumes one slot.
+Re-access in the same billing month is **free**.
+When allowance is exhausted, pass `?confirm_overage=true` to proceed ($30 charged).
+
+Monthly usage headers on every response:
+- `X-Monthly-Included` / `X-Monthly-Used` / `X-Monthly-Remaining`
+- `X-Monthly-Overage` / `X-Monthly-Overage-Cost` / `X-Overage-Rate`
+- `X-Billing-Month` / `X-Billing-Resets`
 
 ### Data Freshness
-- **Starter**: opportunities older than 30 days
-- **Professional**: opportunities older than 7 days
-- **Enterprise**: real-time access to all opportunities
+- **Explorer**: opportunities older than 91 days
+- **Builder / API Starter**: opportunities older than 31 days
+- **Scaler / API Professional**: opportunities older than 8 days
+- **Enterprise / API Enterprise**: real-time access to all opportunities
 
 ### Pagination
 All list endpoints accept `page` (1-indexed, default 1) and `limit`
@@ -180,15 +207,22 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
 # ---------------------------------------------------------------------------
 
 def _freshness_filter(tier: str):
-    """Return a SQLAlchemy filter expression for data freshness based on tier."""
-    if tier == "starter":
-        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-        return Opportunity.created_at <= cutoff
-    if tier == "professional":
-        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-        return Opportunity.created_at <= cutoff
-    # enterprise: no date restriction
-    return None
+    """
+    Return a SQLAlchemy filter expression for data freshness based on tier.
+
+    Uses TierConfig.freshness_days (Spec v2.1):
+      explorer:             91+ days old
+      builder / api_starter: 31+ days old
+      scaler / api_professional: 8+ days old
+      enterprise / api_enterprise: real-time (no filter)
+
+    Legacy tier names are mapped to their v2.1 equivalents.
+    """
+    freshness_days = TierConfig.get_freshness_days(tier)
+    if freshness_days == 0:
+        return None
+    cutoff = datetime.now(timezone.utc) - timedelta(days=freshness_days)
+    return Opportunity.created_at <= cutoff
 
 
 # ---------------------------------------------------------------------------
@@ -282,17 +316,29 @@ def list_opportunities(
     "/opportunities/{opportunity_id}",
     response_model=ApiOpportunityResponse,
     tags=["Opportunities"],
-    summary="Get a single opportunity",
+    summary="Get a single opportunity (consumes monthly allowance)",
 )
 @limiter.limit(dynamic_rate_limit)
 def get_opportunity(
     request: Request,
     opportunity_id: int,
+    confirm_overage: bool = Query(
+        False,
+        description=(
+            "Set to true to confirm a $30 overage charge when monthly "
+            "allowance is exhausted."
+        ),
+    ),
     api_key: APIKey = Depends(require_scope("read:opportunities")),
     db: Session = Depends(get_db),
 ):
     """
     Retrieve a single approved opportunity by its integer ID.
+
+    **Consumes 1 from your monthly opportunity allowance.**
+    Re-accessing the same opportunity in the same billing month is free.
+    When your allowance is exhausted, a `402 Payment Required` response is
+    returned. Pass `?confirm_overage=true` to proceed and be charged $30.
 
     **Requires scope:** `read:opportunities`
     """
@@ -312,6 +358,61 @@ def get_opportunity(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Opportunity not found",
         )
+
+    # --- Monthly allowance check + access recording ----------------------
+    svc = OpportunityAccessService()
+
+    # Try to get Stripe customer ID for overage billing
+    stripe_customer_id = None
+    try:
+        from app.models.subscription import Subscription
+        sub = db.query(Subscription).filter(
+            Subscription.user_id == api_key.user_id
+        ).first()
+        if sub:
+            stripe_customer_id = sub.stripe_customer_id
+    except Exception:
+        pass
+
+    result = svc.check_and_record_access(
+        db=db,
+        user_id=api_key.user_id,
+        tier=api_key.tier,
+        opportunity_id=opportunity_id,
+        api_key_id=str(api_key.id),
+        access_type="api",
+        confirm_overage=confirm_overage,
+        stripe_customer_id=stripe_customer_id,
+    )
+
+    if result.get("requires_overage_confirmation"):
+        usage = result["usage"]
+        cap = TierConfig.get_monthly_cap(api_key.tier)
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "error": "overage_confirmation_required",
+                "message": (
+                    f"You've used all {cap} included opportunities this month."
+                ),
+                "overage_cost": result["overage_cost"],
+                "usage": usage,
+                "options": {
+                    "confirm": {
+                        "url": f"/v1/opportunities/{opportunity_id}?confirm_overage=true",
+                        "cost": result["overage_cost"],
+                    },
+                    "upgrade": {
+                        "url": "https://oppgrid.com/upgrade",
+                    },
+                },
+            },
+        )
+
+    # Stash access result for the response middleware (monthly headers)
+    request.state.monthly_usage = svc.get_usage(
+        db, api_key.user_id, api_key.tier
+    )
 
     return ApiOpportunityResponse(
         id=opportunity.id,
