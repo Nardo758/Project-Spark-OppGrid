@@ -417,21 +417,21 @@ def generate_docx(
     accent.paragraph_format.space_after = Pt(16)
     _add_para_border(accent, "top", "24", EMERALD)
 
-    # ── Wordmark ──
-    wordmark = doc.add_paragraph()
-    wordmark.paragraph_format.space_after = Pt(0)
-    run = wordmark.add_run("OppGrid")
+    # ── Wordmark + tagline (single paragraph to prevent Word separator) ──
+    masthead = doc.add_paragraph()
+    masthead.paragraph_format.space_before = Pt(0)
+    masthead.paragraph_format.space_after = Pt(14)
+    run = masthead.add_run("OppGrid")
     run.font.size = Pt(20)
     run.font.color.rgb = NAVY_RGB
     run.font.name = "Arial"
     run.bold = True
-
-    tagline = doc.add_paragraph()
-    tagline.paragraph_format.space_after = Pt(14)
-    run = tagline.add_run("OPPORTUNITY INTELLIGENCE")
+    masthead.add_run("\n")
+    run = masthead.add_run("OPPORTUNITY INTELLIGENCE")
     run.font.size = Pt(8)
     run.font.color.rgb = SLATE_500_RGB
     run.font.name = "Arial"
+    run.bold = False
 
     # ── Divider ──
     divider = doc.add_paragraph()
