@@ -7,6 +7,10 @@ Creates the two tables required by the OppGrid Public API (v1):
 Also creates the api_usage_daily materialized view for fast billing
 aggregation (refreshed hourly by the background job runner).
 
+UUID primary keys do NOT use a server_default — the ORM always generates
+UUIDs in Python via uuid.uuid4() before INSERT, making this safe and
+portable across all PostgreSQL versions without any extensions.
+
 Revision ID: 20260410_0001
 Revises: 20260409_0001
 Create Date: 2026-04-10
@@ -29,7 +33,6 @@ def upgrade() -> None:
             "id",
             postgresql.UUID(as_uuid=True),
             primary_key=True,
-            server_default=sa.text("gen_random_uuid()"),
             nullable=False,
         ),
         sa.Column("user_id", sa.Integer(), nullable=False),
@@ -106,7 +109,6 @@ def upgrade() -> None:
             "id",
             postgresql.UUID(as_uuid=True),
             primary_key=True,
-            server_default=sa.text("gen_random_uuid()"),
             nullable=False,
         ),
         sa.Column(
