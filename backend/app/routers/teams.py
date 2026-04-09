@@ -583,6 +583,15 @@ def create_api_key(
     db: Session = Depends(get_db)
 ):
     """Create a new API key for a team"""
+    member = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.user_id == current_user.id,
+        TeamMember.is_active == True
+    ).first()
+
+    if not member or member.role not in [TeamRole.OWNER, TeamRole.ADMIN]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You don't have permission to create API keys")
+
     team = db.query(Team).filter(Team.id == team_id).first()
     if not team:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Team not found")

@@ -37,24 +37,37 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# slowapi limiter — dynamic rate limit from authenticated API key tier
+# slowapi limiter — per-API-key rate limiting
 # ---------------------------------------------------------------------------
+
+def _key_identifier(request: Request) -> str:
+    """
+    Unique identifier for the slowapi bucket.
+
+    Uses the API key ID (UUID string) for authenticated requests so each key
+    gets its own independent rate-limit bucket.  Falls back to client IP for
+    unauthenticated requests.
+    """
+    api_key: Optional[APIKey] = getattr(request.state, "api_key", None)
+    if api_key is not None:
+        return str(api_key.id)
+    return get_remote_address(request)
+
 
 def dynamic_rate_limit(request: Request) -> str:
     """
-    Return the slowapi rate-limit string for the authenticated API key.
-
-    Falls back to a permissive limit for public/health endpoints.
+    Return the per-endpoint rate-limit string based on the authenticated API
+    key's tier.  Called by ``@limiter.limit(dynamic_rate_limit)``.
     """
     api_key: Optional[APIKey] = getattr(request.state, "api_key", None)
     if api_key is None:
         return "60/minute"
-
-    rpm = api_key.rate_limit_rpm
-    return f"{rpm}/minute"
+    return f"{api_key.rate_limit_rpm}/minute"
 
 
-limiter = Limiter(key_func=dynamic_rate_limit, default_limits=[])
+# key_func identifies *who* is making the request (bucket key).
+# dynamic_rate_limit determines *how many* requests they may make.
+limiter = Limiter(key_func=_key_identifier, default_limits=[])
 
 
 # ---------------------------------------------------------------------------
