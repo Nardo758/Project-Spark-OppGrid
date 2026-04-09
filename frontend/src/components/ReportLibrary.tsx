@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -204,6 +204,8 @@ export default function ReportLibrary({
   const [sidebarReport, setSidebarReport] = useState('business_plan')
   const [sidebarEmail, setSidebarEmail] = useState('')
   const [sidebarEmailError, setSidebarEmailError] = useState<string | null>(null)
+  const [goDeeperEmailHighlight, setGoDeeperEmailHighlight] = useState(false)
+  const goDeeperEmailRef = useRef<HTMLInputElement>(null)
 
   const [guestEmail, setGuestEmail] = useState('')
   const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
@@ -404,6 +406,10 @@ export default function ReportLibrary({
     }
     if (isGuest && !sidebarEmail.trim()) {
       setGenerateError('Please enter your email above to receive your report.')
+      setGoDeeperEmailHighlight(true)
+      goDeeperEmailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      goDeeperEmailRef.current?.focus()
+      setTimeout(() => setGoDeeperEmailHighlight(false), 2000)
       return
     }
     setSidebarEmailError(null)
@@ -1483,16 +1489,17 @@ export default function ReportLibrary({
           <p className="text-xs text-gray-500 mb-4">Purchase additional reports tailored to your business context. Each uses your analysis data for personalized insights.</p>
 
           {isGuest && (
-            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl">
-              <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">
+            <div className={`mb-4 p-3 rounded-xl border transition-all ${goDeeperEmailHighlight ? 'bg-red-50 border-red-300' : 'bg-gray-50 border-gray-200'}`}>
+              <label className={`text-[11px] font-medium mb-1.5 block ${goDeeperEmailHighlight ? 'text-red-600' : 'text-gray-500'}`}>
                 Email for report delivery <span className="text-red-400 font-normal">(required)</span>
               </label>
               <input
+                ref={goDeeperEmailRef}
                 type="email"
                 value={sidebarEmail}
-                onChange={(e) => { setSidebarEmail(e.target.value); setGenerateError(null) }}
+                onChange={(e) => { setSidebarEmail(e.target.value); setGenerateError(null); setGoDeeperEmailHighlight(false) }}
                 placeholder="your@email.com"
-                className="w-full p-2 border border-gray-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56] transition-all placeholder:text-gray-400"
+                className={`w-full p-2 border rounded-lg text-sm bg-white transition-all placeholder:text-gray-400 ${goDeeperEmailHighlight ? 'border-red-400 ring-2 ring-red-200 focus:ring-red-300 focus:border-red-500' : 'border-gray-200 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]'}`}
               />
             </div>
           )}
