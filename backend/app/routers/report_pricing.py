@@ -1576,7 +1576,7 @@ async def generate_free_report(
             )
         free_check = {"is_free": True, "reason": "guest_free_report"}
     else:
-        free_check = report_usage_service.atomic_reserve_free_report(current_user, db)
+        free_check = report_usage_service.check_free_available(current_user, db)
         if not free_check["is_free"]:
             raise HTTPException(
                 status_code=402,
@@ -1585,8 +1585,6 @@ async def generate_free_report(
 
     if request_data.report_type not in REPORT_PRODUCTS:
         raise HTTPException(status_code=400, detail=f"Invalid report type: {request_data.report_type}")
-
-    reservation_used = current_user is not None and free_check.get("reserved", False)
 
     opportunity = None
     title_suffix = request_data.idea_description or "General Analysis"
@@ -1747,6 +1745,19 @@ Format your response as clean HTML (use <h1>, <h2>, <h3>, <p>, <ul>, <li>, <tabl
 Do NOT include <html>, <head>, or <body> tags - just the content HTML.
 
 {prompt}"""
+
+    reservation_used = False
+    if current_user:
+        atomic_check = report_usage_service.atomic_reserve_free_report(current_user, db)
+        if not atomic_check["is_free"]:
+            report.status = ReportStatus.FAILED
+            report.error_message = "No free reports remaining (concurrent reservation)"
+            db.commit()
+            raise HTTPException(
+                status_code=402,
+                detail="No free reports remaining. Please purchase this report."
+            )
+        reservation_used = atomic_check.get("reserved", False)
 
     start_time = time.time()
     try:
