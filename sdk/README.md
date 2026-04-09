@@ -31,7 +31,7 @@ opp = client.opportunities.get(42)
 print(opp.description)
 
 # List market trends
-trends = client.trends.list(category="technology", min_strength=50)
+trends = client.trends.list(region="north_america", days=14)
 for t in trends["data"]:
     print(f"{t.trend_name} (strength: {t.trend_strength})")
 

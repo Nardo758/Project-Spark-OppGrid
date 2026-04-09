@@ -201,12 +201,13 @@ class OpportunitiesResource:
             response["data"] = [Opportunity.from_dict(o) for o in response["data"]]
         return response
 
-    def get(self, opportunity_id: int) -> Opportunity:
+    def get(self, opportunity_id: int, include_sources: bool = False) -> Opportunity:
         """
         Fetch a single opportunity by its integer ID.
 
         Args:
             opportunity_id: The integer ID of the opportunity.
+            include_sources: Reserved for Professional+ tier (currently no-op).
 
         Returns:
             An :class:`Opportunity` instance.
@@ -228,7 +229,10 @@ class TrendsResource:
     def list(
         self,
         category: Optional[str] = None,
+        region: Optional[str] = None,
+        min_velocity: Optional[float] = None,
         min_strength: Optional[int] = None,
+        days: Optional[int] = None,
         page: int = 1,
         limit: int = 20,
     ) -> Dict[str, Any]:
@@ -237,7 +241,10 @@ class TrendsResource:
 
         Args:
             category:     Filter by category (partial match).
+            region:       Filter hint by geographic region (informational).
+            min_velocity: Alias for ``min_strength`` (trend velocity threshold).
             min_strength: Minimum trend strength (0–100).
+            days:         Look-back period in days (informational; backend uses all detected trends).
             page:         Page number, 1-indexed (default 1).
             limit:        Results per page, max 100 (default 20).
 
@@ -248,8 +255,12 @@ class TrendsResource:
         params: Dict[str, Any] = {"page": page, "limit": limit}
         if category is not None:
             params["category"] = category
-        if min_strength is not None:
-            params["min_strength"] = min_strength
+        # min_strength wins; fall back to min_velocity alias
+        effective_strength = min_strength if min_strength is not None else (
+            int(min_velocity) if min_velocity is not None else None
+        )
+        if effective_strength is not None:
+            params["min_strength"] = effective_strength
 
         response = self._client._request("GET", "/trends", params=params)
         if isinstance(response.get("data"), list):
@@ -319,7 +330,7 @@ class OppGrid:
         opp = client.opportunities.get(42)
 
         # List trends
-        trends = client.trends.list(category="technology", min_strength=50)
+        trends = client.trends.list(region="north_america", days=14)
 
         # Market overview
         markets = client.markets.list()
