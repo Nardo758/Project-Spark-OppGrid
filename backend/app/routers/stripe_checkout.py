@@ -203,22 +203,41 @@ async def handle_stripe_webhook(
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         
+        processing_error: Exception | None = None
         try:
             await process_payment_success(session, db)
         except Exception as e:
             logger.error(f"Error processing payment: {e}")
-            return {"status": "error", "message": str(e)}
+            processing_error = e
 
-    if event_id:
-        try:
-            evt = db.query(StripeWebhookEvent).filter(
-                StripeWebhookEvent.stripe_event_id == event_id
-            ).first()
-            if evt:
-                evt.status = StripeWebhookEventStatus.PROCESSED
-                db.commit()
-        except Exception:
-            pass
+        if event_id:
+            try:
+                evt = db.query(StripeWebhookEvent).filter(
+                    StripeWebhookEvent.stripe_event_id == event_id
+                ).first()
+                if evt:
+                    evt.status = (
+                        StripeWebhookEventStatus.FAILED
+                        if processing_error
+                        else StripeWebhookEventStatus.PROCESSED
+                    )
+                    db.commit()
+            except Exception:
+                pass
+
+        if processing_error:
+            return {"status": "error", "message": str(processing_error)}
+    else:
+        if event_id:
+            try:
+                evt = db.query(StripeWebhookEvent).filter(
+                    StripeWebhookEvent.stripe_event_id == event_id
+                ).first()
+                if evt:
+                    evt.status = StripeWebhookEventStatus.PROCESSED
+                    db.commit()
+            except Exception:
+                pass
 
     return {"status": "success"}
 
