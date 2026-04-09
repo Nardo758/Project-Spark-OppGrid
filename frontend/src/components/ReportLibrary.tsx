@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -185,7 +185,15 @@ export default function ReportLibrary({
   const [guestEmail, setGuestEmail] = useState('')
   const [guestEmailError, setGuestEmailError] = useState<string | null>(null)
 
+  const [checkoutState, setCheckoutState] = useState<any>(null)
+  const [checkoutStateLoading, setCheckoutStateLoading] = useState(false)
+  const [sidebarCheckoutState, setSidebarCheckoutState] = useState<any>(null)
+
   const isGuest = !isAuthenticated
+
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const isValidGuestEmail = isGuest && EMAIL_REGEX.test(guestEmail.trim())
+  const isValidSidebarEmail = isGuest && EMAIL_REGEX.test(sidebarEmail.trim())
 
   const headers = (): Record<string, string> => {
     const h: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -300,13 +308,69 @@ export default function ReportLibrary({
     setGeneratingFree(null)
   }
 
-  const handleReportAction = async (report: ReportItem) => {
-    if (isGuest && !sidebarEmail.trim()) {
-      setSidebarEmailError('Please enter your email to purchase reports.')
-      return
+  const fetchCheckoutState = async (reportType: string, setter: (s: any) => void) => {
+    setCheckoutStateLoading(true)
+    try {
+      const h: Record<string, string> = {}
+      if (token) h['Authorization'] = `Bearer ${token}`
+      const res = await fetch(`/api/v1/report-pricing/checkout-state?report_type=${encodeURIComponent(reportType)}`, { headers: h })
+      if (res.ok) setter(await res.json())
+    } catch {
+    } finally {
+      setCheckoutStateLoading(false)
     }
-    if (isGuest && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sidebarEmail.trim())) {
-      setSidebarEmailError('Please enter a valid email address.')
+  }
+
+  useEffect(() => {
+    if (consultantResult?.intel_cta?.report_type) {
+      const ctaSlugMap: Record<string, string> = {
+        'Feasibility Study': 'feasibility_study',
+        'Business Plan': 'business_plan',
+        'Deep Clone Analysis': 'competitive_analysis',
+        'Subscription': 'market_analysis',
+      }
+      const slug = ctaSlugMap[consultantResult.intel_cta.report_type] || 'market_analysis'
+      fetchCheckoutState(slug, setCheckoutState)
+    }
+  }, [consultantResult?.intel_cta?.report_type, token])
+
+  useEffect(() => {
+    fetchCheckoutState(sidebarReport, setSidebarCheckoutState)
+  }, [sidebarReport, token])
+
+  const handleSubscriberGenerate = async (reportType: string) => {
+    setGeneratingReport(reportType)
+    setGenerateError(null)
+    try {
+      const analysisContext = getContextForMode()
+      const res = await fetch('/api/v1/report-pricing/generate-free-report', {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          report_type: reportType,
+          idea_description: ideaDescription || analysisContext,
+          analysis_context: analysisContext,
+          opportunity_id: opportunityId,
+        }),
+      })
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}))
+        throw new Error(e.detail || 'Generation failed')
+      }
+      const report = await res.json()
+      setViewingReport(report)
+      fetchCheckoutState(reportType, setCheckoutState)
+      fetchCheckoutState(sidebarReport, setSidebarCheckoutState)
+    } catch (e) {
+      setGenerateError(e instanceof Error ? e.message : 'Generation failed')
+    } finally {
+      setGeneratingReport(null)
+    }
+  }
+
+  const handleReportAction = async (report: ReportItem) => {
+    if (sidebarCheckoutState?.state === 'subscriber_has_credits') {
+      await handleSubscriberGenerate(report.slug)
       return
     }
     setSidebarEmailError(null)
@@ -359,17 +423,9 @@ export default function ReportLibrary({
   }
 
   const handleCtaCheckout = async (report: ReportItem) => {
-    if (!isAuthenticated) {
-      const email = guestEmail.trim()
-      if (!email) {
-        setGuestEmailError('Please enter your email to receive your report.')
-        return
-      }
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        setGuestEmailError('Please enter a valid email address.')
-        return
-      }
-      setGuestEmailError(null)
+    if (checkoutState?.state === 'subscriber_has_credits') {
+      await handleSubscriberGenerate(report.slug)
+      return
     }
     setPurchaseLoading(true)
     setGenerateError(null)
@@ -505,53 +561,132 @@ export default function ReportLibrary({
           </select>
         </div>
 
-        {selectedSidebarReport && (
-          <div className="bg-gray-50 rounded-xl p-3.5 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-700 font-semibold">OppGrid Price</span>
-              <span className="text-[#0F6E56] font-bold text-base">{selectedSidebarReport.price}</span>
+        {/* ── Subscriber with credits ── */}
+        {sidebarCheckoutState?.state === 'subscriber_has_credits' ? (
+          <>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0F6E56]/10 w-fit">
+              <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56]" />
+              <span className="text-[11px] font-semibold text-[#0F6E56]">
+                {sidebarCheckoutState.reports_remaining === -1
+                  ? 'Unlimited reports'
+                  : `${sidebarCheckoutState.reports_remaining} of ${sidebarCheckoutState.reports_total} reports remaining`}
+              </span>
             </div>
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-gray-400">Consultant equivalent</span>
-              <span className="text-gray-400 line-through">{selectedSidebarReport.consultantPrice}</span>
+            <div className="bg-gray-50 rounded-xl p-3.5 space-y-2">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-500">Report value</span>
+                <span className="line-through text-gray-300">${(sidebarCheckoutState.base_price_cents / 100).toFixed(0)}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-700 font-semibold">Your price</span>
+                <span className="text-[#0F6E56] font-bold">$0 (included)</span>
+              </div>
+              {selectedSidebarReport && (
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-gray-400">Delivery time</span>
+                  <span className="text-gray-500 font-medium">{selectedSidebarReport.deliveryTime}</span>
+                </div>
+              )}
             </div>
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-gray-400">Delivery time</span>
-              <span className="text-gray-500 font-medium">{selectedSidebarReport.deliveryTime}</span>
+            {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
+            <button
+              onClick={() => {
+                const report = allReports.find(r => r.slug === sidebarReport)
+                if (report) handleSubscriberGenerate(report.slug)
+              }}
+              disabled={purchaseLoading || !!generatingReport}
+              className="w-full py-3 text-white rounded-xl text-sm font-semibold transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
+            >
+              {generatingReport ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</> : <><FileText className="w-4 h-4" /> Generate report (use 1 credit)</>}
+            </button>
+          </>
+        ) : sidebarCheckoutState?.state === 'free_tier' || sidebarCheckoutState?.state === 'subscriber_no_credits' ? (
+          <>
+            {sidebarCheckoutState.upsell_message && (
+              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-amber-700">{sidebarCheckoutState.upsell_message}</p>
+              </div>
+            )}
+            <div className="bg-gray-50 rounded-xl p-3.5 space-y-2">
+              {sidebarCheckoutState.discount_pct > 0 && (
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-gray-500">Base price</span>
+                  <span className="line-through text-gray-300">${(sidebarCheckoutState.base_price_cents / 100).toFixed(0)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-gray-700 font-semibold">
+                  {sidebarCheckoutState.discount_pct > 0 ? `Your price (${sidebarCheckoutState.discount_pct}% off)` : 'Price'}
+                </span>
+                <span className="text-gray-900 font-bold">${(sidebarCheckoutState.final_price_cents / 100).toFixed(0)}</span>
+              </div>
             </div>
-          </div>
+            {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
+            <button
+              onClick={() => {
+                const report = allReports.find(r => r.slug === sidebarReport)
+                if (report) handleReportAction(report)
+              }}
+              disabled={purchaseLoading || !!generatingReport}
+              className="w-full py-3 text-white rounded-xl text-sm font-semibold transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
+            >
+              {purchaseLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting...</> : <><ShoppingCart className="w-4 h-4" /> {sidebarCheckoutState.primary_cta}</>}
+            </button>
+            <Link to="/billing" className="block text-center text-[11px] text-[#185FA5] hover:underline">
+              Subscribe & save 20%+ →
+            </Link>
+          </>
+        ) : (
+          <>
+            {selectedSidebarReport && (
+              <div className="bg-gray-50 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-700 font-semibold">OppGrid Price</span>
+                  <span className="text-[#0F6E56] font-bold text-base">{selectedSidebarReport.price}</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-gray-400">Consultant equivalent</span>
+                  <span className="text-gray-400 line-through">{selectedSidebarReport.consultantPrice}</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-gray-400">Delivery time</span>
+                  <span className="text-gray-500 font-medium">{selectedSidebarReport.deliveryTime}</span>
+                </div>
+              </div>
+            )}
+            {isGuest && (
+              <div>
+                <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">
+                  Email for delivery <span className="text-red-400 font-normal">(required)</span>
+                </label>
+                <input
+                  type="email"
+                  value={sidebarEmail}
+                  onChange={(e) => { setSidebarEmail(e.target.value); setSidebarEmailError(null) }}
+                  placeholder="your@email.com"
+                  className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56] transition-all placeholder:text-gray-400"
+                />
+                <p className="text-[10px] text-gray-400 mt-1">Reports are also available in your dashboard</p>
+                {sidebarEmailError && <p className="text-[10px] text-red-500 mt-1 font-medium">{sidebarEmailError}</p>}
+              </div>
+            )}
+            {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
+            <button
+              onClick={() => {
+                const report = allReports.find(r => r.slug === sidebarReport)
+                if (report) handleReportAction(report)
+              }}
+              disabled={purchaseLoading || !!generatingReport || (isGuest && !isValidSidebarEmail)}
+              className="w-full py-3 text-white rounded-xl text-sm font-semibold transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
+            >
+              {purchaseLoading || generatingReport ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><ShoppingCart className="w-4 h-4" /> Get Report</>}
+            </button>
+          </>
         )}
-
-        <div>
-          <label className="text-[11px] font-medium text-gray-500 mb-1.5 block">Email for delivery {isGuest ? <span className="text-red-400 font-normal">(required)</span> : <span className="text-gray-300 font-normal">(optional)</span>}</label>
-          <input
-            type="email"
-            value={sidebarEmail}
-            onChange={(e) => { setSidebarEmail(e.target.value); setSidebarEmailError(null) }}
-            placeholder="your@email.com"
-            className="w-full p-2.5 border border-gray-200 rounded-xl text-sm bg-gray-50 focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56] transition-all placeholder:text-gray-400"
-          />
-          <p className="text-[10px] text-gray-400 mt-1">Reports are also available in your dashboard</p>
-          {sidebarEmailError && (
-            <p className="text-[10px] text-red-500 mt-1 font-medium">{sidebarEmailError}</p>
-          )}
-        </div>
-
-        <button
-          onClick={() => {
-            const report = allReports.find(r => r.slug === sidebarReport)
-            if (report) handleReportAction(report)
-          }}
-          disabled={purchaseLoading || !!generatingReport}
-          className="w-full py-3 text-white rounded-xl text-sm font-semibold transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
-          style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
-        >
-          {purchaseLoading || generatingReport ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
-          ) : (
-            <><ShoppingCart className="w-4 h-4" /> Get Report</>
-          )}
-        </button>
 
         <div className="border-t border-gray-100 pt-3 space-y-2 text-[11px] text-gray-500">
           <div className="flex items-center gap-2">
@@ -564,7 +699,7 @@ export default function ReportLibrary({
           </div>
           <div className="flex items-center gap-2">
             <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56] shrink-0" />
-            <span>Free validation + feasibility included</span>
+            <span>Available in your dashboard</span>
           </div>
         </div>
 
@@ -945,7 +1080,7 @@ export default function ReportLibrary({
                 </div>
               )}
 
-              {/* CTA */}
+              {/* CTA — 3-state checkout panel */}
               {consultantResult.intel_cta && (() => {
                 const ctaSlugMap: Record<string, string> = {
                   'Feasibility Study': 'feasibility_study',
@@ -955,37 +1090,115 @@ export default function ReportLibrary({
                 }
                 const ctaSlug = ctaSlugMap[consultantResult.intel_cta.report_type] || 'market_analysis'
                 const ctaReport = allReports.find(r => r.slug === ctaSlug)
+                const cs = checkoutState
+                const selectedOpt = cs?.report_options?.find((o: any) => o.report_type === ctaSlug) || null
+
                 return (
-                  <div className="pt-3 border-t border-gray-100">
-                    {isGuest && (
-                      <div className="mb-3">
-                        <p className="text-[11px] text-gray-500 mb-1.5">Enter your email to receive the report:</p>
-                        <input
-                          type="email"
-                          placeholder="you@example.com"
-                          value={guestEmail}
-                          onChange={e => { setGuestEmail(e.target.value); setGuestEmailError(null) }}
-                          className="w-full text-[12px] px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
-                        />
-                        {guestEmailError && <p className="text-[10px] text-red-500 mt-1">{guestEmailError}</p>}
-                      </div>
+                  <div className="pt-3 border-t border-gray-100 space-y-3">
+
+                    {/* ── STATE: SUBSCRIBER WITH CREDITS ── */}
+                    {cs?.state === 'subscriber_has_credits' && (
+                      <>
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0F6E56]/10 w-fit">
+                          <CheckCircle className="w-3.5 h-3.5 text-[#0F6E56]" />
+                          <span className="text-[11px] font-semibold text-[#0F6E56]">
+                            {cs.reports_remaining === -1
+                              ? 'Unlimited reports'
+                              : `${cs.reports_remaining} of ${cs.reports_total} reports remaining this month`}
+                          </span>
+                        </div>
+                        <div className="space-y-1 text-[11px]">
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-500">Report value</span>
+                            <span className="line-through text-gray-300">${(cs.base_price_cents / 100).toFixed(0)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-700 font-medium">Your price</span>
+                            <span className="text-[#0F6E56] font-bold">$0 (included)</span>
+                          </div>
+                        </div>
+                        {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
+                        <button
+                          onClick={() => ctaReport && handleSubscriberGenerate(ctaReport.slug)}
+                          disabled={purchaseLoading || !!generatingReport}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white text-[12px] font-semibold disabled:opacity-50 transition-all hover:shadow-md"
+                          style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
+                        >
+                          {generatingReport ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating...</> : <><FileText className="w-3.5 h-3.5" /> Generate report (use 1 credit)</>}
+                        </button>
+                      </>
                     )}
-                    {generateError && (
-                      <p className="text-[10px] text-red-600 mb-2">{generateError}</p>
+
+                    {/* ── STATE: GUEST ── */}
+                    {(!cs || cs.state === 'guest') && (
+                      <>
+                        <div>
+                          <p className="text-[11px] text-gray-500 mb-1.5">Enter your email to receive the report:</p>
+                          <input
+                            type="email"
+                            placeholder="you@example.com"
+                            value={guestEmail}
+                            onChange={e => { setGuestEmail(e.target.value); setGuestEmailError(null) }}
+                            className="w-full text-[12px] px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0F6E56]/30 focus:border-[#0F6E56]"
+                          />
+                          {guestEmailError && <p className="text-[10px] text-red-500 mt-1">{guestEmailError}</p>}
+                        </div>
+                        {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-gray-500">{consultantResult.intel_cta.text}</span>
+                          <button
+                            onClick={() => { if (ctaReport) handleCtaCheckout(ctaReport) }}
+                            disabled={purchaseLoading || !ctaReport || !isValidGuestEmail}
+                            className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-40 transition-all"
+                            style={{ background: '#0F6E56' }}
+                          >
+                            {purchaseLoading ? 'Redirecting...' : `Get ${consultantResult.intel_cta.report_type} → $${consultantResult.intel_cta.price}`}
+                          </button>
+                        </div>
+                        <Link to="/register" className="block text-center text-[10px] text-[#185FA5] hover:underline">
+                          Create free account (save 20%)
+                        </Link>
+                      </>
                     )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-500 pr-3">{consultantResult.intel_cta.text}</span>
-                      <button
-                        onClick={() => {
-                          if (ctaReport) handleCtaCheckout(ctaReport)
-                        }}
-                        disabled={purchaseLoading || !ctaReport}
-                        className="flex-shrink-0 text-[11px] font-semibold px-3 py-1.5 rounded-lg text-white disabled:opacity-60 transition-opacity"
-                        style={{ background: '#0F6E56' }}
-                      >
-                        {purchaseLoading ? 'Redirecting to Stripe...' : `Get ${consultantResult.intel_cta.report_type} → $${consultantResult.intel_cta.price}`}
-                      </button>
-                    </div>
+
+                    {/* ── STATE: FREE TIER or NO CREDITS (auth user needs to pay) ── */}
+                    {cs && (cs.state === 'free_tier' || cs.state === 'subscriber_no_credits') && (
+                      <>
+                        {cs.upsell_message && (
+                          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                            <p className="text-[11px] text-amber-700">{cs.upsell_message}</p>
+                          </div>
+                        )}
+                        <div className="space-y-1 text-[11px]">
+                          {cs.discount_pct > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-gray-500">Base price</span>
+                              <span className="line-through text-gray-300">${(cs.base_price_cents / 100).toFixed(0)}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <span className="text-gray-700 font-medium">
+                              {cs.discount_pct > 0 ? `Your price (${cs.discount_pct}% off)` : 'Price'}
+                            </span>
+                            <span className="text-gray-900 font-bold">${(cs.final_price_cents / 100).toFixed(0)}</span>
+                          </div>
+                        </div>
+                        {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
+                        <button
+                          onClick={() => { if (ctaReport) handleCtaCheckout(ctaReport) }}
+                          disabled={purchaseLoading || !ctaReport}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-white text-[12px] font-semibold disabled:opacity-50 transition-all hover:shadow-md"
+                          style={{ background: 'linear-gradient(135deg, #0F6E56, #185FA5)' }}
+                        >
+                          {purchaseLoading ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Redirecting...</> : <><ShoppingCart className="w-3.5 h-3.5" /> {cs.primary_cta}</>}
+                        </button>
+                        <Link to="/billing" className="block text-center text-[10px] text-[#185FA5] hover:underline">
+                          Subscribe & save 20%+ →
+                        </Link>
+                      </>
+                    )}
+
                   </div>
                 )
               })()}
