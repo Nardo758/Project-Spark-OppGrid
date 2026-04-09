@@ -226,7 +226,7 @@ interface KeyRevealBannerProps {
 
 function KeyRevealBanner({ plaintext, keyName, onDismiss }: KeyRevealBannerProps) {
   const [copied, setCopied] = useState(false)
-  const [shown, setShown] = useState(false)
+  const [shown, setShown] = useState(true)
 
   function handleCopy() {
     navigator.clipboard.writeText(plaintext).catch(() => {})
@@ -304,9 +304,10 @@ interface RevokeConfirmProps {
   onConfirm: () => void
   onCancel: () => void
   loading: boolean
+  error?: string | null
 }
 
-function RevokeConfirm({ keyName, onConfirm, onCancel, loading }: RevokeConfirmProps) {
+function RevokeConfirm({ keyName, onConfirm, onCancel, loading, error }: RevokeConfirmProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl">
@@ -322,6 +323,12 @@ function RevokeConfirm({ keyName, onConfirm, onCancel, loading }: RevokeConfirmP
             </p>
           </div>
         </div>
+        {error && (
+          <div className="mb-4 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            {error}
+          </div>
+        )}
         <div className="flex gap-3">
           <button
             onClick={onCancel}
@@ -433,6 +440,7 @@ export default function SettingsApiKeys() {
 
   const [revokeTarget, setRevokeTarget] = useState<{ id: string; name: string } | null>(null)
   const [revoking, setRevoking] = useState(false)
+  const [revokeError, setRevokeError] = useState<string | null>(null)
 
   const apiTier = subscriptionToApiTier(user?.tier)
 
@@ -479,6 +487,7 @@ export default function SettingsApiKeys() {
   async function handleRevoke() {
     if (!revokeTarget || !token) return
     setRevoking(true)
+    setRevokeError(null)
     try {
       const res = await fetch(`/api/v1/api-keys/${revokeTarget.id}`, {
         method: 'DELETE',
@@ -491,7 +500,7 @@ export default function SettingsApiKeys() {
       setKeys((prev) => prev.filter((k) => k.id !== revokeTarget.id))
       setRevokeTarget(null)
     } catch (err) {
-      console.error('Revoke error:', err)
+      setRevokeError(err instanceof Error ? err.message : 'Failed to revoke key')
     } finally {
       setRevoking(false)
     }
@@ -672,8 +681,9 @@ export default function SettingsApiKeys() {
         <RevokeConfirm
           keyName={revokeTarget.name}
           onConfirm={handleRevoke}
-          onCancel={() => setRevokeTarget(null)}
+          onCancel={() => { setRevokeTarget(null); setRevokeError(null) }}
           loading={revoking}
+          error={revokeError}
         />
       )}
     </div>

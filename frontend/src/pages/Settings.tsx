@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { 
   User, 
@@ -158,6 +158,7 @@ const networkRoles: NetworkRoleConfig[] = [
 
 export default function Settings() {
   const { user, token } = useAuthStore()
+  const location = useLocation()
   const [activeTab, setActiveTab] = useState('profile')
   const [subscriptionInfo, setSubscriptionInfo] = useState<SubscriptionInfo | null>(null)
   const [loadingSubscription, setLoadingSubscription] = useState(false)
@@ -627,14 +628,18 @@ export default function Settings() {
           <div className="w-full md:w-64 bg-white rounded-xl border border-gray-200 p-4">
             <nav className="space-y-1">
               {tabs.map((tab) => {
+                const isHrefTab = 'href' in tab && tab.href
+                const isActive = isHrefTab
+                  ? location.pathname === tab.href
+                  : activeTab === tab.id
                 const cls = `w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === tab.id
+                  isActive
                     ? 'bg-gray-900 text-white'
                     : 'text-gray-700 hover:bg-gray-100'
                 }`
-                if ('href' in tab && tab.href) {
+                if (isHrefTab) {
                   return (
-                    <Link key={tab.id} to={tab.href} className={cls}>
+                    <Link key={tab.id} to={tab.href!} className={cls}>
                       <tab.icon className="w-5 h-5" />
                       {tab.label}
                     </Link>
