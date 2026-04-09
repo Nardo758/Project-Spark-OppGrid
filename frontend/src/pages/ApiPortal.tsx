@@ -54,7 +54,6 @@ const apiTiers = [
     priceLabel: '/mo',
     summary: '1,000 req/day · 10 RPM',
     popular: false,
-    gradient: 'from-slate-600 to-slate-700',
     features: [
       'All 5 public endpoints',
       '1,000 requests per day',
@@ -70,7 +69,6 @@ const apiTiers = [
     priceLabel: '/mo',
     summary: '10,000 req/day · 100 RPM',
     popular: true,
-    gradient: 'from-emerald-600 to-teal-600',
     features: [
       'All 5 public endpoints',
       '10,000 requests per day',
@@ -87,7 +85,6 @@ const apiTiers = [
     priceLabel: '',
     summary: '100,000+ req/day · 1,000 RPM',
     popular: false,
-    gradient: 'from-violet-600 to-purple-700',
     features: [
       'All 5 public endpoints',
       '100,000+ requests per day',
