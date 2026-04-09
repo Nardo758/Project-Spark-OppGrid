@@ -5,12 +5,11 @@ Mounted at /v1 by the main FastAPI app.
 Swagger UI: /v1/docs
 Auth: X-API-Key header (og_live_… or og_test_…)
 
-Rate limits by tier:
+Rate limits by tier (enforced via slowapi):
   starter:      10 rpm /  1 000 req/day  — opportunities > 30 days old
   professional: 100 rpm / 10 000 req/day  — opportunities > 7 days old
   enterprise:   1 000 rpm / 100 000 req/day — all opportunities
 """
-import time
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
@@ -19,18 +18,44 @@ from fastapi import FastAPI, Depends, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
 
-from app.db.database import get_db, SessionLocal
+from app.db.database import get_db
 from app.models.api_key import APIKey
 from app.models.api_usage import APIUsage
 from app.models.opportunity import Opportunity
 from app.models.detected_trend import DetectedTrend
 from app.middleware.api_auth import get_authenticated_key, require_scope, APIAuthError
+from app.middleware.usage_tracking import UsageTrackingMiddleware
 from app.services import api_key_service
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# slowapi limiter — dynamic rate limit from authenticated API key tier
+# ---------------------------------------------------------------------------
+
+def dynamic_rate_limit(request: Request) -> str:
+    """
+    Return the slowapi rate-limit string for the authenticated API key.
+
+    Falls back to a permissive limit for public/health endpoints.
+    """
+    api_key: Optional[APIKey] = getattr(request.state, "api_key", None)
+    if api_key is None:
+        return "60/minute"
+
+    rpm = api_key.rate_limit_rpm
+    return f"{rpm}/minute"
+
+
+limiter = Limiter(key_func=dynamic_rate_limit, default_limits=[])
+
 
 # ---------------------------------------------------------------------------
 # Sub-application
@@ -76,6 +101,10 @@ All list endpoints accept `page` (1-indexed, default 1) and `limit`
     openapi_url="/openapi.json",
 )
 
+# Attach slowapi limiter to v1_app state
+v1_app.state.limiter = limiter
+
+# CORS
 v1_app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -84,6 +113,13 @@ v1_app.add_middleware(
     allow_headers=["*"],
 )
 
+# Async usage tracking (dedicated module)
+v1_app.add_middleware(UsageTrackingMiddleware)
+
+
+# ---------------------------------------------------------------------------
+# Exception handlers
+# ---------------------------------------------------------------------------
 
 @v1_app.exception_handler(APIAuthError)
 async def api_auth_error_handler(request: Request, exc: APIAuthError):
@@ -97,46 +133,17 @@ async def api_auth_error_handler(request: Request, exc: APIAuthError):
     )
 
 
-# ---------------------------------------------------------------------------
-# Response-side middleware: rate-limit headers + usage recording
-# ---------------------------------------------------------------------------
-
-@v1_app.middleware("http")
-async def response_middleware(request: Request, call_next):
-    start = time.monotonic()
-    response = await call_next(request)
-    elapsed_ms = int((time.monotonic() - start) * 1000)
-
-    response.headers["X-Response-Time-Ms"] = str(elapsed_ms)
-
-    if hasattr(request.state, "rpm_remaining"):
-        response.headers["X-RateLimit-Remaining"] = str(request.state.rpm_remaining)
-    if hasattr(request.state, "daily_remaining"):
-        response.headers["X-RateLimit-Remaining-Daily"] = str(
-            request.state.daily_remaining
-        )
-
-    # Record usage for all v1 requests (authenticated or not).
-    # api_key_id is None for unauthenticated requests (still recorded for audit).
-    # Uses a dedicated SessionLocal so we never touch the request's session
-    # after the response has already been sent.
-    api_key: Optional[APIKey] = getattr(request.state, "api_key", None)
-    db = SessionLocal()
-    try:
-        api_key_service.record_usage(
-            api_key_id=api_key.id if api_key is not None else None,
-            endpoint=str(request.url.path),
-            method=request.method,
-            status_code=response.status_code,
-            response_time_ms=elapsed_ms,
-            ip_address=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-            db=db,
-        )
-    finally:
-        db.close()
-
-    return response
+@v1_app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    """Convert slowapi RateLimitExceeded into canonical {"error": ..., "detail": ...} shape."""
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": "rate_limit_exceeded",
+            "detail": "Rate limit exceeded. Slow down and retry after the window resets.",
+        },
+        headers={"Retry-After": "60"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +245,9 @@ def _freshness_filter(tier: str):
     tags=["Opportunities"],
     summary="List business opportunities",
 )
+@limiter.limit(dynamic_rate_limit)
 def list_opportunities(
+    request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     limit: int = Query(20, ge=1, le=100, description="Results per page (max 100)"),
     category: Optional[str] = Query(None, description="Filter by category (partial match)"),
@@ -319,7 +328,9 @@ def list_opportunities(
     tags=["Opportunities"],
     summary="Get a single opportunity",
 )
+@limiter.limit(dynamic_rate_limit)
 def get_opportunity(
+    request: Request,
     opportunity_id: int,
     api_key: APIKey = Depends(require_scope("read:opportunities")),
     db: Session = Depends(get_db),
@@ -372,7 +383,9 @@ def get_opportunity(
     tags=["Trends"],
     summary="List detected market trends",
 )
+@limiter.limit(dynamic_rate_limit)
 def list_trends(
+    request: Request,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     category: Optional[str] = Query(None, description="Filter by category"),
@@ -436,7 +449,9 @@ def list_trends(
     tags=["Markets"],
     summary="List market intelligence by category",
 )
+@limiter.limit(dynamic_rate_limit)
 def list_markets(
+    request: Request,
     api_key: APIKey = Depends(require_scope("read:markets")),
     db: Session = Depends(get_db),
 ):
@@ -502,7 +517,9 @@ def list_markets(
     tags=["Markets"],
     summary="List market intelligence for a specific region",
 )
+@limiter.limit(dynamic_rate_limit)
 def get_market_by_region(
+    request: Request,
     region: str,
     api_key: APIKey = Depends(require_scope("read:markets")),
     db: Session = Depends(get_db),
@@ -574,7 +591,9 @@ def get_market_by_region(
     tags=["Usage"],
     summary="Get API key usage statistics",
 )
+@limiter.limit(dynamic_rate_limit)
 def get_usage_stats(
+    request: Request,
     api_key: APIKey = Depends(get_authenticated_key),
     db: Session = Depends(get_db),
 ):
