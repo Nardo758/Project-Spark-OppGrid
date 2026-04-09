@@ -1,7 +1,15 @@
 """
 Report Export Service
 
-Generates PDF and DOCX exports from HTML report content with OppGrid branding.
+Generates PDF and DOCX exports from HTML report content with institutional OppGrid branding.
+
+Design System (matches oppgrid.com):
+- Emerald accent: #10B981
+- Dark navy: #0F172A (headings, table headers, OG badge)
+- Slate palette: #334155 (body), #64748B (secondary), #94A3B8 (muted)
+- Background tones: #F8FAFC (zebra), #F1F5F9 (borders), #E2E8F0 (dividers)
+- Heading font: Georgia (serif) for report titles
+- Body font: Helvetica/Arial (sans-serif) for everything else
 """
 
 import html
@@ -13,22 +21,39 @@ from typing import Optional
 from bs4 import BeautifulSoup
 from xhtml2pdf import pisa
 from docx import Document
-from docx.shared import Inches, Pt, Cm, RGBColor
+from docx.shared import Inches, Pt, Cm, RGBColor, Emu
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.oxml.ns import qn
 
 
-# OppGrid brand colors
-BRAND_PURPLE = "#7c3aed"
-BRAND_PURPLE_RGB = RGBColor(0x7C, 0x3A, 0xED)
-BRAND_DARK = "#1e293b"
-BRAND_DARK_RGB = RGBColor(0x1E, 0x29, 0x3B)
-BRAND_GRAY = "#475569"
-BRAND_GRAY_RGB = RGBColor(0x47, 0x55, 0x69)
+# ── Brand tokens ──────────────────────────────────────────────────────
+EMERALD = "#10B981"
+EMERALD_RGB = RGBColor(0x10, 0xB9, 0x81)
+EMERALD_DARK = "#059669"
+EMERALD_DARK_RGB = RGBColor(0x05, 0x96, 0x69)
+EMERALD_LIGHT = "#ECFDF5"
 
+NAVY = "#0F172A"
+NAVY_RGB = RGBColor(0x0F, 0x17, 0x2A)
+
+SLATE_800 = "#1E293B"
+SLATE_800_RGB = RGBColor(0x1E, 0x29, 0x3B)
+SLATE_700 = "#334155"
+SLATE_700_RGB = RGBColor(0x33, 0x41, 0x55)
+SLATE_500 = "#64748B"
+SLATE_500_RGB = RGBColor(0x64, 0x74, 0x8B)
+SLATE_400 = "#94A3B8"
+SLATE_400_RGB = RGBColor(0x94, 0xA3, 0xB8)
+SLATE_200 = "#E2E8F0"
+SLATE_100 = "#F1F5F9"
+SLATE_50 = "#F8FAFC"
+
+
+# ── PDF template ──────────────────────────────────────────────────────
 
 def _branded_html_wrapper(content: str, title: str, report_type: str, generated_at: str) -> str:
-    """Wrap report HTML content with OppGrid-branded PDF template."""
+    """Wrap report HTML content with institutional OppGrid-branded PDF template."""
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -36,118 +61,235 @@ def _branded_html_wrapper(content: str, title: str, report_type: str, generated_
 <style>
   @page {{
     size: letter;
-    margin: 0.75in;
+    margin: 0.75in 0.85in 0.85in 0.85in;
     @frame footer {{
       -pdf-frame-content: page-footer;
       bottom: 0.3in;
-      margin-left: 0.75in;
-      margin-right: 0.75in;
+      margin-left: 0.85in;
+      margin-right: 0.85in;
       height: 0.4in;
     }}
   }}
   body {{
     font-family: Helvetica, Arial, sans-serif;
-    font-size: 11pt;
-    line-height: 1.6;
-    color: #374151;
+    font-size: 10.5pt;
+    line-height: 1.65;
+    color: {SLATE_700};
   }}
-  .cover-header {{
-    background-color: {BRAND_PURPLE};
-    color: white;
-    padding: 24px 32px;
-    margin: -0.75in -0.75in 32px -0.75in;
+
+  /* ── Accent bar ── */
+  .accent-bar {{
+    background-color: {EMERALD};
+    height: 5px;
+    margin: -0.75in -0.85in 0 -0.85in;
   }}
-  .cover-header h1 {{
-    font-size: 28pt;
+
+  /* ── Masthead ── */
+  .masthead {{
+    padding: 20px 0 16px 0;
+    border-bottom: 1px solid {SLATE_200};
+    margin-bottom: 20px;
+  }}
+  .masthead .wordmark {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 17pt;
+    font-weight: bold;
+    color: {NAVY};
+    letter-spacing: -0.3px;
+  }}
+  .masthead .tagline {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 8pt;
+    color: {SLATE_500};
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }}
+
+  /* ── Title block ── */
+  .title-block {{
+    margin-bottom: 8px;
+  }}
+  .report-type-badge {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 8.5pt;
+    font-weight: bold;
+    color: {EMERALD};
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }}
+  .report-title {{
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 24pt;
+    font-weight: normal;
+    color: {NAVY};
     margin: 0 0 4px 0;
-    color: white;
+    line-height: 1.2;
+    letter-spacing: -0.3px;
   }}
-  .cover-header .subtitle {{
-    font-size: 11pt;
-    color: rgba(255,255,255,0.85);
-    margin: 0;
+
+  /* ── Metadata row ── */
+  .meta-row {{
+    margin-top: 16px;
+    padding: 10px 0;
+    border-top: 1px solid {SLATE_100};
+    border-bottom: 1px solid {SLATE_100};
   }}
-  .cover-header .meta {{
-    font-size: 9pt;
-    color: rgba(255,255,255,0.7);
-    margin-top: 12px;
+  .meta-row table {{
+    width: 100%;
+    border-collapse: collapse;
+    border: none;
   }}
+  .meta-row td {{
+    border: none;
+    padding: 0 16px 0 0;
+    vertical-align: top;
+    background: transparent;
+  }}
+  .meta-label {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 7.5pt;
+    color: {SLATE_400};
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }}
+  .meta-value {{
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 10pt;
+    color: {SLATE_700};
+    margin-top: 2px;
+  }}
+
+  /* ── Section headings ── */
   h1 {{
-    font-size: 18pt;
-    color: {BRAND_DARK};
-    border-bottom: 2px solid {BRAND_PURPLE};
-    padding-bottom: 6px;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 15pt;
+    font-weight: normal;
+    color: {NAVY};
+    border-bottom: 2.5px solid {EMERALD};
+    padding-bottom: 5px;
     margin-top: 28px;
+    margin-bottom: 12px;
   }}
   h2 {{
-    font-size: 14pt;
-    color: {BRAND_PURPLE};
-    margin-top: 22px;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: bold;
+    color: {NAVY};
+    margin-top: 20px;
+    margin-bottom: 8px;
   }}
   h3 {{
-    font-size: 12pt;
-    color: {BRAND_DARK};
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 11pt;
+    font-weight: bold;
+    color: {SLATE_800};
     margin-top: 16px;
+    margin-bottom: 6px;
   }}
-  p {{ margin: 8px 0; }}
-  ul, ol {{ margin: 8px 0; padding-left: 24px; }}
-  li {{ margin-bottom: 4px; }}
+
+  /* ── Body ── */
+  p {{ margin: 6px 0; }}
+  ul, ol {{ margin: 6px 0; padding-left: 22px; }}
+  li {{ margin-bottom: 3px; }}
+  strong, b {{ color: {NAVY}; }}
+
+  /* ── Tables ── */
   table {{
     width: 100%;
     border-collapse: collapse;
     margin: 12px 0;
-  }}
-  th, td {{
-    border: 1px solid #d1d5db;
-    padding: 6px 10px;
-    text-align: left;
-    font-size: 10pt;
+    font-size: 9.5pt;
   }}
   th {{
-    background-color: #f3f4f6;
-    font-weight: bold;
-    color: {BRAND_DARK};
+    background-color: {NAVY};
+    color: white;
+    font-weight: 500;
+    padding: 7px 10px;
+    text-align: left;
+    border: none;
   }}
+  td {{
+    padding: 6px 10px;
+    border-bottom: 1px solid {SLATE_100};
+    color: {SLATE_700};
+  }}
+  tr:nth-child(even) td {{
+    background-color: {SLATE_50};
+  }}
+
+  /* ── Callout / insight blocks ── */
+  blockquote {{
+    border-left: 3px solid {EMERALD};
+    margin: 12px 0;
+    padding: 8px 16px;
+    background-color: {EMERALD_LIGHT};
+    font-style: italic;
+    color: {SLATE_700};
+  }}
+
   .section {{
     page-break-inside: avoid;
   }}
 </style>
 </head>
 <body>
-  <div class="cover-header">
-    <h1>OppGrid</h1>
-    <p class="subtitle">{title}</p>
-    <p class="meta">{report_type} &bull; Generated {generated_at}</p>
+  <!-- Accent bar -->
+  <div class="accent-bar"></div>
+
+  <!-- Masthead -->
+  <div class="masthead">
+    <div class="wordmark">OppGrid</div>
+    <div class="tagline">Opportunity Intelligence</div>
   </div>
 
+  <!-- Title block -->
+  <div class="title-block">
+    <div class="report-type-badge">{report_type}</div>
+    <div class="report-title">{title}</div>
+  </div>
+
+  <!-- Metadata row -->
+  <div class="meta-row">
+    <table>
+      <tr>
+        <td>
+          <div class="meta-label">Generated</div>
+          <div class="meta-value">{generated_at}</div>
+        </td>
+        <td>
+          <div class="meta-label">Platform</div>
+          <div class="meta-value">oppgrid.com</div>
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Report content -->
   {content}
 
-  <div id="page-footer" style="text-align: center; font-size: 8pt; color: #9ca3af;">
-    OppGrid &mdash; AI-Powered Opportunity Intelligence &bull; oppgrid.com
+  <!-- Footer -->
+  <div id="page-footer" style="font-size: 7.5pt; color: {SLATE_400};">
+    <table style="width: 100%; border: none; margin: 0; padding: 0;">
+      <tr>
+        <td style="border: none; padding: 0; text-align: left; background: transparent;">Confidential &mdash; Prepared by OppGrid AI</td>
+        <td style="border: none; padding: 0; text-align: right; background: transparent;">oppgrid.com</td>
+      </tr>
+    </table>
   </div>
 </body>
 </html>"""
 
+
+# ── Plain-text detection ──────────────────────────────────────────────
 
 _HTML_TAG_RE = re.compile(r"<[a-zA-Z][^>]*>|</[a-zA-Z]+>", re.DOTALL)
 _BORDER_ONLY_RE = re.compile(r"^[\s═─━╔╗╚╝║╠╣╦╩╪╫▀▄█▌▐░▒▓\-=_~*+|]+$")
 
 
 def _ensure_html(content: str) -> str:
-    """Convert plain-text report content to basic HTML if needed.
-
-    Older reports stored in the database may contain plain ASCII text with
-    box-drawing characters (═══, ───) rather than HTML.  xhtml2pdf cannot
-    parse those characters cleanly, so we detect plain-text content and
-    convert it before handing it to the PDF/DOCX generators.
-
-    Detection uses a tag regex (not a bare `<` check) so angle brackets in
-    plain text such as "<5%" or "&lt;10k" are not misidentified as HTML.
-    Content that passes the regex is returned unchanged.
-
-    Plain-text lines are HTML-escaped before wrapping so that any stray `<`,
-    `>`, or `&` characters do not produce malformed markup.
-    """
+    """Convert plain-text report content to basic HTML if needed."""
     if _HTML_TAG_RE.search(content):
         return content
 
@@ -162,24 +304,15 @@ def _ensure_html(content: str) -> str:
     return "\n".join(html_parts)
 
 
+# ── PDF generation ────────────────────────────────────────────────────
+
 def generate_pdf(
     html_content: str,
     title: str = "OppGrid Report",
     report_type: str = "Report",
     generated_at: Optional[str] = None,
 ) -> bytes:
-    """
-    Convert HTML report content to a branded PDF.
-
-    Args:
-        html_content: The raw HTML content of the report
-        title: Report title for the cover header
-        report_type: e.g. "Problem Overview", "Deep Dive Analysis"
-        generated_at: ISO date string; defaults to now
-
-    Returns:
-        PDF file as bytes
-    """
+    """Convert HTML report content to an institutionally branded PDF."""
     if not generated_at:
         generated_at = datetime.utcnow().strftime("%B %d, %Y")
 
@@ -196,36 +329,68 @@ def generate_pdf(
     return buffer.read()
 
 
-def _strip_tags(html: str) -> str:
+# ── DOCX helpers ──────────────────────────────────────────────────────
+
+def _strip_tags(html_str: str) -> str:
     """Remove HTML tags, returning plain text."""
-    return re.sub(r"<[^>]+>", "", html).strip()
+    return re.sub(r"<[^>]+>", "", html_str).strip()
+
+
+def _set_cell_shading(cell, hex_color: str):
+    """Apply background shading to a table cell via XML."""
+    tc_pr = cell._element.get_or_add_tcPr()
+    shading = tc_pr.makeelement(qn("w:shd"), {
+        qn("w:fill"): hex_color.lstrip("#"),
+        qn("w:val"): "clear",
+    })
+    tc_pr.append(shading)
+
+
+def _add_para_border(paragraph, side: str, sz: str, color: str):
+    """Add a border to a specific side of a paragraph."""
+    pPr = paragraph._element.get_or_add_pPr()
+    pBdr = pPr.makeelement(qn("w:pBdr"), {})
+    border = pBdr.makeelement(qn(f"w:{side}"), {
+        qn("w:val"): "single",
+        qn("w:sz"): sz,
+        qn("w:space"): "1",
+        qn("w:color"): color.lstrip("#"),
+    })
+    pBdr.append(border)
+    pPr.append(pBdr)
 
 
 def _add_heading(doc: Document, text: str, level: int = 1):
-    """Add a styled heading to the Word document."""
+    """Add a styled heading."""
     heading = doc.add_heading(text, level=level)
     for run in heading.runs:
         if level == 1:
-            run.font.color.rgb = BRAND_DARK_RGB
-            run.font.size = Pt(18)
+            run.font.color.rgb = NAVY_RGB
+            run.font.size = Pt(16)
+            run.font.name = "Georgia"
         elif level == 2:
-            run.font.color.rgb = BRAND_PURPLE_RGB
-            run.font.size = Pt(14)
+            run.font.color.rgb = NAVY_RGB
+            run.font.size = Pt(13)
+            run.font.name = "Arial"
         else:
-            run.font.color.rgb = BRAND_DARK_RGB
-            run.font.size = Pt(12)
+            run.font.color.rgb = SLATE_800_RGB
+            run.font.size = Pt(11)
+            run.font.name = "Arial"
 
 
 def _add_paragraph(doc: Document, text: str, bold: bool = False):
-    """Add a styled paragraph."""
+    """Add a styled body paragraph."""
     p = doc.add_paragraph()
     run = p.add_run(text)
-    run.font.size = Pt(11)
-    run.font.color.rgb = BRAND_GRAY_RGB
+    run.font.size = Pt(10.5)
+    run.font.color.rgb = SLATE_700_RGB
+    run.font.name = "Arial"
     run.bold = bold
-    p.paragraph_format.space_after = Pt(6)
+    p.paragraph_format.space_after = Pt(4)
     return p
 
+
+# ── DOCX generation ──────────────────────────────────────────────────
 
 def generate_docx(
     html_content: str,
@@ -233,79 +398,89 @@ def generate_docx(
     report_type: str = "Report",
     generated_at: Optional[str] = None,
 ) -> bytes:
-    """
-    Convert HTML report content to a branded DOCX file.
-
-    Parses the HTML structure and maps it to Word document elements
-    with OppGrid branding (colors, fonts, header/footer).
-
-    Args:
-        html_content: The raw HTML content of the report
-        title: Report title for the cover page
-        report_type: e.g. "Problem Overview", "Deep Dive Analysis"
-        generated_at: ISO date string; defaults to now
-
-    Returns:
-        DOCX file as bytes
-    """
+    """Convert HTML report content to an institutionally branded DOCX file."""
     if not generated_at:
         generated_at = datetime.utcnow().strftime("%B %d, %Y")
 
     html_content = _ensure_html(html_content)
     doc = Document()
 
-    # Page margins
+    # ── Page setup ──
     for section in doc.sections:
-        section.top_margin = Cm(2.5)
+        section.top_margin = Cm(2.0)
         section.bottom_margin = Cm(2.5)
-        section.left_margin = Cm(2.5)
-        section.right_margin = Cm(2.5)
+        section.left_margin = Cm(2.2)
+        section.right_margin = Cm(2.2)
 
-    # Cover header
-    header_para = doc.add_paragraph()
-    header_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    run = header_para.add_run("OppGrid")
-    run.font.size = Pt(28)
-    run.font.color.rgb = BRAND_PURPLE_RGB
-    run.bold = True
+    # ── Accent line (emerald top rule) ──
+    accent = doc.add_paragraph()
+    accent.paragraph_format.space_after = Pt(16)
+    _add_para_border(accent, "top", "24", EMERALD)
 
-    subtitle = doc.add_paragraph()
-    run = subtitle.add_run("AI-Powered Opportunity Intelligence")
-    run.font.size = Pt(11)
-    run.font.color.rgb = BRAND_GRAY_RGB
-    run.italic = True
-
-    doc.add_paragraph()  # spacer
-
-    # Title
-    title_para = doc.add_paragraph()
-    run = title_para.add_run(title)
+    # ── Wordmark ──
+    wordmark = doc.add_paragraph()
+    wordmark.paragraph_format.space_after = Pt(0)
+    run = wordmark.add_run("OppGrid")
     run.font.size = Pt(20)
-    run.font.color.rgb = BRAND_DARK_RGB
+    run.font.color.rgb = NAVY_RGB
+    run.font.name = "Arial"
     run.bold = True
 
-    meta_para = doc.add_paragraph()
-    run = meta_para.add_run(f"{report_type}  |  Generated {generated_at}")
-    run.font.size = Pt(10)
-    run.font.color.rgb = BRAND_GRAY_RGB
+    tagline = doc.add_paragraph()
+    tagline.paragraph_format.space_after = Pt(14)
+    run = tagline.add_run("OPPORTUNITY INTELLIGENCE")
+    run.font.size = Pt(8)
+    run.font.color.rgb = SLATE_500_RGB
+    run.font.name = "Arial"
 
-    # Divider
+    # ── Divider ──
     divider = doc.add_paragraph()
-    divider.paragraph_format.space_before = Pt(12)
-    divider.paragraph_format.space_after = Pt(12)
+    divider.paragraph_format.space_after = Pt(14)
+    _add_para_border(divider, "bottom", "4", SLATE_200)
 
-    # Footer
+    # ── Report type badge ──
+    badge = doc.add_paragraph()
+    badge.paragraph_format.space_after = Pt(4)
+    run = badge.add_run(report_type.upper())
+    run.font.size = Pt(8.5)
+    run.font.color.rgb = EMERALD_RGB
+    run.font.name = "Arial"
+    run.bold = True
+
+    # ── Title ──
+    title_para = doc.add_paragraph()
+    title_para.paragraph_format.space_after = Pt(4)
+    run = title_para.add_run(title)
+    run.font.size = Pt(24)
+    run.font.color.rgb = NAVY_RGB
+    run.font.name = "Georgia"
+
+    # ── Metadata ──
+    meta = doc.add_paragraph()
+    meta.paragraph_format.space_before = Pt(8)
+    meta.paragraph_format.space_after = Pt(16)
+    run = meta.add_run(f"{report_type}  |  Generated {generated_at}  |  oppgrid.com")
+    run.font.size = Pt(9)
+    run.font.color.rgb = SLATE_400_RGB
+    run.font.name = "Arial"
+
+    # ── Divider ──
+    divider2 = doc.add_paragraph()
+    divider2.paragraph_format.space_after = Pt(12)
+    _add_para_border(divider2, "bottom", "4", SLATE_100)
+
+    # ── Footer ──
     for section in doc.sections:
         footer = section.footer
         footer_para = footer.paragraphs[0] if footer.paragraphs else footer.add_paragraph()
-        footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = footer_para.add_run("OppGrid — AI-Powered Opportunity Intelligence — oppgrid.com")
-        run.font.size = Pt(8)
-        run.font.color.rgb = BRAND_GRAY_RGB
+        footer_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        run = footer_para.add_run("Confidential — Prepared by OppGrid AI")
+        run.font.size = Pt(7.5)
+        run.font.color.rgb = SLATE_400_RGB
+        run.font.name = "Arial"
 
-    # Parse the HTML content
+    # ── Parse HTML body ──
     soup = BeautifulSoup(html_content, "html.parser")
-
     for element in soup.children:
         _process_element(doc, element)
 
@@ -314,6 +489,8 @@ def generate_docx(
     buffer.seek(0)
     return buffer.read()
 
+
+# ── HTML-to-DOCX element processing ──────────────────────────────────
 
 def _process_element(doc: Document, element):
     """Recursively process an HTML element into Word document elements."""
@@ -338,17 +515,29 @@ def _process_element(doc: Document, element):
         if text:
             p = doc.add_paragraph()
             _build_inline_runs(p, element)
-            p.paragraph_format.space_after = Pt(6)
+            p.paragraph_format.space_after = Pt(4)
     elif tag in ("ul", "ol"):
         for li in element.find_all("li", recursive=False):
             text = li.get_text(strip=True)
             if text:
                 p = doc.add_paragraph(style="List Bullet" if tag == "ul" else "List Number")
                 run = p.add_run(text)
-                run.font.size = Pt(11)
-                run.font.color.rgb = BRAND_GRAY_RGB
+                run.font.size = Pt(10.5)
+                run.font.color.rgb = SLATE_700_RGB
+                run.font.name = "Arial"
     elif tag == "table":
         _process_table(doc, element)
+    elif tag == "blockquote":
+        text = element.get_text(strip=True)
+        if text:
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Cm(0.5)
+            _add_para_border(p, "left", "12", EMERALD)
+            run = p.add_run(text)
+            run.font.size = Pt(10.5)
+            run.font.color.rgb = SLATE_700_RGB
+            run.font.name = "Arial"
+            run.italic = True
     elif tag in ("div", "section", "article", "main", "span", "strong", "em", "b", "i"):
         for child in element.children:
             _process_element(doc, child)
@@ -359,46 +548,50 @@ def _process_element(doc: Document, element):
         divider.paragraph_format.space_before = Pt(8)
         divider.paragraph_format.space_after = Pt(8)
     else:
-        # Fallback: extract text from unknown tags
         text = element.get_text(strip=True)
         if text:
             _add_paragraph(doc, text)
 
 
 def _build_inline_runs(paragraph, element):
-    """Build runs for inline elements (bold, italic, etc.) within a paragraph."""
+    """Build runs for inline elements (bold, italic, links) within a paragraph."""
     for child in element.children:
         if isinstance(child, str):
             text = child
             if text:
                 run = paragraph.add_run(text)
-                run.font.size = Pt(11)
-                run.font.color.rgb = BRAND_GRAY_RGB
+                run.font.size = Pt(10.5)
+                run.font.color.rgb = SLATE_700_RGB
+                run.font.name = "Arial"
         elif child.name in ("strong", "b"):
             run = paragraph.add_run(child.get_text())
-            run.font.size = Pt(11)
-            run.font.color.rgb = BRAND_DARK_RGB
+            run.font.size = Pt(10.5)
+            run.font.color.rgb = NAVY_RGB
+            run.font.name = "Arial"
             run.bold = True
         elif child.name in ("em", "i"):
             run = paragraph.add_run(child.get_text())
-            run.font.size = Pt(11)
-            run.font.color.rgb = BRAND_GRAY_RGB
+            run.font.size = Pt(10.5)
+            run.font.color.rgb = SLATE_500_RGB
+            run.font.name = "Arial"
             run.italic = True
         elif child.name == "a":
             run = paragraph.add_run(child.get_text())
-            run.font.size = Pt(11)
-            run.font.color.rgb = BRAND_PURPLE_RGB
+            run.font.size = Pt(10.5)
+            run.font.color.rgb = EMERALD_DARK_RGB
+            run.font.name = "Arial"
             run.underline = True
         elif child.name == "br":
             paragraph.add_run("\n")
         else:
             run = paragraph.add_run(child.get_text())
-            run.font.size = Pt(11)
-            run.font.color.rgb = BRAND_GRAY_RGB
+            run.font.size = Pt(10.5)
+            run.font.color.rgb = SLATE_700_RGB
+            run.font.name = "Arial"
 
 
 def _process_table(doc: Document, table_elem):
-    """Convert an HTML table to a Word table."""
+    """Convert an HTML table to a branded Word table with dark header and zebra rows."""
     rows_data = []
     header_row = None
 
@@ -414,7 +607,6 @@ def _process_table(doc: Document, table_elem):
     for tr in body_rows:
         cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
         if cells:
-            # If no explicit thead, treat first row with <th> as header
             if not header_row and tr.find("th"):
                 header_row = cells
             else:
@@ -436,23 +628,33 @@ def _process_table(doc: Document, table_elem):
     table.style = "Table Grid"
 
     row_idx = 0
+
+    # ── Header row: dark navy background ──
     if header_row:
         for col_idx, text in enumerate(header_row[:num_cols]):
             cell = table.cell(0, col_idx)
             cell.text = text
+            _set_cell_shading(cell, NAVY)
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
                     run.bold = True
-                    run.font.size = Pt(10)
+                    run.font.size = Pt(9.5)
+                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                    run.font.name = "Arial"
         row_idx = 1
 
-    for data_row in rows_data:
+    # ── Data rows: zebra striping ──
+    for i, data_row in enumerate(rows_data):
         for col_idx, text in enumerate(data_row[:num_cols]):
             cell = table.cell(row_idx, col_idx)
             cell.text = text
+            if i % 2 == 1:
+                _set_cell_shading(cell, SLATE_50)
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
-                    run.font.size = Pt(10)
+                    run.font.size = Pt(9.5)
+                    run.font.color.rgb = SLATE_700_RGB
+                    run.font.name = "Arial"
         row_idx += 1
 
     doc.add_paragraph()  # spacing after table
