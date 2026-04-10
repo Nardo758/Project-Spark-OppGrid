@@ -936,8 +936,6 @@ async def trigger_report_generation(
     
     # Generate the report
     try:
-        generator = AIReportGenerator()
-        
         # Parse city and state from location
         location = report_context.get("location", "")
         city, state = "", ""
@@ -947,77 +945,19 @@ async def trigger_report_generation(
             state = parts[1].strip() if len(parts) > 1 else ""
         else:
             city = location
-        
-        opportunity_context = {
-            "title": report_context.get("businessConcept", "Business Opportunity"),
-            "category": report_context.get("category", "General"),
-            "city": city,
-            "region": state,
-            "description": report_context.get("businessConcept", ""),
-            "target_audience": report_context.get("targetMarket", ""),
-        }
-        
-        # Fetch full 4 P's data using ReportDataService
-        report_data = None
-        try:
-            from app.services.report_data_service import ReportDataService
-            
-            if city and state:
-                data_service = ReportDataService(db)
-                report_data = data_service.get_report_data(
-                    city=city,
-                    state=state,
-                    business_type=report_context.get("category"),
-                    report_type=report_type
-                )
-                logger.info(f"[ReportData] Fetched 4 P's data: {report_data.data_quality.completeness:.0%} complete")
-        except Exception as data_err:
-            logger.warning(f"[ReportData] Could not fetch report data: {data_err}")
-        
-        report_content = ""
-        if report_type in ("market_analysis",):
-            report_content = generator.generate_market_analysis_report(
-                opportunity_context,
-                report_data=report_data
-            )
-        elif report_type in ("strategic", "strategic_assessment"):
-            report_content = generator.generate_strategic_assessment(opportunity_context)
-        elif report_type in ("pestle", "pestle_analysis"):
-            report_content = generator.generate_pestle_analysis(opportunity_context)
-        elif report_type in ("business_plan",):
-            report_content = generator.generate_business_plan(opportunity_context)
-        elif report_type in ("financial", "financial_model", "financials"):
-            report_content = generator.generate_financial_projections(opportunity_context)
-        elif report_type in ("pitch_deck",):
-            report_content = generator.generate_pitch_deck_content(opportunity_context)
-        elif report_type in ("feasibility", "feasibility_study"):
-            report_content = generator.generate_feasibility_study(opportunity_context)
-        elif report_type in ("location_analysis",):
-            # Use template-based generation for Location Analysis Report
-            from app.models.report_template import ReportTemplate as RT
-            from app.services.llm_ai_engine import llm_ai_engine_service as _llm_svc
-            location_template = db.query(RT).filter(RT.slug == "location_analysis").first()
-            if not location_template or not location_template.ai_prompt:
-                raise ValueError("Location Analysis template not found or has no prompt — cannot generate report")
-            loc_context = "\n".join([
-                f"Business Concept: {report_context.get('businessConcept', opportunity_context['title'])}",
-                f"Category: {report_context.get('category', opportunity_context['category'])}",
-                f"Location/Market Area: {report_context.get('location', opportunity_context['city'])}",
-                f"Target Market: {report_context.get('targetMarket', opportunity_context.get('target_audience', ''))}",
-            ])
-            loc_prompt = location_template.ai_prompt.replace("{context}", loc_context)
-            from app.services.ai_report_generator import AIReportGenerator as _ARG
-            loc_result = await _llm_svc.generate_response(
-                f"You are OppGrid's senior market intelligence analyst producing institutional-grade location analysis reports.\n\n{_ARG.INSTITUTIONAL_STYLE_INSTRUCTIONS}\n\n{loc_prompt}",
-                model="claude"
-            )
-            if loc_result.get("error"):
-                raise Exception(f"AI service error for location_analysis: {loc_result.get('error_message', loc_result.get('error'))}")
-            report_content = loc_result.get("response") or loc_result.get("raw") or ""
-            if not report_content:
-                raise Exception("AI returned empty response for location_analysis report")
-        else:
-            report_content = generator.generate_executive_summary(opportunity_context)
+
+        from app.services.report_orchestrator import ReportOrchestrator
+        orchestrator = ReportOrchestrator()
+        report_content = await orchestrator.generate(
+            report_type=report_type,
+            business_type=report_context.get("businessConcept", "Business Opportunity"),
+            city=city,
+            state=state,
+            db=db,
+            user_notes=report_context.get("businessConcept", ""),
+            category=report_context.get("category"),
+            target_audience=report_context.get("targetMarket"),
+        )
         
         # Update report
         pending_report.status = ReportStatus.COMPLETED
@@ -1649,142 +1589,28 @@ async def generate_free_report(
     db.commit()
     db.refresh(report)
 
-    # Build context for AI generation
-    context_parts = []
-    if request_data.analysis_context:
-        context_parts.append(request_data.analysis_context)
-    elif request_data.idea_description:
-        context_parts.append(f"Business Concept: {request_data.idea_description}")
-    if request_data.target_market:
-        context_parts.append(f"Target Market: {request_data.target_market}")
-    if request_data.location:
-        context_parts.append(f"Location: {request_data.location}")
-    if opportunity:
-        context_parts.append(f"Opportunity: {opportunity.title}")
-        if opportunity.description:
-            context_parts.append(f"Description: {opportunity.description}")
-        if opportunity.category:
-            context_parts.append(f"Category: {opportunity.category}")
-        if opportunity.market_size:
-            context_parts.append(f"Market Size: {opportunity.market_size}")
-
-    if not context_parts:
-        context_parts.append("General business analysis")
-
-    context = "\n".join(context_parts)
-
-    # Report type specific prompts
-    report_prompts = {
-        "feasibility_study": f"""Create a comprehensive Feasibility Study report for the following business concept.
-Include these sections with detailed analysis:
-1. Executive Summary
-2. Market Opportunity - market size, growth trends, target customers
-3. Technical Feasibility - what's needed to build/launch this
-4. Financial Viability - startup costs, revenue projections, break-even timeline
-5. Risk Assessment - key risks and mitigation strategies
-6. Recommendation - GO / NO-GO / CONDITIONAL with clear reasoning
-
-Business Context:
-{context}""",
-        "market_analysis": f"""Create a comprehensive Market Analysis report.
-Include these sections:
-1. Market Size (TAM/SAM/SOM)
-2. Growth Trends and Market Dynamics
-3. Customer Segments and Demographics
-4. Competitive Landscape
-5. Market Entry Strategy
-6. Revenue Projections
-
-Business Context:
-{context}""",
-        "strategic_assessment": f"""Create a Strategic Assessment report.
-Include these sections:
-1. SWOT Analysis (Strengths, Weaknesses, Opportunities, Threats)
-2. Competitive Positioning
-3. Value Proposition Analysis
-4. Strategic Options
-5. Recommended Strategy with implementation steps
-
-Business Context:
-{context}""",
-        "pestle_analysis": f"""Create a PESTLE Analysis report.
-Include these sections:
-1. Political Factors
-2. Economic Factors
-3. Social Factors
-4. Technological Factors
-5. Legal Factors
-6. Environmental Factors
-7. Summary and Strategic Implications
-
-Business Context:
-{context}""",
-        "business_plan": f"""Create a comprehensive Business Plan.
-Include these sections:
-1. Executive Summary
-2. Company Description
-3. Market Analysis
-4. Organization & Management
-5. Product/Service Line
-6. Marketing & Sales Strategy
-7. Financial Projections (3-year)
-8. Funding Requirements
-
-Business Context:
-{context}""",
-        "financial_model": f"""Create a Financial Model report.
-Include these sections:
-1. Revenue Model and Pricing Strategy
-2. Cost Structure (fixed and variable)
-3. Unit Economics (LTV, CAC, margins)
-4. Cash Flow Projections (monthly for Year 1, quarterly for Years 2-3)
-5. Profit & Loss Projection (3-year)
-6. Sensitivity Analysis
-7. Key Financial Metrics and KPIs
-
-Business Context:
-{context}""",
-        "pitch_deck": f"""Create a Pitch Deck outline with detailed content for each slide.
-Include these slides:
-1. Problem - the pain point you're solving
-2. Solution - your product/service
-3. Market Size - TAM/SAM/SOM
-4. Business Model - how you make money
-5. Traction - early wins, metrics, or validation
-6. Competitive Advantage - your moat
-7. Team - key people (suggest roles needed)
-8. Financials - key projections
-9. The Ask - funding needed and use of funds
-
-Business Context:
-{context}""",
-    }
-
-    # For location_analysis, prefer the DB template prompt and use institutional system prompt
-    if request_data.report_type == "location_analysis":
-        from app.models.report_template import ReportTemplate as _RT
-        from app.services.ai_report_generator import AIReportGenerator as _ARG
-        _loc_tmpl = db.query(_RT).filter(_RT.slug == "location_analysis").first()
-        if _loc_tmpl and _loc_tmpl.ai_prompt:
-            prompt = _loc_tmpl.ai_prompt.replace("{context}", context)
-        else:
-            prompt = report_prompts.get("location_analysis", f"""Create a detailed business report.\n\nBusiness Context:\n{context}""")
-        full_prompt = f"""You are OppGrid's senior market intelligence analyst producing institutional-grade location analysis reports.
-
-{_ARG.INSTITUTIONAL_STYLE_INSTRUCTIONS}
-
-{prompt}"""
+    # Extract city and state from location for orchestrator
+    _free_location = request_data.location or (opportunity.city if opportunity else "") or ""
+    _free_city, _free_state = "", ""
+    if "," in _free_location:
+        _free_parts = _free_location.split(",")
+        _free_city = _free_parts[0].strip()
+        _free_state = _free_parts[1].strip() if len(_free_parts) > 1 else ""
     else:
-        prompt = report_prompts.get(request_data.report_type, f"""Create a detailed business report.
+        _free_city = _free_location
 
-Business Context:
-{context}""")
-        full_prompt = f"""You are a business strategy expert creating professional reports for entrepreneurs.
-Provide actionable, specific, and well-structured content. Use HTML formatting for headings, lists, tables, and emphasis.
-Format your response as clean HTML (use <h1>, <h2>, <h3>, <p>, <ul>, <li>, <table>, <strong>, <em> tags).
-Do NOT include <html>, <head>, or <body> tags - just the content HTML.
+    _free_business_type = (
+        request_data.idea_description
+        or (opportunity.title if opportunity else "")
+        or "Business Opportunity"
+    )
+    _free_category = (
+        request_data.analysis_context
+        or (opportunity.category if opportunity else None)
+    )
 
-{prompt}"""
+    from app.services.report_orchestrator import ReportOrchestrator
+    _orchestrator = ReportOrchestrator()
 
     reservation_used = False
     if current_user:
@@ -1801,13 +1627,16 @@ Do NOT include <html>, <head>, or <body> tags - just the content HTML.
 
     start_time = time.time()
     try:
-        result = await llm_ai_engine_service.generate_response(full_prompt, model="claude")
-
-        if result.get("error"):
-            logger.error(f"AI service error: {result.get('error_message', result.get('error'))}")
-            raise Exception(f"AI service unavailable: {result.get('error_message', 'Unknown error')}")
-
-        content = result.get("response") or result.get("raw")
+        content = await _orchestrator.generate(
+            report_type=request_data.report_type,
+            business_type=_free_business_type,
+            city=_free_city,
+            state=_free_state,
+            db=db,
+            user_notes=request_data.idea_description or "",
+            category=_free_category,
+            target_audience=request_data.target_market,
+        )
         if not content:
             raise Exception("AI returned empty response")
 

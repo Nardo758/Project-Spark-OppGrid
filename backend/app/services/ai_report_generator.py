@@ -582,74 +582,82 @@ Business Model Suggestions: {opportunity.get('business_models', '')}
 """
         return self._generate(system, prompt)
     
-    def generate_business_plan(self, opportunity: Dict[str, Any]) -> str:
+    def generate_business_plan(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
         """Generate a comprehensive business plan for Layer 3."""
         system = f"""You are a senior business strategist at OppGrid creating investor-ready business plans.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
-Structure the business plan with these numbered sections:
+CRITICAL OUTPUT RULES:
+- Output ONLY valid HTML using tags like <h2>, <h3>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <strong>, <em>.
+- Do NOT output plain text, ASCII art, or border characters (═══, ───, etc.).
+- Do NOT include any title block, header section, report ID, date stamp, or branding at the top. The document wrapper handles all of that. Start immediately with the first section heading.
+- Do NOT wrap the output in <html>, <head>, or <body> tags.
 
-1. EXECUTIVE SUMMARY
-   ────────────────────
-   One-page overview: opportunity, solution, market, financials, ask.
+Structure the business plan with these HTML sections:
 
-2. COMPANY DESCRIPTION
-   ────────────────────
-   • Mission Statement
-   • Vision Statement  
-   • Core Values
-   • Legal Structure (recommended)
+<h2>1. Executive Summary</h2>
+One-page overview: opportunity, solution, market size, financials highlight, and ask.
 
-3. MARKET ANALYSIS
-   ────────────────────
-   • Industry Overview & Trends
-   • Target Market Definition
-   • Market Size (TAM/SAM/SOM)
-   • Competitive Landscape
+<h2>2. Company Description</h2>
+<ul>
+  <li>Mission Statement</li>
+  <li>Vision Statement</li>
+  <li>Core Values</li>
+  <li>Recommended Legal Structure</li>
+</ul>
 
-4. PRODUCTS & SERVICES
-   ────────────────────
-   • Core Offering Description
-   • Unique Value Proposition
-   • Product Roadmap
-   • Intellectual Property Considerations
+<h2>3. Market Analysis</h2>
+<ul>
+  <li>Industry Overview &amp; Trends</li>
+  <li>Target Market Definition (use real demographics from OppGrid data if provided)</li>
+  <li>Market Size (TAM/SAM/SOM)</li>
+  <li>Competitive Landscape (use real competitor data if provided — do NOT invent names or counts)</li>
+</ul>
 
-5. MARKETING & SALES STRATEGY
-   ────────────────────
-   • Go-to-Market Approach
-   • Customer Acquisition Channels
-   • Pricing Strategy
-   • Sales Process
+<h2>4. Products &amp; Services</h2>
+<ul>
+  <li>Core Offering Description</li>
+  <li>Unique Value Proposition</li>
+  <li>Product Roadmap</li>
+  <li>Intellectual Property Considerations</li>
+</ul>
 
-6. OPERATIONS PLAN
-   ────────────────────
-   • Key Activities & Processes
-   • Resource Requirements
-   • Strategic Partnerships
-   • Technology Stack
+<h2>5. Marketing &amp; Sales Strategy</h2>
+<ul>
+  <li>Go-to-Market Approach</li>
+  <li>Customer Acquisition Channels</li>
+  <li>Pricing Strategy</li>
+  <li>Sales Process</li>
+</ul>
 
-7. MANAGEMENT & ORGANIZATION
-   ────────────────────
-   • Organizational Structure
-   • Key Roles & Responsibilities
-   • Advisory Board (recommended)
+<h2>6. Operations Plan</h2>
+<ul>
+  <li>Key Activities &amp; Processes</li>
+  <li>Resource Requirements</li>
+  <li>Strategic Partnerships</li>
+  <li>Technology Stack</li>
+</ul>
 
-8. FINANCIAL PROJECTIONS
-   ────────────────────
-   • Revenue Model
-   • Cost Structure
-   • 3-Year P&L Summary
-   • Funding Requirements & Use of Funds
+<h2>7. Management &amp; Organization</h2>
+<ul>
+  <li>Organizational Structure</li>
+  <li>Key Roles &amp; Responsibilities</li>
+  <li>Advisory Board (recommended)</li>
+</ul>
 
-9. MILESTONES & TIMELINE
-   ────────────────────
-   • 12-Month Roadmap
-   • Key Success Metrics
-   • Risk Mitigation Milestones
+<h2>8. Financial Projections</h2>
+Use an HTML table for year-by-year projections. Include revenue model, cost structure, 3-year P&amp;L summary, and funding requirements.
 
-Format as a professional, investor-ready document."""
+<h2>9. Milestones &amp; Timeline</h2>
+<ul>
+  <li>12-Month Roadmap</li>
+  <li>Key Success Metrics</li>
+  <li>Risk Mitigation Milestones</li>
+</ul>
+
+When OppGrid intelligence data is provided below, use it to populate competitor counts, demographics, formula scores, and market sizing — cite sources inline."""
         
-        prompt = f"""Write a comprehensive business plan for:
+        prompt = f"""Write a comprehensive, investor-ready business plan for:
 
 Title: {opportunity.get('title', 'Unknown')}
 Category: {opportunity.get('category', 'Unknown')}
@@ -659,78 +667,65 @@ Market Size: {opportunity.get('market_size', 'Under analysis')}
 Target Audience: {opportunity.get('target_audience', '')}
 Business Model Ideas: {opportunity.get('business_models', '')}
 """
+        if secret_sauce_block:
+            prompt += f"\n\n{secret_sauce_block}"
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Business Plan")
     
-    def generate_financial_projections(self, opportunity: Dict[str, Any]) -> str:
+    def generate_financial_projections(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
         """Generate financial projections for Layer 3."""
         system = f"""You are a senior financial analyst at OppGrid creating institutional-grade financial projections.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
-Structure your projections with these numbered sections:
+CRITICAL OUTPUT RULES:
+- Output ONLY valid HTML using tags like <h2>, <h3>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <strong>, <em>.
+- Do NOT output plain text, ASCII art, or border characters (═══, ───, etc.).
+- Do NOT include any title block, header section, report ID, date stamp, or branding at the top. The document wrapper handles all of that. Start immediately with the first section heading.
+- Do NOT wrap the output in <html>, <head>, or <body> tags.
 
-1. EXECUTIVE SUMMARY
-   ────────────────────
-   Key financial metrics and investment thesis (2-3 sentences).
+Structure your projections with these HTML sections:
 
-2. REVENUE MODEL
-   ────────────────────
-   • Primary Revenue Streams
-   • Pricing Strategy & Tiers
-   • Revenue Recognition Methodology
-   • Average Revenue Per User/Customer
+<h2>1. Executive Summary</h2>
+Key financial metrics and investment thesis (2-3 sentences). Anchor all figures to OppGrid market data when provided.
 
-3. YEAR 1 PROJECTIONS (Monthly)
-   ────────────────────
-   Month    │ Revenue │ COGS   │ OpEx   │ Net
-   ─────────┼─────────┼────────┼────────┼───────
-   M1-M3    │ $X      │ $X     │ $X     │ ($X)
-   M4-M6    │ $X      │ $X     │ $X     │ ($X)
-   M7-M9    │ $X      │ $X     │ $X     │ $X
-   M10-M12  │ $X      │ $X     │ $X     │ $X
-   ─────────┼─────────┼────────┼────────┼───────
-   TOTAL Y1 │ $X      │ $X     │ $X     │ $X
+<h2>2. Revenue Model</h2>
+<ul>
+  <li>Primary Revenue Streams</li>
+  <li>Pricing Strategy &amp; Tiers</li>
+  <li>Revenue Recognition Methodology</li>
+  <li>Average Revenue Per Customer</li>
+</ul>
 
-4. YEAR 2-3 PROJECTIONS (Quarterly)
-   ────────────────────
-   Quarterly breakdown with growth assumptions.
+<h2>3. Year 1 Projections (Monthly Quarters)</h2>
+Use an HTML table with columns: Period, Revenue, COGS, Operating Expenses, Net. Base revenue assumptions on OppGrid revenue benchmark when provided.
 
-5. COST STRUCTURE
-   ────────────────────
-   FIXED COSTS (Monthly):
-   • [Cost item]: $X
-   • [Cost item]: $X
-   
-   VARIABLE COSTS (Per Unit):
-   • [Cost item]: $X
-   • [Cost item]: $X
-   
-   UNIT ECONOMICS:
-   • Customer Acquisition Cost (CAC): $X
-   • Lifetime Value (LTV): $X
-   • LTV:CAC Ratio: X:1
+<h2>4. Year 2–3 Projections</h2>
+Quarterly breakdown with growth assumptions clearly stated. Use an HTML table.
 
-6. BREAK-EVEN ANALYSIS
-   ────────────────────
-   • Break-Even Point: Month X
-   • Units/Customers Required: X
-   • Revenue at Break-Even: $X
+<h2>5. Cost Structure</h2>
+Two sub-tables: Fixed Costs (monthly) and Variable Costs (per unit/customer). Include unit economics: CAC, LTV, LTV:CAC ratio.
 
-7. FUNDING REQUIREMENTS
-   ────────────────────
-   • Initial Capital Required: $X
-   • Use of Funds Breakdown
-   • Runway Analysis
+<h2>6. Break-Even Analysis</h2>
+<ul>
+  <li>Break-Even Month</li>
+  <li>Units/Customers Required</li>
+  <li>Revenue at Break-Even</li>
+</ul>
 
-8. KEY ASSUMPTIONS
-   ────────────────────
-   List all assumptions with justification.
+<h2>7. Funding Requirements</h2>
+<ul>
+  <li>Initial Capital Required (use OppGrid capital_required benchmark if provided)</li>
+  <li>Use of Funds Breakdown</li>
+  <li>Runway Analysis</li>
+</ul>
 
-9. SENSITIVITY ANALYSIS
-   ────────────────────
-   Best/Base/Worst case scenarios.
+<h2>8. Key Assumptions</h2>
+List all assumptions with justification. Cite OppGrid median income, market size, and revenue benchmark data inline.
 
-Include specific dollar figures and realistic growth rates based on market analysis."""
+<h2>9. Sensitivity Analysis</h2>
+Best / Base / Worst case scenarios in a table format.
+
+When OppGrid intelligence data is provided below, anchor ALL revenue, income, and market size figures to it — cite sources inline."""
         
         prompt = f"""Create 3-year financial projections for:
 
@@ -740,55 +735,55 @@ Location: {opportunity.get('city', '')}, {opportunity.get('region', '')}
 Market Size Estimate: {opportunity.get('market_size', 'Under analysis')}
 Business Model: {opportunity.get('business_models', '')}
 """
+        if secret_sauce_block:
+            prompt += f"\n\n{secret_sauce_block}"
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Financial Model")
     
-    def generate_feasibility_study(self, opportunity: Dict[str, Any]) -> str:
+    def generate_feasibility_study(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
         """Generate a feasibility study for Consultant Studio."""
         system = f"""You are a senior feasibility analyst at OppGrid preparing an institutional-grade feasibility assessment.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
-Structure your feasibility study with these numbered sections:
+CRITICAL OUTPUT RULES:
+- Output ONLY valid HTML using tags like <h2>, <h3>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <strong>, <em>.
+- Do NOT output plain text, ASCII art, or border characters (═══, ───, etc.).
+- Do NOT include any title block, header section, report ID, date stamp, or branding at the top. The document wrapper handles all of that. Start immediately with the first section heading.
+- Do NOT wrap the output in <html>, <head>, or <body> tags.
 
-1. EXECUTIVE SUMMARY
-   ────────────────────
-   Brief 2-3 sentence overview of findings and recommendation.
+Structure your feasibility study with these HTML sections:
 
-2. PROJECT OVERVIEW
-   ────────────────────
-   What is being evaluated and scope of analysis.
+<h2>1. Executive Summary</h2>
+Brief overview of findings and recommendation. Lead with Go/No-Go/Conditional verdict.
 
-3. TECHNICAL FEASIBILITY (Score: X/10)
-   ────────────────────
-   Can it be built/delivered? Technology requirements and readiness.
+<h2>2. Project Overview</h2>
+What is being evaluated and scope of analysis.
 
-4. MARKET FEASIBILITY (Score: X/10)
-   ────────────────────
-   Is there validated demand? Market size and growth indicators.
+<h2>3. Technical Feasibility <em>(Score: X/10)</em></h2>
+Can it be built/delivered? Technology requirements, availability, and readiness.
 
-5. FINANCIAL FEASIBILITY (Score: X/10)
-   ────────────────────
-   Is it economically viable? ROI projections and capital requirements.
+<h2>4. Market Feasibility <em>(Score: X/10)</em></h2>
+Is there validated demand? Use OppGrid signal data and competitor count when provided. Market size and growth indicators.
 
-6. OPERATIONAL FEASIBILITY (Score: X/10)
-   ────────────────────
-   Can it be executed? Resource and capability requirements.
+<h2>5. Financial Feasibility <em>(Score: X/10)</em></h2>
+Is it economically viable? Use OppGrid revenue benchmark and capital required when provided. ROI projections.
 
-7. LEGAL & REGULATORY CONSIDERATIONS
-   ────────────────────
-   Compliance requirements and potential barriers.
+<h2>6. Operational Feasibility <em>(Score: X/10)</em></h2>
+Can it be executed? Resource and capability requirements.
 
-8. RISK ASSESSMENT MATRIX
-   ────────────────────
-   Key risks rated by likelihood and impact.
+<h2>7. Legal &amp; Regulatory Considerations</h2>
+Compliance requirements and potential barriers specific to the location.
 
-9. RECOMMENDATION
-   ────────────────────
-   Go/No-Go/Conditional recommendation with justification.
+<h2>8. Risk Assessment Matrix</h2>
+HTML table: Risk | Likelihood (H/M/L) | Impact (H/M/L) | Mitigation Strategy. Use OppGrid key_risks when provided.
 
-COMPOSITE FEASIBILITY SCORE: X/10
+<h2>9. Recommendation</h2>
+<strong>Verdict: GO / NO-GO / CONDITIONAL</strong> with clear justification. Reference OppGrid CWI and DVS scores when provided.
 
-Use the scoring system consistently. Be objective, balanced, and thorough."""
+<h2>Composite Feasibility Score: X/10</h2>
+Weighted average of section scores with methodology note.
+
+Use the scoring system consistently. Base market and financial scores on OppGrid data when provided."""
         
         prompt = f"""Conduct a comprehensive feasibility study for:
 
@@ -799,101 +794,71 @@ Description: {opportunity.get('description', '')}
 Market Size: {opportunity.get('market_size', 'Under analysis')}
 Competition Level: {opportunity.get('competition_level', '')}
 """
+        if secret_sauce_block:
+            prompt += f"\n\n{secret_sauce_block}"
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Feasibility Study")
     
-    def generate_pitch_deck_content(self, opportunity: Dict[str, Any]) -> str:
+    def generate_pitch_deck_content(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
         """Generate pitch deck slide content for Quick Actions."""
         system = f"""You are a senior pitch consultant at OppGrid creating investor-ready presentation content.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
-Structure content as a professional pitch deck outline:
+CRITICAL OUTPUT RULES:
+- Output ONLY valid HTML using tags like <h2>, <h3>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <strong>, <em>.
+- Do NOT output plain text, ASCII art, or border characters (═══, ───, etc.).
+- Do NOT include any title block, header section, report ID, date stamp, or branding at the top. The document wrapper handles all of that. Start immediately with the first section heading.
+- Do NOT wrap the output in <html>, <head>, or <body> tags.
 
-1. PITCH DECK OVERVIEW
-   ────────────────────
-   Summary of deck structure and key narrative.
+Structure content as slide-by-slide HTML sections:
 
-═══════════════════════════════════════════════════════════════════════════════
-                              SLIDE-BY-SLIDE CONTENT
-═══════════════════════════════════════════════════════════════════════════════
+<h2>Pitch Deck Overview</h2>
+Brief summary of the narrative arc and key investor hooks.
 
-SLIDE 1: TITLE
-────────────────────
-• Recommended Company Name Options
-• Tagline Options (2-3)
-• Visual Direction
+<h2>Slide 1: Title</h2>
+Recommended company name options, tagline options (2-3), and visual direction note.
 
-SLIDE 2: PROBLEM
-────────────────────
-• Problem Statement (one sentence)
-• Key Pain Points (3 bullets)
-• Current Solutions & Why They Fail
-• Speaker Notes: [Narrative guidance]
+<h2>Slide 2: Problem</h2>
+<ul>
+  <li>Problem Statement (one sentence)</li>
+  <li>Key Pain Points (3 bullets — use OppGrid signal evidence when provided)</li>
+  <li>Current Solutions &amp; Why They Fail</li>
+  <li><em>Speaker Notes: narrative guidance</em></li>
+</ul>
 
-SLIDE 3: SOLUTION
-────────────────────
-• Solution Statement (one sentence)
-• Key Features/Benefits (3-4 bullets)
-• Unique Value Proposition
-• Speaker Notes: [Narrative guidance]
+<h2>Slide 3: Solution</h2>
+<ul>
+  <li>Solution Statement (one sentence)</li>
+  <li>Key Features/Benefits (3-4 bullets)</li>
+  <li>Unique Value Proposition</li>
+  <li><em>Speaker Notes: narrative guidance</em></li>
+</ul>
 
-SLIDE 4: MARKET SIZE
-────────────────────
-• TAM: $X (Global opportunity)
-• SAM: $X (Addressable segment)
-• SOM: $X (Year 1-3 target)
-• Growth Rate: X% CAGR
-• Speaker Notes: [Methodology talking points]
+<h2>Slide 4: Market Size</h2>
+TAM / SAM / SOM table using OppGrid market size data when provided. Include growth rate (CAGR) and speaker notes on methodology.
 
-SLIDE 5: BUSINESS MODEL
-────────────────────
-• Revenue Streams
-• Pricing Model
-• Unit Economics (CAC, LTV, margins)
-• Path to Profitability
-• Speaker Notes: [Key metrics to emphasize]
+<h2>Slide 5: Business Model</h2>
+Revenue streams, pricing model, unit economics (CAC, LTV, margins), path to profitability.
 
-SLIDE 6: TRACTION
-────────────────────
-• Milestones Achieved/Planned
-• Key Metrics (if applicable)
-• Validation Evidence
-• Speaker Notes: [Credibility talking points]
+<h2>Slide 6: Traction</h2>
+Milestones achieved/planned, validation evidence. Reference OppGrid opportunity score and signal density when provided.
 
-SLIDE 7: COMPETITION
-────────────────────
-• Competitive Landscape Map
-• Key Differentiators
-• Defensibility/Moats
-• Speaker Notes: [Positioning narrative]
+<h2>Slide 7: Competition</h2>
+Competitive landscape. Use OppGrid competitor data (names, ratings, count) when provided. Key differentiators and defensibility/moats.
 
-SLIDE 8: TEAM
-────────────────────
-• Key Roles Needed
-• Ideal Founder Profile
-• Advisory Needs
-• Speaker Notes: [Team narrative]
+<h2>Slide 8: Team</h2>
+Key roles needed, ideal founder profile, advisory needs.
 
-SLIDE 9: THE ASK
-────────────────────
-• Funding Amount: $X
-• Use of Funds Breakdown
-• Key Milestones with Funding
-• Valuation Guidance (if appropriate)
-• Speaker Notes: [Closing narrative]
+<h2>Slide 9: The Ask</h2>
+Funding amount, use of funds breakdown, key milestones with funding, valuation guidance.
 
-SLIDE 10: VISION
-────────────────────
-• 5-Year Vision Statement
-• Long-term Market Position
-• Exit Potential
-• Speaker Notes: [Inspirational close]
+<h2>Slide 10: Vision</h2>
+5-year vision statement, long-term market position, exit potential.
 
-═══════════════════════════════════════════════════════════════════════════════
+<h2>Appendix: Backup Slides</h2>
+Recommended backup slides for investor Q&amp;A (deep-dive financials, competitive matrix, team bios, technical architecture).
 
-APPENDIX: BACKUP SLIDES
-────────────────────
-Recommended backup slides for Q&A."""
+When OppGrid intelligence data is provided below, use signal evidence for the Problem slide, market data for Market Size, and competitor data for the Competition slide."""
         
         prompt = f"""Create pitch deck content for:
 
@@ -904,87 +869,93 @@ Market Size: {opportunity.get('market_size', 'Under analysis')}
 Target Audience: {opportunity.get('target_audience', '')}
 Business Models: {opportunity.get('business_models', '')}
 """
+        if secret_sauce_block:
+            prompt += f"\n\n{secret_sauce_block}"
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Pitch Deck")
     
     def generate_pestle_analysis(
-        self, 
+        self,
         opportunity: Dict[str, Any],
-        target_region: Optional[str] = None
+        target_region: Optional[str] = None,
+        secret_sauce_block: str = "",
     ) -> str:
         """Generate PESTLE analysis for macro-environmental factors."""
         system = f"""You are a senior macro-environment analyst at OppGrid conducting institutional-grade PESTLE analysis.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
-Structure your analysis with these numbered sections:
+CRITICAL OUTPUT RULES:
+- Output ONLY valid HTML using tags like <h2>, <h3>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <strong>, <em>.
+- Do NOT output plain text, ASCII art, or border characters (═══, ───, etc.).
+- Do NOT include any title block, header section, report ID, date stamp, or branding at the top. The document wrapper handles all of that. Start immediately with the first section heading.
+- Do NOT wrap the output in <html>, <head>, or <body> tags.
 
-1. EXECUTIVE SUMMARY
-   ────────────────────
-   Key macro-environmental findings and strategic implications (2-3 sentences).
+Structure your analysis with these HTML sections. For each PESTLE factor, include impact rating and a strategic implication:
 
-2. POLITICAL FACTORS (Impact: High/Medium/Low)
-   ────────────────────
-   • Government Stability & Policy Direction
-   • Tax Policies & Trade Regulations
-   • Industry-Specific Political Climate
-   • Regulatory Trends & Outlook
-   
-   Strategic Implication: [One sentence]
+<h2>1. Executive Summary</h2>
+Key macro-environmental findings and top strategic implication (2-3 sentences). Reference OppGrid DSI and ATI scores when provided.
 
-3. ECONOMIC FACTORS (Impact: High/Medium/Low)
-   ────────────────────
-   • Economic Growth Trajectory
-   • Interest Rate & Inflation Environment
-   • Consumer Spending Patterns
-   • Labor Market Conditions
-   
-   Strategic Implication: [One sentence]
+<h2>2. Political Factors <em>(Impact: High/Medium/Low)</em></h2>
+<ul>
+  <li>Government Stability &amp; Policy Direction</li>
+  <li>Tax Policies &amp; Trade Regulations</li>
+  <li>Industry-Specific Political Climate</li>
+  <li>Regulatory Trends &amp; Outlook</li>
+</ul>
+<p><strong>Strategic Implication:</strong> [one sentence]</p>
 
-4. SOCIAL FACTORS (Impact: High/Medium/Low)
-   ────────────────────
-   • Demographic Trends & Shifts
-   • Cultural & Lifestyle Changes
-   • Consumer Behavior Evolution
-   • Health & Education Indicators
-   
-   Strategic Implication: [One sentence]
+<h2>3. Economic Factors <em>(Impact: High/Medium/Low)</em></h2>
+<ul>
+  <li>Economic Growth Trajectory (use OppGrid income/spending data when provided)</li>
+  <li>Interest Rate &amp; Inflation Environment</li>
+  <li>Consumer Spending Patterns</li>
+  <li>Labor Market Conditions (use OppGrid unemployment/job growth data when provided)</li>
+</ul>
+<p><strong>Strategic Implication:</strong> [one sentence]</p>
 
-5. TECHNOLOGICAL FACTORS (Impact: High/Medium/Low)
-   ────────────────────
-   • Technology Adoption Rates
-   • Innovation & R&D Landscape
-   • Digital Transformation Trends
-   • Emerging Technology Impact
-   
-   Strategic Implication: [One sentence]
+<h2>4. Social Factors <em>(Impact: High/Medium/Low)</em></h2>
+<ul>
+  <li>Demographic Trends &amp; Shifts (use OppGrid demographics when provided)</li>
+  <li>Cultural &amp; Lifestyle Changes</li>
+  <li>Consumer Behavior Evolution (use OppGrid signal evidence when provided)</li>
+  <li>Health &amp; Education Indicators</li>
+</ul>
+<p><strong>Strategic Implication:</strong> [one sentence]</p>
 
-6. LEGAL FACTORS (Impact: High/Medium/Low)
-   ────────────────────
-   • Industry Regulations & Compliance
-   • Employment Law Considerations
-   • Consumer Protection Requirements
-   • Intellectual Property Landscape
-   
-   Strategic Implication: [One sentence]
+<h2>5. Technological Factors <em>(Impact: High/Medium/Low)</em></h2>
+<ul>
+  <li>Technology Adoption Rates</li>
+  <li>Innovation &amp; R&amp;D Landscape</li>
+  <li>Digital Transformation Trends</li>
+  <li>Emerging Technology Impact</li>
+</ul>
+<p><strong>Strategic Implication:</strong> [one sentence]</p>
 
-7. ENVIRONMENTAL FACTORS (Impact: High/Medium/Low)
-   ────────────────────
-   • Environmental Regulations
-   • Sustainability Trends
-   • Climate Change Considerations
-   • Resource & Waste Management
-   
-   Strategic Implication: [One sentence]
+<h2>6. Legal Factors <em>(Impact: High/Medium/Low)</em></h2>
+<ul>
+  <li>Industry Regulations &amp; Compliance</li>
+  <li>Employment Law Considerations</li>
+  <li>Consumer Protection Requirements</li>
+  <li>Intellectual Property Landscape</li>
+</ul>
+<p><strong>Strategic Implication:</strong> [one sentence]</p>
 
-8. IMPACT SUMMARY MATRIX
-   ────────────────────
-   Present a table summarizing all factors with impact ratings.
+<h2>7. Environmental Factors <em>(Impact: High/Medium/Low)</em></h2>
+<ul>
+  <li>Environmental Regulations</li>
+  <li>Sustainability Trends</li>
+  <li>Climate Change Considerations</li>
+  <li>Resource &amp; Waste Management</li>
+</ul>
+<p><strong>Strategic Implication:</strong> [one sentence]</p>
 
-9. STRATEGIC RECOMMENDATIONS
-   ────────────────────
-   Prioritized actions based on PESTLE findings.
+<h2>8. Impact Summary Matrix</h2>
+HTML table: Factor | Impact Rating | Strategic Implication | Priority (High/Medium/Low).
 
-Provide specific, actionable insights tied to the target market."""
+<h2>9. Strategic Recommendations</h2>
+Prioritized action list based on PESTLE findings. Reference OppGrid formula scores when provided.
+
+Provide specific, actionable insights tied to the target market and OppGrid intelligence data."""
         
         region_info = target_region or opportunity.get('city', '') or opportunity.get('region', '')
         
@@ -996,6 +967,8 @@ Target Region: {region_info}
 Description: {opportunity.get('description', '')}
 Target Audience: {opportunity.get('target_audience', '')}
 """
+        if secret_sauce_block:
+            prompt += f"\n\n{secret_sauce_block}"
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "PESTLE Analysis")
     
@@ -1176,89 +1149,61 @@ Target Audience: {opportunity.get('target_audience', '')}
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Market Analysis")
     
-    def generate_strategic_assessment(self, opportunity: Dict[str, Any]) -> str:
+    def generate_strategic_assessment(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
         """Generate strategic assessment with SWOT analysis and recommendations."""
         system = f"""You are a senior strategy consultant at OppGrid providing institutional-grade strategic assessments.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
-Structure your assessment with these numbered sections:
+CRITICAL OUTPUT RULES:
+- Output ONLY valid HTML using tags like <h2>, <h3>, <p>, <ul>, <li>, <table>, <thead>, <tbody>, <tr>, <th>, <td>, <strong>, <em>.
+- Do NOT output plain text, ASCII art, or border characters (═══, ───, etc.).
+- Do NOT include any title block, header section, report ID, date stamp, or branding at the top. The document wrapper handles all of that. Start immediately with the first section heading.
+- Do NOT wrap the output in <html>, <head>, or <body> tags.
 
-1. EXECUTIVE SUMMARY
-   ────────────────────
-   Strategic positioning and key recommendation (2-3 sentences).
+Structure your assessment with these HTML sections:
 
-2. SWOT ANALYSIS
-   ────────────────────
-   
-   STRENGTHS                          │ WEAKNESSES
-   • [Strength 1]                     │ • [Weakness 1]
-   • [Strength 2]                     │ • [Weakness 2]
-   • [Strength 3]                     │ • [Weakness 3]
-   ──────────────────────────────────────────────────────
-   OPPORTUNITIES                       │ THREATS
-   • [Opportunity 1]                  │ • [Threat 1]
-   • [Opportunity 2]                  │ • [Threat 2]
-   • [Opportunity 3]                  │ • [Threat 3]
+<h2>1. Executive Summary</h2>
+Strategic positioning and key recommendation (2-3 sentences). Reference OppGrid CLS score when provided.
 
-3. STRATEGIC POSITION ANALYSIS
-   ────────────────────
-   • Current Market Position
-   • Competitive Advantages (Sustainable vs. Temporary)
-   • Value Proposition Clarity Score: X/10
-   • Brand Positioning Assessment
+<h2>2. SWOT Analysis</h2>
+Use a 2×2 HTML table with four quadrants: Strengths, Weaknesses, Opportunities, Threats.
+Base Opportunities on OppGrid signal evidence and CWI. Base Threats on competitor data and key_risks when provided.
 
-4. GROWTH STRATEGY OPTIONS
-   ────────────────────
-   Option A: Market Penetration
-   • Approach: [Description]
-   • Expected Impact: [High/Medium/Low]
-   • Resource Requirement: [High/Medium/Low]
-   
-   Option B: Market Development
-   • Approach: [Description]
-   • Expected Impact: [High/Medium/Low]
-   • Resource Requirement: [High/Medium/Low]
-   
-   Option C: Product/Service Expansion
-   • Approach: [Description]
-   • Expected Impact: [High/Medium/Low]
-   • Resource Requirement: [High/Medium/Low]
-   
-   RECOMMENDED STRATEGY: [Option X with justification]
+<h2>3. Strategic Position Analysis</h2>
+<ul>
+  <li>Current Market Position (reference OppGrid competition_level when provided)</li>
+  <li>Competitive Advantages: Sustainable vs. Temporary</li>
+  <li>Value Proposition Clarity Score: X/10</li>
+  <li>Brand Positioning Assessment</li>
+</ul>
 
-5. RESOURCE REQUIREMENTS
-   ────────────────────
-   • Key Capabilities Needed
-   • Investment Requirements (Estimated Range)
-   • Team & Talent Priorities
-   • Timeline Considerations
+<h2>4. Growth Strategy Options</h2>
+Three options (Market Penetration, Market Development, Product/Service Expansion) in a comparison table:
+Option | Approach | Expected Impact | Resource Requirement
+End with: <strong>Recommended Strategy:</strong> [Option with justification]
 
-6. RISK ASSESSMENT MATRIX
-   ────────────────────
-   Risk                    │ Likelihood │ Impact │ Mitigation
-   [Risk 1]               │ H/M/L      │ H/M/L  │ [Strategy]
-   [Risk 2]               │ H/M/L      │ H/M/L  │ [Strategy]
-   [Risk 3]               │ H/M/L      │ H/M/L  │ [Strategy]
+<h2>5. Resource Requirements</h2>
+<ul>
+  <li>Key Capabilities Needed</li>
+  <li>Investment Requirements (use OppGrid capital_required when provided)</li>
+  <li>Team &amp; Talent Priorities</li>
+  <li>Timeline Considerations</li>
+</ul>
 
-7. STRATEGIC RECOMMENDATIONS
-   ────────────────────
-   IMMEDIATE (0-30 days):
-   • [Priority action 1]
-   • [Priority action 2]
-   
-   SHORT-TERM (1-6 months):
-   • [Strategic initiative 1]
-   • [Strategic initiative 2]
-   
-   MEDIUM-TERM (6-18 months):
-   • [Growth initiative 1]
-   • [Growth initiative 2]
+<h2>6. Risk Assessment Matrix</h2>
+HTML table: Risk | Likelihood (H/M/L) | Impact (H/M/L) | Mitigation Strategy.
+Use OppGrid key_risks when provided — do NOT invent risk names.
 
-8. SUCCESS METRICS
-   ────────────────────
-   Key Performance Indicators to track strategic progress.
+<h2>7. Strategic Recommendations</h2>
+Three time horizons with action items:
+<h3>Immediate (0–30 days)</h3>
+<h3>Short-Term (1–6 months)</h3>
+<h3>Medium-Term (6–18 months)</h3>
 
-Provide actionable, specific recommendations based on OppGrid analysis."""
+<h2>8. Success Metrics</h2>
+Key Performance Indicators to track strategic progress. Use OppGrid opportunity score and signal density as baseline metrics when provided.
+
+Provide actionable, specific recommendations anchored to OppGrid intelligence data when provided."""
         
         prompt = f"""Conduct a strategic assessment for:
 
@@ -1270,6 +1215,8 @@ Market Size: {opportunity.get('market_size', 'Under analysis')}
 Competition Level: {opportunity.get('competition_level', '')}
 Target Audience: {opportunity.get('target_audience', '')}
 """
+        if secret_sauce_block:
+            prompt += f"\n\n{secret_sauce_block}"
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Strategic Assessment")
 

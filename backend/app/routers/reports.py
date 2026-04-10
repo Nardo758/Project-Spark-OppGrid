@@ -501,29 +501,54 @@ async def generate_report(
     db.commit()
     db.refresh(generated_report)
     
+    # Report types that route through the full orchestrator pipeline
+    ORCHESTRATED_TYPES = {
+        "business_plan", "financial_model", "financial", "financials",
+        "strategic_assessment", "strategic", "pestle_analysis", "pestle",
+        "pitch_deck", "feasibility_study", "feasibility",
+        "market_analysis", "location_analysis",
+    }
+
     start_time = time.time()
     try:
-        data_instruction = ""
-        if report_data_text:
-            data_instruction = " Use the OppGrid Market Intelligence Data provided to ground your analysis in real data points. Cite specific metrics where relevant."
+        if template.slug in ORCHESTRATED_TYPES:
+            from app.services.report_orchestrator import ReportOrchestrator
+            _orchestrator = ReportOrchestrator()
+            content = await _orchestrator.generate(
+                report_type=template.slug,
+                business_type=business_type or "Business Opportunity",
+                city=city or "",
+                state=state or "",
+                db=db,
+                user_notes=request.custom_context or "",
+                category=business_type,
+                target_audience=None,
+                opportunity_id=request.opportunity_id,
+            )
+            if not content:
+                raise Exception("AI returned empty response")
+        else:
+            data_instruction = ""
+            if report_data_text:
+                data_instruction = " Use the OppGrid Market Intelligence Data provided to ground your analysis in real data points. Cite specific metrics where relevant."
 
-        full_prompt = f"""You are OppGrid's senior market intelligence analyst producing institutional-grade business reports.{data_instruction}
+            full_prompt = f"""You are OppGrid's senior market intelligence analyst producing institutional-grade business reports.{data_instruction}
 
 {AIReportGenerator.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
 {prompt}"""
-        result = await llm_ai_engine_service.generate_response(full_prompt, model="claude")
-        
-        if result.get("error"):
-            logger.error(f"AI service error: {result.get('error_message', result.get('error'))}")
-            raise Exception(f"AI service unavailable: {result.get('error_message', 'Unknown error')}")
-        
-        raw_content = result.get("response") or result.get("raw")
-        if not raw_content:
-            raise Exception("AI returned empty response")
-        
-        formatter = AIReportGenerator()
-        content = formatter._format_institutional_report(raw_content, template.slug)
+            result = await llm_ai_engine_service.generate_response(full_prompt, model="claude")
+
+            if result.get("error"):
+                logger.error(f"AI service error: {result.get('error_message', result.get('error'))}")
+                raise Exception(f"AI service unavailable: {result.get('error_message', 'Unknown error')}")
+
+            raw_content = result.get("response") or result.get("raw")
+            if not raw_content:
+                raise Exception("AI returned empty response")
+
+            formatter = AIReportGenerator()
+            content = formatter._format_institutional_report(raw_content, template.slug)
         
         generation_time_ms = int((time.time() - start_time) * 1000)
         
