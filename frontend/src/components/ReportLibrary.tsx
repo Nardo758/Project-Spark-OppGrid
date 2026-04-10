@@ -124,6 +124,29 @@ const REPORT_CATEGORIES: ReportCategory[] = [
       { slug: 'pestle_analysis', title: 'PESTLE Analysis', description: 'Political, Economic, Social, Tech, Legal, Environmental factors.', price: '$99', priceCents: 9900, consultantPrice: '$1,500 - $5,000', icon: Shield, accentColor: '#0F6E56', sections: ['Political', 'Economic', 'Social', 'Technological', 'Legal', 'Environmental'], deliveryTime: '2-3 hrs', isStudio: true },
       { slug: 'competitive_analysis', title: 'Competitive Analysis', description: 'Deep competitor benchmarking with strategic recommendations.', price: '$149', priceCents: 14900, consultantPrice: '$2,000 - $6,000', icon: BarChart3, accentColor: '#D97757', sections: ['Competitor Profiles', 'Feature Matrix', 'Pricing Comparison', 'Market Positioning'], deliveryTime: '3-4 hrs', isStudio: false },
       { slug: 'pricing_strategy', title: 'Pricing Strategy', description: 'Optimal pricing model based on market and competitor data.', price: '$139', priceCents: 13900, consultantPrice: '$1,500 - $5,000', icon: DollarSign, accentColor: '#BA7517', sections: ['Market Pricing', 'Value-Based Pricing', 'Competitor Pricing', 'Recommended Model'], deliveryTime: '2-4 hrs', isStudio: false },
+      {
+        slug: 'location_analysis',
+        title: 'Location Analysis Report',
+        description: 'Identify the top 5 launch locations using 8 proprietary formulas — including the Traffic Anomaly Index that spots emerging markets before competitors.',
+        price: '$119',
+        priceCents: 11900,
+        consultantPrice: '$5,000 - $25,000',
+        icon: MapPin,
+        accentColor: '#10B981',
+        sections: [
+          'Executive Location Summary',
+          'Market Opportunity Heatmap',
+          'Top 5 Location Profiles',
+          'Demographic Deep Dive',
+          'Competitive Density Analysis',
+          'Foot Traffic & Accessibility',
+          'Location Comparison Matrix',
+          'Emerging Location Intelligence',
+          'Grouped Comparison Map',
+        ],
+        deliveryTime: '15 min',
+        isStudio: true,
+      },
     ]
   },
   {
@@ -159,34 +182,6 @@ const REPORT_CATEGORIES: ReportCategory[] = [
       { slug: 'customer_interview', title: 'Customer Interview Guide', description: 'Structured interview script for customer discovery.', price: '$89', priceCents: 8900, consultantPrice: '$500 - $2,000', icon: Users, accentColor: '#185FA5', sections: ['Research Questions', 'Interview Script', 'Analysis Framework', 'Insight Template'], deliveryTime: '2-3 hrs', isStudio: false },
       { slug: 'tweet_landing', title: 'Tweet Landing Page', description: 'Viral tweet thread + micro landing page content.', price: '$49', priceCents: 4900, consultantPrice: '$300 - $800', icon: MousePointer, accentColor: '#D97757', sections: ['Tweet Thread', 'Hook Variants', 'Landing Copy', 'CTA Options'], deliveryTime: '0.5-1 hr', isStudio: false },
       { slug: 'feasibility_study', title: 'Feasibility Study', description: 'Quick viability check with market validation data.', price: '$25', priceCents: 2500, consultantPrice: '$1,500 - $15,000', icon: Target, accentColor: '#0F6E56', sections: ['Executive Summary', 'Market Opportunity', 'Technical Feasibility', 'Financial Viability', 'Risk Assessment'], deliveryTime: '1-2 hrs', isStudio: true },
-    ]
-  },
-  {
-    id: 'location', label: 'Location Intelligence', icon: MapPin, color: '#10B981',
-    reports: [
-      {
-        slug: 'location_analysis',
-        title: 'Location Analysis Report',
-        description: 'Identify the top 5 launch locations using 8 proprietary formulas — including the Traffic Anomaly Index that spots emerging markets before competitors.',
-        price: '$119',
-        priceCents: 11900,
-        consultantPrice: '$5,000 - $25,000',
-        icon: MapPin,
-        accentColor: '#10B981',
-        sections: [
-          'Executive Location Summary',
-          'Market Opportunity Heatmap',
-          'Top 5 Location Profiles',
-          'Demographic Deep Dive',
-          'Competitive Density Analysis',
-          'Foot Traffic & Accessibility',
-          'Location Comparison Matrix',
-          'Emerging Location Intelligence',
-          'Grouped Comparison Map',
-        ],
-        deliveryTime: '15 min',
-        isStudio: true,
-      },
     ]
   },
 ]
