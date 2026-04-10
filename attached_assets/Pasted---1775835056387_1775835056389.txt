@@ -1,0 +1,679 @@
+================================================================================
+                         SECRET SAUCE ARCHITECTURE
+          Ensuring Proprietary Intelligence Flows Through All Reports
+================================================================================
+
+                           OppGrid Consultant Studio
+                      The Opportunity Intelligence Platform
+
+                           Version 1.0 | April 2026
+
+================================================================================
+                              THE PROBLEM
+================================================================================
+
+Currently, each report generator is a separate function with its own Claude 
+prompt. This creates:
+
+  • Inconsistency: Some reports get data, others don't
+  • Duplication: Each generator reinvents data injection
+  • Fragility: Easy to add a new report type that bypasses the secret sauce
+  • Maintenance burden: Updating formulas requires touching 7+ files
+
+--------------------------------------------------------------------------------
+                            THE SECRET SAUCE
+--------------------------------------------------------------------------------
+
+  8 Proprietary Formulas: TAI, WMM, DVS, CWI, BFV, ATI, FMW, DSI
+  + Signal Evidence + Source Citations + Geographic Maps
+
+================================================================================
+                 THE SOLUTION: CENTRALIZED REPORT ORCHESTRATOR
+================================================================================
+
+Create a single ReportOrchestrator that ALL report generation must pass 
+through. This orchestrator:
+
+  1. Collects data from all sources (Census, scrapers, signals DB)
+  2. Calculates ALL proprietary formulas
+  3. Generates maps
+  4. Builds the shared context block
+  5. Injects context into report-specific prompts
+  6. Calls Claude with the enriched prompt
+  7. Embeds maps and renders final output
+
+--------------------------------------------------------------------------------
+                          ARCHITECTURE DIAGRAM
+--------------------------------------------------------------------------------
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      ReportOrchestrator                         │
+│  (Single entry point — ALL reports go through here)             │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+┌───────────────┐    ┌───────────────┐    ┌───────────────┐
+│ DataCollector │    │ FormulaEngine │    │ MapGenerator  │
+│               │    │               │    │               │
+│ • Census API  │    │ • TAI         │    │ • Competitor  │
+│ • PostGIS     │    │ • CWI         │    │ • Demographic │
+│ • Scrapers    │    │ • DVS         │    │ • TAI Overlay │
+│ • Signals DB  │    │ • WMM, etc.   │    │               │
+└───────────────┘    └───────────────┘    └───────────────┘
+        │                     │                     │
+        └─────────────────────┼─────────────────────┘
+                              ▼
+              ┌───────────────────────────┐
+              │     ReportContext         │
+              │  (Unified data object)    │
+              │                           │
+              │  • competitors[]          │
+              │  • demographics           │
+              │  • signals[]              │
+              │  • formula_scores         │
+              │  • maps{}                 │
+              │  • sources[]              │
+              └───────────────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────┐
+              │  SecretSauceInjector      │
+              │  (Builds shared prompt    │
+              │   block for ANY report)   │
+              └───────────────────────────┘
+                              │
+        ┌──────────┬──────────┼──────────┬──────────┐
+        ▼          ▼          ▼          ▼          ▼
+   ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
+   │Business│ │Feasib. │ │Financ. │ │Pitch   │ │Location│
+   │Plan    │ │Study   │ │Model   │ │Deck    │ │Analysis│
+   │Prompt  │ │Prompt  │ │Prompt  │ │Prompt  │ │Prompt  │
+   └────────┘ └────────┘ └────────┘ └────────┘ └────────┘
+        │          │          │          │          │
+        └──────────┴──────────┼──────────┴──────────┘
+                              ▼
+                    ┌───────────────┐
+                    │    Claude     │
+                    │  (with full   │
+                    │   context)    │
+                    └───────────────┘
+                              │
+                              ▼
+                    ┌───────────────┐
+                    │  PDF/HTML     │
+                    │  Renderer     │
+                    │  (with maps)  │
+                    └───────────────┘
+
+================================================================================
+                             IMPLEMENTATION
+================================================================================
+
+--------------------------------------------------------------------------------
+STEP 1: Define ReportContext (Shared Data Object)
+--------------------------------------------------------------------------------
+
+This is the SINGLE SOURCE OF TRUTH for all report data. Every report 
+generator receives this same object.
+
+# models/report_context.py
+
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional
+from datetime import datetime
+
+@dataclass
+class Competitor:
+    name: str
+    address: str
+    lat: float
+    lng: float
+    rating: float
+    review_count: int
+    distance_miles: float
+    source: str = "Google Maps"
+    scraped_at: datetime = None
+
+@dataclass
+class Demographics:
+    population: int
+    median_income: int
+    age_25_44_pct: float
+    growth_rate_yoy: float
+    census_year: str = "2020-2024"
+    source: str = "Census ACS 5-Year"
+
+@dataclass
+class Signal:
+    text: str
+    source: str  # "reddit", "yelp", "google_reviews"
+    subreddit_or_business: str
+    discovered_at: datetime
+    quality_score: float
+    pain_point_category: str
+
+@dataclass
+class FormulaScores:
+    tai: float = 0.0   # Traffic Anomaly Index
+    wmm: float = 0.0   # Wealth Migration Momentum
+    dvs: float = 0.0   # Demand Velocity Score
+    cwi: float = 0.0   # Competitive Whitespace Index
+    bfv: float = 0.0   # Business Formation Velocity
+    ati: float = 0.0   # Affordability Tension Index
+    fmw: float = 0.0   # First-Mover Window (days)
+    dsi: float = 0.0   # Demographic Shift Index
+    cls: float = 0.0   # Composite Location Score
+    
+    def interpret(self, formula: str) -> str:
+        """Return human-readable interpretation"""
+        interpretations = {
+            'tai': {0.15: 'Emerging hotspot', 0: 'Stable', -999: 'Declining'},
+            'cwi': {10: 'Wide open market', 3: 'Opportunity exists', 0: 'Saturated'},
+            'dvs': {50: 'Rapidly emerging', 10: 'Growing', 0: 'Mature/flat'},
+            'cls': {80: 'Excellent', 60: 'Good', 0: 'Challenging'}
+        }
+        # Return appropriate interpretation based on thresholds
+        ...
+
+@dataclass
+class ReportContext:
+    # Request info
+    business_type: str
+    city: str
+    state: str
+    coordinates: tuple  # (lat, lng)
+    
+    # Collected data
+    competitors: List[Competitor] = field(default_factory=list)
+    demographics: Demographics = None
+    signals: List[Signal] = field(default_factory=list)
+    
+    # Calculated scores
+    formula_scores: FormulaScores = None
+    
+    # Generated assets
+    maps: Dict[str, bytes] = field(default_factory=dict)
+    
+    # Metadata
+    generated_at: datetime = None
+    data_sources: List[str] = field(default_factory=list)
+
+--------------------------------------------------------------------------------
+STEP 2: Centralized FormulaEngine
+--------------------------------------------------------------------------------
+
+All 8 proprietary formulas calculated in ONE place. 
+Update here = updates everywhere.
+
+# services/formula_engine.py
+
+from datetime import datetime, timedelta
+from models.report_context import FormulaScores, Competitor, Signal
+
+class FormulaEngine:
+    
+    @staticmethod
+    def calculate_all(context: 'ReportContext') -> FormulaScores:
+        """Calculate all proprietary formulas from context data"""
+        scores = FormulaScores()
+        
+        # CWI: Competitive Whitespace Index
+        scores.cwi = FormulaEngine._calculate_cwi(
+            signals=context.signals,
+            competitors=context.competitors
+        )
+        
+        # DVS: Demand Velocity Score
+        scores.dvs = FormulaEngine._calculate_dvs(context.signals)
+        
+        # DSI: Demographic Shift Index
+        scores.dsi = FormulaEngine._calculate_dsi(context.demographics)
+        
+        # FMW: First-Mover Window
+        scores.fmw = FormulaEngine._calculate_fmw(
+            signals=context.signals,
+            competitors=context.competitors
+        )
+        
+        # TAI: Traffic Anomaly Index (requires traffic API)
+        scores.tai = FormulaEngine._calculate_tai(
+            coordinates=context.coordinates
+        )
+        
+        # WMM: Wealth Migration Momentum
+        scores.wmm = FormulaEngine._calculate_wmm(context.demographics)
+        
+        # CLS: Composite Location Score
+        scores.cls = FormulaEngine._calculate_cls(scores)
+        
+        return scores
+    
+    @staticmethod
+    def _calculate_cwi(signals: list, competitors: list) -> float:
+        """(Signals × Quality) / (Competitors + 1)"""
+        if not signals:
+            return 0.0
+        avg_quality = sum(s.quality_score for s in signals) / len(signals)
+        weighted = len(signals) * avg_quality
+        return round(weighted / (len(competitors) + 1), 2)
+    
+    @staticmethod
+    def _calculate_dvs(signals: list) -> float:
+        """(Recent - Older) / Older × 100"""
+        now = datetime.now()
+        cutoff = now - timedelta(days=90)
+        recent = len([s for s in signals if s.discovered_at > cutoff])
+        older = len([s for s in signals if s.discovered_at <= cutoff])
+        if older == 0:
+            return 100.0 if recent > 0 else 0.0
+        return round(((recent - older) / older) * 100, 1)
+    
+    @staticmethod
+    def _calculate_cls(scores: FormulaScores) -> float:
+        """Weighted composite score (0-100)"""
+        return round(
+            scores.tai * 15 +
+            scores.wmm * 15 +
+            scores.dvs * 0.15 +
+            scores.cwi * 2 +
+            scores.bfv * 10 +
+            scores.ati * 10 +
+            scores.fmw * 0.05 +
+            scores.dsi * 0.10
+        , 0)
+
+--------------------------------------------------------------------------------
+STEP 3: SecretSauceInjector (THE KEY COMPONENT)
+--------------------------------------------------------------------------------
+
+This builds the SHARED CONTEXT BLOCK that gets injected into EVERY report 
+prompt. This is where OppGrid's differentiation lives.
+
+# services/secret_sauce_injector.py
+
+from models.report_context import ReportContext
+
+class SecretSauceInjector:
+    """
+    Builds the shared context block that makes OppGrid reports unique.
+    This block is injected into EVERY report type's Claude prompt.
+    """
+    
+    @staticmethod
+    def build_context_block(ctx: ReportContext) -> str:
+        """Build the secret sauce block for any report"""
+        
+        sections = [
+            SecretSauceInjector._build_header(ctx),
+            SecretSauceInjector._build_competitor_section(ctx),
+            SecretSauceInjector._build_demographics_section(ctx),
+            SecretSauceInjector._build_formula_scores_section(ctx),
+            SecretSauceInjector._build_signal_evidence_section(ctx),
+            SecretSauceInjector._build_data_sources_section(ctx),
+            SecretSauceInjector._build_instructions()
+        ]
+        
+        return "\n\n".join(sections)
+    
+    @staticmethod
+    def _build_header(ctx: ReportContext) -> str:
+        return f"""## OPPGRID INTELLIGENCE DATA
+## USE THIS DATA — DO NOT INVENT STATISTICS
+
+Business: {ctx.business_type}
+Location: {ctx.city}, {ctx.state}
+Analysis Date: {ctx.generated_at.strftime('%B %d, %Y')}"""
+    
+    @staticmethod
+    def _build_competitor_section(ctx: ReportContext) -> str:
+        if not ctx.competitors:
+            return """### Competitive Landscape
+Competitor data pending — scraper integration in progress.
+Do NOT invent competitor names or counts."""
+        
+        rows = []
+        for c in ctx.competitors[:10]:
+            rows.append(f"| {c.name} | {c.distance_miles:.1f} mi | {c.rating}★ | {c.review_count} reviews |")
+        
+        table = "\n".join(rows)
+        avg_rating = sum(c.rating for c in ctx.competitors) / len(ctx.competitors)
+        
+        return f"""### Competitive Landscape (Real Data)
+Total competitors within 5 miles: {len(ctx.competitors)}
+Average rating: {avg_rating:.1f}★
+Source: {ctx.competitors[0].source}, scraped {ctx.competitors[0].scraped_at.strftime('%B %Y')}
+
+| Name | Distance | Rating | Reviews |
+|------|----------|--------|---------|
+{table}"""
+    
+    @staticmethod
+    def _build_demographics_section(ctx: ReportContext) -> str:
+        d = ctx.demographics
+        if not d:
+            return "### Demographics\nDemographic data not available."
+        
+        return f"""### Demographics ({d.source} {d.census_year})
+Population (5-mi radius): {d.population:,}
+Median Household Income: ${d.median_income:,}
+Age 25-44 (Prime Renter): {d.age_25_44_pct}%
+Population Growth: {d.growth_rate_yoy:+.1f}% YoY"""
+    
+    @staticmethod
+    def _build_formula_scores_section(ctx: ReportContext) -> str:
+        f = ctx.formula_scores
+        if not f:
+            return "### OppGrid Scores\nScores not calculated."
+        
+        return f"""### OppGrid Proprietary Scores
+
+**Composite Location Score: {f.cls:.0f}/100** — {f.interpret('cls')}
+
+| Formula | Score | Interpretation |
+|---------|-------|----------------|
+| Traffic Anomaly Index (TAI) | {f.tai:+.2f} | {f.interpret('tai')} |
+| Competitive Whitespace (CWI) | {f.cwi:.1f} | {f.interpret('cwi')} |
+| Demand Velocity (DVS) | {f.dvs:+.1f}% | {f.interpret('dvs')} |
+| Wealth Migration (WMM) | {f.wmm:.2f} | {f.interpret('wmm')} |
+| First-Mover Window (FMW) | {f.fmw:.0f} days | {f.interpret('fmw')} |
+| Demographic Shift (DSI) | {f.dsi:+.1f}% | {f.interpret('dsi')} |"""
+    
+    @staticmethod
+    def _build_signal_evidence_section(ctx: ReportContext) -> str:
+        if not ctx.signals:
+            return "### Why This Opportunity?\nSignal data pending."
+        
+        # Group by source
+        sources = {}
+        for s in ctx.signals:
+            sources[s.source] = sources.get(s.source, 0) + 1
+        source_breakdown = ", ".join(f"{k}: {v}" for k, v in sources.items())
+        
+        # Group by pain point
+        pain_points = {}
+        for s in ctx.signals:
+            pain_points[s.pain_point_category] = pain_points.get(s.pain_point_category, 0) + 1
+        total = len(ctx.signals)
+        top_pains = sorted(pain_points.items(), key=lambda x: -x[1])[:3]
+        pain_list = "\n".join(f"- {p[0]}: {p[1]/total*100:.0f}%" for p in top_pains)
+        
+        # Example quotes
+        examples = ctx.signals[:2]
+        quotes = "\n".join(f'> "{s.text[:100]}..." — {s.source}, {s.subreddit_or_business}' for s in examples)
+        
+        avg_quality = sum(s.quality_score for s in ctx.signals) / len(ctx.signals)
+        
+        return f"""### Why This Opportunity? (Signal Evidence)
+
+OppGrid detected {len(ctx.signals)} demand signals for {ctx.business_type} in {ctx.city}:
+
+**Sources:** {source_breakdown}
+
+**Top Pain Points:**
+{pain_list}
+
+**Example Signals:**
+{quotes}
+
+**Signal Quality:** {avg_quality:.1f}/10 average"""
+    
+    @staticmethod
+    def _build_data_sources_section(ctx: ReportContext) -> str:
+        sources = ctx.data_sources or [
+            "U.S. Census Bureau, American Community Survey 5-Year Estimates",
+            "Google Maps Places API",
+            "OppGrid Signal Database (Reddit, Yelp, Google Reviews)"
+        ]
+        return "### Data Sources\n" + "\n".join(f"- {s}" for s in sources)
+    
+    @staticmethod
+    def _build_instructions() -> str:
+        return """### CRITICAL INSTRUCTIONS
+1. Use ONLY the data provided above — do not invent statistics
+2. Cite sources inline: "The median income is $X (Census ACS 2024)"
+3. Reference specific competitors by name when relevant
+4. Explain what the OppGrid scores mean for this business
+5. Include the signal evidence to justify the opportunity
+6. If data is missing, say so — do not fabricate"""
+
+--------------------------------------------------------------------------------
+STEP 4: ReportOrchestrator (Single Entry Point)
+--------------------------------------------------------------------------------
+
+This is the ONLY WAY to generate a report. All paths lead here.
+
+# services/report_orchestrator.py
+
+from enum import Enum
+from models.report_context import ReportContext
+from services.data_collector import DataCollector
+from services.formula_engine import FormulaEngine
+from services.map_generator import MapGenerator
+from services.secret_sauce_injector import SecretSauceInjector
+from services.claude_client import ClaudeClient
+from services.pdf_renderer import PDFRenderer
+
+class ReportType(Enum):
+    BUSINESS_PLAN = "business_plan"
+    FEASIBILITY_STUDY = "feasibility_study"
+    MARKET_ANALYSIS = "market_analysis"
+    FINANCIAL_MODEL = "financial_model"
+    STRATEGIC_ASSESSMENT = "strategic_assessment"
+    PITCH_DECK = "pitch_deck"
+    LOCATION_ANALYSIS = "location_analysis"
+    PESTLE = "pestle"
+
+class ReportOrchestrator:
+    """
+    THE SINGLE ENTRY POINT FOR ALL REPORT GENERATION.
+    
+    Every report — paid, free, bundled — goes through here.
+    This ensures the secret sauce is ALWAYS applied.
+    """
+    
+    def __init__(self):
+        self.data_collector = DataCollector()
+        self.formula_engine = FormulaEngine()
+        self.map_generator = MapGenerator()
+        self.injector = SecretSauceInjector()
+        self.claude = ClaudeClient()
+        self.renderer = PDFRenderer()
+    
+    async def generate(
+        self,
+        report_type: ReportType,
+        business_type: str,
+        city: str,
+        state: str,
+        user_notes: str = ""
+    ) -> bytes:
+        """
+        Generate any report type with full secret sauce.
+        Returns PDF bytes.
+        """
+        
+        # 1. COLLECT DATA (same for all reports)
+        context = await self.data_collector.collect(
+            business_type=business_type,
+            city=city,
+            state=state,
+            radius_miles=5
+        )
+        
+        # 2. CALCULATE FORMULAS (same for all reports)
+        context.formula_scores = self.formula_engine.calculate_all(context)
+        
+        # 3. GENERATE MAPS (same for all reports)
+        context.maps['competitive'] = await self.map_generator.competitive_map(
+            center=context.coordinates,
+            competitors=context.competitors
+        )
+        context.maps['demographic'] = await self.map_generator.demographic_map(
+            center=context.coordinates,
+            demographics=context.demographics
+        )
+        
+        # 4. BUILD SECRET SAUCE BLOCK (same for all reports)
+        secret_sauce = self.injector.build_context_block(context)
+        
+        # 5. GET REPORT-SPECIFIC PROMPT
+        report_prompt = self._get_report_prompt(report_type, user_notes)
+        
+        # 6. COMBINE: Secret Sauce + Report-Specific Prompt
+        full_prompt = f"{secret_sauce}\n\n---\n\n{report_prompt}"
+        
+        # 7. CALL CLAUDE
+        content = await self.claude.generate(full_prompt)
+        
+        # 8. RENDER WITH MAPS
+        pdf = self.renderer.render(
+            content=content,
+            maps=context.maps,
+            report_type=report_type,
+            context=context
+        )
+        
+        return pdf
+    
+    def _get_report_prompt(self, report_type: ReportType, user_notes: str) -> str:
+        """Get the report-specific portion of the prompt"""
+        prompts = {
+            ReportType.BUSINESS_PLAN: BUSINESS_PLAN_PROMPT,
+            ReportType.FEASIBILITY_STUDY: FEASIBILITY_STUDY_PROMPT,
+            ReportType.FINANCIAL_MODEL: FINANCIAL_MODEL_PROMPT,
+            ReportType.PITCH_DECK: PITCH_DECK_PROMPT,
+            ReportType.STRATEGIC_ASSESSMENT: STRATEGIC_ASSESSMENT_PROMPT,
+            ReportType.LOCATION_ANALYSIS: LOCATION_ANALYSIS_PROMPT,
+            ReportType.MARKET_ANALYSIS: MARKET_ANALYSIS_PROMPT,
+            ReportType.PESTLE: PESTLE_PROMPT,
+        }
+        base_prompt = prompts.get(report_type, BUSINESS_PLAN_PROMPT)
+        
+        if user_notes:
+            base_prompt += f"\n\n### Additional User Context\n{user_notes}"
+        
+        return base_prompt
+
+--------------------------------------------------------------------------------
+STEP 5: Wire All Entry Points to Orchestrator
+--------------------------------------------------------------------------------
+
+Every report trigger — paid, free, API — must go through the orchestrator:
+
+# routes/report_pricing.py (Paid Stripe path)
+
+@router.post("/trigger-report-generation")
+async def trigger_report_generation(request: ReportRequest):
+    orchestrator = ReportOrchestrator()
+    
+    pdf_bytes = await orchestrator.generate(
+        report_type=ReportType(request.report_type),
+        business_type=request.business_type,
+        city=request.city,
+        state=request.state,
+        user_notes=request.notes
+    )
+    
+    # Save and return
+    report = await save_generated_report(pdf_bytes, request)
+    return {"report_id": report.id, "download_url": report.url}
+
+--------------------------------------------------------------------------------
+
+# routes/consultant_studio.py (Free path)
+
+@router.post("/generate-free-report")
+async def generate_free_report(request: FreeReportRequest):
+    orchestrator = ReportOrchestrator()  # SAME orchestrator
+    
+    pdf_bytes = await orchestrator.generate(
+        report_type=ReportType(request.report_type),
+        business_type=request.business_type,
+        city=request.city,
+        state=request.state
+    )
+    
+    return {"report_id": report.id}
+
+--------------------------------------------------------------------------------
+
+# api/v1/reports.py (API path)
+
+@router.post("/v1/reports/generate")
+async def api_generate_report(request: APIReportRequest, api_key: str):
+    orchestrator = ReportOrchestrator()  # SAME orchestrator
+    
+    pdf_bytes = await orchestrator.generate(
+        report_type=ReportType(request.report_type),
+        business_type=request.business_type,
+        city=request.city,
+        state=request.state
+    )
+    
+    return {"report_id": report.id}
+
+--------------------------------------------------------------------------------
+STEP 6: Report-Specific Prompts
+--------------------------------------------------------------------------------
+
+Each report type has its own prompt that focuses on what to GENERATE,
+while the SecretSauceInjector provides the DATA.
+
++----------------------+------------------------------------------+----------------------------------+
+| Report               | Unique Sections                          | Data Dependencies                |
++----------------------+------------------------------------------+----------------------------------+
+| Business Plan        | Executive Summary, Operations Plan,      | All: competitors, demographics,  |
+|                      | Go-to-Market, Financial Overview         | signals, formulas                |
++----------------------+------------------------------------------+----------------------------------+
+| Feasibility Study    | Viability Score, Risk Assessment,        | CWI, DVS, competitor count,      |
+|                      | Go/No-Go Recommendation                  | signal quality                   |
++----------------------+------------------------------------------+----------------------------------+
+| Financial Model      | Revenue Projections, Unit Economics,     | Demographics (income),           |
+|                      | Break-Even, Cash Flow                    | competitor pricing, market size  |
++----------------------+------------------------------------------+----------------------------------+
+| Strategic Assessment | SWOT Analysis, Porter's Five Forces,     | Competitors (for rivalry),       |
+|                      | Strategic Options                        | signals (for opportunities)      |
++----------------------+------------------------------------------+----------------------------------+
+| Pitch Deck           | Problem, Solution, TAM/SAM/SOM,          | Demographics (for TAM), signals  |
+|                      | Traction, Team, Ask                      | (for problem validation), CLS    |
++----------------------+------------------------------------------+----------------------------------+
+| Location Analysis    | Top 5 Locations, Maps,                   | All formulas especially TAI,     |
+|                      | Comparison Matrix                        | FMW; multiple location contexts  |
++----------------------+------------------------------------------+----------------------------------+
+
+================================================================================
+                          VERIFICATION CHECKLIST
+================================================================================
+
+After implementation, generate each report type and verify:
+
+  ☐ OppGrid Proprietary Scores section appears with all 6+ formulas
+  ☐ Competitor table shows real data with source citation
+  ☐ Demographics include Census year and source
+  ☐ "Why This Opportunity?" section shows signal count and examples
+  ☐ At least 1 map appears in the report
+  ☐ Data Sources section lists all sources at end
+  ☐ No raw JSON or template variables visible
+  ☐ No invented statistics (test with known market)
+
+================================================================================
+                     BENEFITS OF THIS ARCHITECTURE
+================================================================================
+
+  • Single source of truth: Update a formula once, it propagates to all reports
+  
+  • Impossible to bypass: All entry points funnel through ReportOrchestrator
+  
+  • Consistent quality: Every report gets the same data collection + formulas
+  
+  • Easy to extend: New report type = new prompt, everything else is inherited
+  
+  • Testable: Mock ReportContext to test any report generator in isolation
+
+================================================================================
+
+                OppGrid • The Opportunity Intelligence Platform
+                              oppgrid.com
+
+================================================================================

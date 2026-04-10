@@ -1,0 +1,73 @@
+⚠️ Gaps / Suggestions
+1. Missing: Proprietary Formula Calculation
+The tasks mention injecting "CWI/DVS/CLS scores with interpretations" but don't specify where these get calculated. Currently:
+
+Does ReportDataService already compute these?
+Or does a separate FormulaEngine need to be called?
+
+Suggestion: Add a task to ensure ReportDataService.collect() returns formula scores, or add explicit step:
+5. Ensure formula scores are calculated — Verify ReportDataService returns 
+   tai, cwi, dvs, cls scores. If not, add FormulaEngine.calculate() call 
+   before passing report_data to generator.
+
+2. Missing: Other Report Types
+The tasks only address generate_business_plan. What about:
+
+generate_feasibility_study ($25)
+generate_strategic_assessment ($89)
+generate_financial_model ($129)
+generate_pitch_deck ($79)
+generate_pestle_analysis
+
+Suggestion: Either:
+
+Add parallel tasks for each report type, OR
+Create a generic wrapper that all generators use:
+
+pythondef inject_report_context(prompt: str, report_data: ReportDataContext) -> str:
+    """Shared function to inject data into any report prompt"""
+    return prompt.format(
+        competitor_table=report_data.competitor_table,
+        demographics=report_data.demographics_with_citation,
+        formula_scores=report_data.formula_summary,
+        ...
+    )
+
+3. Map Generation: Competitor Data Source
+Task 1 says "competitor pins for a given center coordinate" — but where do the competitor coordinates come from?
+Clarification needed:
+
+Is report_data.competitors already populated with lat/lng from the Google Maps scraper?
+If scrapers aren't running yet, will this fail silently or show an empty map?
+
+Suggestion: Add defensive handling:
+If no competitors in report_data, generate map with just the center pin 
+and a note: "Competitor data pending — scraper integration in progress"
+
+4. Missing: Signal Evidence Section
+The tasks mention "signal count/pain points summary" but don't specify adding a dedicated "Why This Opportunity?" section with:
+
+Example signal quotes
+Source breakdown (Reddit: 23, Yelp: 15, etc.)
+Signal quality score
+
+This is what makes OppGrid reports different from generic AI output.
+Suggestion:
+6. Add signal evidence block — Include "Why This Opportunity?" section 
+   in Business Plan showing signal_count, source_breakdown, top 3 
+   pain_points with percentages, and 2 anonymized example quotes.
+
+Recommended Task Additions
+5. Calculate formula scores — Ensure ReportDataService returns CWI, DVS, 
+   CLS (and TAI when available). Add FormulaEngine call if not present.
+
+6. Add signal evidence section — Include "Why This Opportunity?" block 
+   with signal count, source breakdown, pain point themes, example quotes.
+
+7. Handle missing data gracefully — If competitors list is empty or 
+   scrapers not connected, show placeholder with explanation rather 
+   than fake data.
+
+8. Extend to other report types — Apply same report_data injection 
+   pattern to: feasibility_study, strategic_assessment, financial_model, 
+   pitch_deck, pestle_analysis.
