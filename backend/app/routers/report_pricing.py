@@ -997,21 +997,20 @@ async def trigger_report_generation(
             from app.models.report_template import ReportTemplate as RT
             from app.services.llm_ai_engine import llm_ai_engine_service as _llm_svc
             location_template = db.query(RT).filter(RT.slug == "location_analysis").first()
-            if location_template and location_template.ai_prompt:
-                loc_context = "\n".join([
-                    f"Business Concept: {report_context.get('businessConcept', opportunity_context['title'])}",
-                    f"Category: {report_context.get('category', opportunity_context['category'])}",
-                    f"Location/Market Area: {report_context.get('location', opportunity_context['city'])}",
-                    f"Target Market: {report_context.get('targetMarket', opportunity_context.get('target_audience', ''))}",
-                ])
-                loc_prompt = location_template.ai_prompt.replace("{context}", loc_context)
-                loc_result = await _llm_svc.generate_response(
-                    f"You are OppGrid's Location Intelligence Engine producing institutional-grade location analysis reports.\n\n{loc_prompt}",
-                    model="claude"
-                )
-                report_content = loc_result.get("response") or loc_result.get("raw") or ""
-            else:
-                report_content = generator.generate_executive_summary(opportunity_context)
+            if not location_template or not location_template.ai_prompt:
+                raise ValueError("Location Analysis template not found or has no prompt — cannot generate report")
+            loc_context = "\n".join([
+                f"Business Concept: {report_context.get('businessConcept', opportunity_context['title'])}",
+                f"Category: {report_context.get('category', opportunity_context['category'])}",
+                f"Location/Market Area: {report_context.get('location', opportunity_context['city'])}",
+                f"Target Market: {report_context.get('targetMarket', opportunity_context.get('target_audience', ''))}",
+            ])
+            loc_prompt = location_template.ai_prompt.replace("{context}", loc_context)
+            loc_result = await _llm_svc.generate_response(
+                f"You are OppGrid's Location Intelligence Engine producing institutional-grade location analysis reports.\n\n{loc_prompt}",
+                model="claude"
+            )
+            report_content = loc_result.get("response") or loc_result.get("raw") or ""
         else:
             report_content = generator.generate_executive_summary(opportunity_context)
         
@@ -1808,7 +1807,16 @@ All 5 locations with coordinates, CLS-ranked markers (green/yellow/orange by sco
 Format as a professional institutional report with tables, scores, and clear section headers.""",
     }
 
-    prompt = report_prompts.get(request_data.report_type, f"""Create a detailed business report.
+    # For location_analysis, prefer the DB template prompt to keep a single source of truth
+    if request_data.report_type == "location_analysis":
+        from app.models.report_template import ReportTemplate as _RT
+        _loc_tmpl = db.query(_RT).filter(_RT.slug == "location_analysis").first()
+        if _loc_tmpl and _loc_tmpl.ai_prompt:
+            prompt = _loc_tmpl.ai_prompt.replace("{context}", context)
+        else:
+            prompt = report_prompts.get("location_analysis", f"""Create a detailed business report.\n\nBusiness Context:\n{context}""")
+    else:
+        prompt = report_prompts.get(request_data.report_type, f"""Create a detailed business report.
 
 Business Context:
 {context}""")
