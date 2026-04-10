@@ -153,8 +153,70 @@ class ReportOrchestrator:
             user_notes=user_notes,
         )
 
+        # ── 5. Inject static maps into Business Plan HTML ────────────────────
+        if norm_type == "business_plan" and city and state:
+            content = await self._inject_business_plan_maps(
+                html=content,
+                business_type=business_type,
+                city=city,
+                state=state,
+            )
+
         logger.info(f"[Orchestrator] Generation complete ({len(content)} chars)")
         return content
+
+    async def _inject_business_plan_maps(
+        self,
+        html: str,
+        business_type: str,
+        city: str,
+        state: str,
+    ) -> str:
+        """
+        Inject static map <figure> blocks into the Business Plan HTML.
+
+        - Location overview map inserted after the first </h2> (Executive Summary)
+        - Competitive density map inserted after the Market Analysis <h2> heading
+        Both are gracefully no-ops on failure.
+        """
+        import re
+
+        try:
+            from app.services.static_map_generator import StaticMapGenerator
+            gen = StaticMapGenerator()
+
+            overview_html = await gen.location_overview_map_html(city=city, state=state)
+            density_html = await gen.competitor_density_map_html(
+                business_type=business_type,
+                city=city,
+                state=state,
+                radius_miles=5.0,
+            )
+
+            if overview_html:
+                # Insert after the first closing </h2> (Executive Summary heading)
+                first_h2_close = html.find("</h2>")
+                if first_h2_close != -1:
+                    insert_pos = first_h2_close + len("</h2>")
+                    html = html[:insert_pos] + "\n" + overview_html + html[insert_pos:]
+                    logger.info("[Orchestrator] Overview map injected into Executive Summary")
+                else:
+                    html = overview_html + "\n" + html
+
+            if density_html:
+                # Find Market Analysis h2 heading (look for "Market" in h2 tag text)
+                market_h2 = re.search(r'<h2[^>]*>[^<]*[Mm]arket[^<]*</h2>', html)
+                if market_h2:
+                    end_pos = market_h2.end()
+                    html = html[:end_pos] + "\n" + density_html + html[end_pos:]
+                    logger.info("[Orchestrator] Competitor density map injected into Market Analysis")
+                else:
+                    html = html + "\n" + density_html
+
+        except Exception as map_err:
+            logger.warning(f"[Orchestrator] Map injection failed (non-fatal): {map_err}")
+
+        return html
 
     async def _route(
         self,
