@@ -959,7 +959,11 @@ async def trigger_report_generation(
             target_audience=report_context.get("targetMarket"),
         )
         
-        # Update report
+        # Update report — normalise title to "Type: Business in City"
+        _type_display = report_type.replace("_", " ").title()
+        _business_name = str(report_context.get("businessConcept", "Business Opportunity")).strip().strip('"').strip("'")
+        _city_part = f" in {city}" if city else ""
+        pending_report.title = f"{_type_display}: {_business_name}{_city_part}"[:255]
         pending_report.status = ReportStatus.COMPLETED
         pending_report.content = report_content
         pending_report.completed_at = datetime.now(timezone.utc)
@@ -1576,7 +1580,11 @@ async def generate_free_report(
 
     report_product = REPORT_PRODUCTS[request_data.report_type]
 
-    raw_title = f"{report_product.name}: {title_suffix}"
+    # Normalise title to "Product Name: Business in City" (sanitise — no JSON fragments)
+    _location_hint = (request_data.location or "").split(",")[0].strip()
+    _city_suffix = f" in {_location_hint}" if _location_hint else ""
+    _safe_title_suffix = str(title_suffix).strip().strip('"').strip("'").replace("{", "").replace("}", "")
+    raw_title = f"{report_product.name}: {_safe_title_suffix}{_city_suffix}"
     report = GeneratedReport(
         user_id=current_user.id if current_user else None,
         opportunity_id=request_data.opportunity_id if opportunity else None,

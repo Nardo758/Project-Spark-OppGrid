@@ -582,7 +582,7 @@ Business Model Suggestions: {opportunity.get('business_models', '')}
 """
         return self._generate(system, prompt)
     
-    def generate_business_plan(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
+    def generate_business_plan(self, opportunity: Dict[str, Any], secret_sauce_block: str = "", report_data=None) -> str:
         """Generate a comprehensive business plan for Layer 3."""
         system = f"""You are a senior business strategist at OppGrid creating investor-ready business plans.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
@@ -672,7 +672,7 @@ Business Model Ideas: {opportunity.get('business_models', '')}
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Business Plan")
     
-    def generate_financial_projections(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
+    def generate_financial_projections(self, opportunity: Dict[str, Any], secret_sauce_block: str = "", report_data=None) -> str:
         """Generate financial projections for Layer 3."""
         system = f"""You are a senior financial analyst at OppGrid creating institutional-grade financial projections.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
@@ -740,7 +740,7 @@ Business Model: {opportunity.get('business_models', '')}
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Financial Model")
     
-    def generate_feasibility_study(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
+    def generate_feasibility_study(self, opportunity: Dict[str, Any], secret_sauce_block: str = "", report_data=None) -> str:
         """Generate a feasibility study for Consultant Studio."""
         system = f"""You are a senior feasibility analyst at OppGrid preparing an institutional-grade feasibility assessment.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
@@ -799,7 +799,7 @@ Competition Level: {opportunity.get('competition_level', '')}
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Feasibility Study")
     
-    def generate_pitch_deck_content(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
+    def generate_pitch_deck_content(self, opportunity: Dict[str, Any], secret_sauce_block: str = "", report_data=None) -> str:
         """Generate pitch deck slide content for Quick Actions."""
         system = f"""You are a senior pitch consultant at OppGrid creating investor-ready presentation content.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
@@ -879,6 +879,7 @@ Business Models: {opportunity.get('business_models', '')}
         opportunity: Dict[str, Any],
         target_region: Optional[str] = None,
         secret_sauce_block: str = "",
+        report_data=None,
     ) -> str:
         """Generate PESTLE analysis for macro-environmental factors."""
         system = f"""You are a senior macro-environment analyst at OppGrid conducting institutional-grade PESTLE analysis.
@@ -1149,7 +1150,7 @@ Target Audience: {opportunity.get('target_audience', '')}
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Market Analysis")
     
-    def generate_strategic_assessment(self, opportunity: Dict[str, Any], secret_sauce_block: str = "") -> str:
+    def generate_strategic_assessment(self, opportunity: Dict[str, Any], secret_sauce_block: str = "", report_data=None) -> str:
         """Generate strategic assessment with SWOT analysis and recommendations."""
         system = f"""You are a senior strategy consultant at OppGrid providing institutional-grade strategic assessments.
 {self.INSTITUTIONAL_STYLE_INSTRUCTIONS}
