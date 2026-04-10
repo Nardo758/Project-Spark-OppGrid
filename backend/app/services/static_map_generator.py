@@ -44,7 +44,11 @@ NAVY = "0F172A"
 
 
 def _fetch_image_as_base64(url: str, timeout: int = 12) -> str:
-    """Download a URL and return its content as a base64 string. Returns '' on error."""
+    """Download a URL and return its content as a base64 string. Returns '' on error.
+
+    Designed to be called via loop.run_in_executor so it does not block the
+    async event loop (requests.get is synchronous / blocking I/O).
+    """
     try:
         resp = requests.get(url, timeout=timeout)
         resp.raise_for_status()
@@ -52,6 +56,14 @@ def _fetch_image_as_base64(url: str, timeout: int = 12) -> str:
     except Exception as exc:
         logger.warning(f"[StaticMap] Image fetch failed: {exc}")
         return ""
+
+
+async def _fetch_image_as_base64_async(url: str, timeout: int = 12) -> str:
+    """Async wrapper that runs the blocking HTTP fetch in the default threadpool."""
+    import asyncio
+    from functools import partial
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, partial(_fetch_image_as_base64, url, timeout))
 
 
 def _mapbox_static_url(
@@ -236,7 +248,7 @@ class StaticMapGenerator:
         )
 
         logger.info(f"[StaticMap] Fetching competitor density map for {city}, {state}")
-        b64 = _fetch_image_as_base64(url)
+        b64 = await _fetch_image_as_base64_async(url)
         if not b64:
             return ""
 
@@ -296,7 +308,7 @@ class StaticMapGenerator:
         )
 
         logger.info(f"[StaticMap] Fetching overview map for {city}, {state}")
-        b64 = _fetch_image_as_base64(url)
+        b64 = await _fetch_image_as_base64_async(url)
         if not b64:
             return ""
 
