@@ -14,6 +14,7 @@ method returns "" and the caller omits the <figure> block.
 
 import base64
 import logging
+import math
 import os
 from datetime import date
 from typing import List, Optional, Tuple
@@ -23,6 +24,17 @@ import requests
 from app.services.location_utils import get_location_coords
 
 logger = logging.getLogger(__name__)
+
+_EARTH_RADIUS_MILES = 3958.8
+
+
+def _haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    """Return the great-circle distance in miles between two (lat, lng) points."""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlam = math.radians(lng2 - lng1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
+    return 2 * _EARTH_RADIUS_MILES * math.asin(math.sqrt(a))
 
 MAPBOX_TOKEN = os.environ.get("MAPBOX_ACCESS_TOKEN", "")
 
@@ -161,8 +173,9 @@ class StaticMapGenerator:
                 if c_lat is not None and c_lng is not None:
                     c_lat_f = float(c_lat)
                     c_lng_f = float(c_lng)
-                    # Basic sanity: filter out coords that match the center exactly
-                    if abs(c_lat_f - lat) > 0.00001 or abs(c_lng_f - lng) > 0.00001:
+                    dist = _haversine_miles(lat, lng, c_lat_f, c_lng_f)
+                    # Keep only competitors within the specified radius
+                    if dist <= radius_miles:
                         competitors.append((c_lat_f, c_lng_f, name))
 
             logger.info(
