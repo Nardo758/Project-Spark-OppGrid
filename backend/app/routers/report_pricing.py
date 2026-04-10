@@ -762,6 +762,7 @@ STUDIO_REPORT_PRICES = {
     "customer_interview": {"name": "Customer Interview Guide", "price_cents": 8900},
     "tweet_landing": {"name": "Tweet Landing Page", "price_cents": 4900},
     "feasibility_study": {"name": "Feasibility Study", "price_cents": 2500},
+    "location_analysis": {"name": "Location Analysis Report", "price_cents": 11900},
 }
 
 
@@ -991,6 +992,25 @@ async def trigger_report_generation(
             report_content = generator.generate_pitch_deck_content(opportunity_context)
         elif report_type in ("feasibility", "feasibility_study"):
             report_content = generator.generate_feasibility_study(opportunity_context)
+        elif report_type in ("location_analysis",):
+            # Use template-based generation for Location Analysis Report
+            from app.models.report_template import ReportTemplate as RT
+            location_template = db.query(RT).filter(RT.slug == "location_analysis").first()
+            if location_template and location_template.ai_prompt:
+                loc_context = "\n".join([
+                    f"Business Concept: {report_context.get('businessConcept', opportunity_context['title'])}",
+                    f"Category: {report_context.get('category', opportunity_context['category'])}",
+                    f"Location/Market Area: {report_context.get('location', opportunity_context['city'])}",
+                    f"Target Market: {report_context.get('targetMarket', opportunity_context.get('target_audience', ''))}",
+                ])
+                loc_prompt = location_template.ai_prompt.replace("{context}", loc_context)
+                loc_result = await llm_ai_engine_service.generate_response(
+                    f"You are OppGrid's Location Intelligence Engine producing institutional-grade location analysis reports.\n\n{loc_prompt}",
+                    model="claude"
+                )
+                report_content = loc_result.get("response") or loc_result.get("raw") or ""
+            else:
+                report_content = generator.generate_executive_summary(opportunity_context)
         else:
             report_content = generator.generate_executive_summary(opportunity_context)
         
@@ -1602,6 +1622,7 @@ async def generate_free_report(
         "business_plan": ReportType.BUSINESS_PLAN,
         "financial_model": ReportType.FINANCIAL_MODEL,
         "pitch_deck": ReportType.PITCH_DECK,
+        "location_analysis": ReportType.LOCATION_ANALYSIS,
     }
 
     report_type_enum = report_type_map.get(request_data.report_type)
@@ -1732,6 +1753,58 @@ Include these slides:
 
 Business Context:
 {context}""",
+        "location_analysis": f"""You are OppGrid's Location Intelligence Engine. Generate a comprehensive Location Analysis Report identifying the TOP 5 physical locations for this business.
+
+CRITICAL: For every location compute all 8 proprietary formula scores and the Composite Location Score (CLS). Show your work for each formula. Use the business context data provided to derive realistic, plausible values.
+
+Business Context:
+{context}
+
+Produce a 9-section report covering:
+
+SECTION 1 — EXECUTIVE LOCATION SUMMARY
+Write a 2-3 paragraph summary: top 3 picks, key market factors, risk flags, and a confidence score (0-100%). Include a VERDICT box with recommended launch location and one-sentence rationale.
+
+SECTION 2 — MARKET OPPORTUNITY HEATMAP
+Describe demand signal density: signal cluster locations, signal types (Reddit/Yelp/Google complaints), demand intensity by zone (High/Medium/Low), signal momentum, and map bounding coordinates.
+
+SECTION 3 — TOP 5 LOCATION PROFILES (repeat for each)
+For EACH of 5 locations provide:
+- Site coordinates, CLS score (0-100), Emerging/Stable/Declining badge
+- 6 map layer descriptions (base geography, competitor plot with 1mi/3mi/5mi counts, foot traffic anchors and peaks, demographic choropleth with median income, TAI zone classification, demand signal density)
+- All 8 formula scores WITH calculation shown:
+  TAI = (Current Traffic - DOT Historical Avg) / DOT Historical Avg
+  WMM = (Net Migration × Avg Inbound Income) / (Population × Median Local Income)
+  DVS = (Signals This Month - Signals 3mo Ago) / Signals 3mo Ago × 100
+  CWI = (Demand Signals × Signal Quality Score) / (Competitor Count + 1)
+  BFV = (New Businesses YoY / Population) × 10,000
+  ATI = Income Growth % - Commercial Rent Growth %
+  FMW = Days Since First Signal - Days Since Last Competitor Entered
+  DSI = (Target Demo % Now - 5yr Ago) / 5yr Ago × 100
+- CLS = (TAI×15) + (WMM×15) + (DVS×15) + (CWI×20) + (BFV×10) + (ATI×10) + (FMW×5) + (DSI×10) — show full calculation
+- Top 5 competitors (name, rating, distance, positioning)
+- 3 location-specific risk factors with mitigations
+- 3 recommended action steps
+
+SECTION 4 — DEMOGRAPHIC DEEP DIVE
+Age/income/education comparison table for all 5 locations. Identify strongest demographic alignment.
+
+SECTION 5 — COMPETITIVE DENSITY ANALYSIS
+Competitor count within 1mi/3mi/5mi for each location. Saturation rating (Low/Medium/High). Whitespace zones.
+
+SECTION 6 — FOOT TRAFFIC & ACCESSIBILITY
+Peak hours, anchor businesses, parking, transit score (1-10), walkability, 10-minute drive catchment.
+
+SECTION 7 — LOCATION COMPARISON MATRIX
+Full side-by-side table: CLS, TAI, WMM, DVS, CWI, BFV, ATI, FMW, DSI, competitor count, median income, population, transit score, final rank for all 5 locations.
+
+SECTION 8 — EMERGING LOCATION INTELLIGENCE
+TAI rankings highest to lowest. FMW urgency rankings with "Move Now / 30 Days / 60 Days" per location. WMM wealth migration hot zones. DVS demand acceleration leaders.
+
+SECTION 9 — GROUPED COMPARISON MAP
+All 5 locations with coordinates, CLS-ranked markers (green/yellow/orange by score), geographic spread analysis, estimated driving distance matrix, and multi-location expansion strategy with recommended rollout order.
+
+Format as a professional institutional report with tables, scores, and clear section headers.""",
     }
 
     prompt = report_prompts.get(request_data.report_type, f"""Create a detailed business report.

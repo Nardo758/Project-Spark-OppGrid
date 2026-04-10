@@ -10,6 +10,7 @@ class ReportCategory(str, enum.Enum):
     PRODUCT = "product"
     BUSINESS = "business"
     RESEARCH = "research"
+    LOCATION = "location"
 
 
 class ReportTemplate(Base):

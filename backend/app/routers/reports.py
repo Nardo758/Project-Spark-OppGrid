@@ -284,6 +284,7 @@ async def get_report_templates(
         "business": "Business",
         "research": "Research",
         "analysis": "Analysis Reports",
+        "location": "Location Intelligence",
     }
     
     categories = {}
@@ -294,7 +295,7 @@ async def get_report_templates(
         categories[cat].append(template)
     
     result = []
-    for cat_key in ["popular", "marketing", "product", "business", "research", "analysis"]:
+    for cat_key in ["popular", "marketing", "product", "business", "research", "analysis", "location"]:
         if cat_key in categories:
             result.append(CategoryWithTemplates(
                 category=cat_key,
@@ -327,6 +328,7 @@ async def get_public_report_templates(
         "business": "Business",
         "research": "Research",
         "analysis": "Analysis Reports",
+        "location": "Location Intelligence",
     }
     
     categories = {}
@@ -337,7 +339,7 @@ async def get_public_report_templates(
         categories[cat].append(template)
     
     result = []
-    for cat_key in ["popular", "marketing", "product", "business", "research", "analysis"]:
+    for cat_key in ["popular", "marketing", "product", "business", "research", "analysis", "location"]:
         if cat_key in categories:
             result.append(CategoryWithTemplates(
                 category=cat_key,
@@ -481,6 +483,7 @@ async def generate_report(
         "pestle_analysis": ReportType.PESTLE_ANALYSIS,
         "strategic_assessment": ReportType.STRATEGIC_ASSESSMENT,
         "pitch_deck": ReportType.PITCH_DECK,
+        "location_analysis": ReportType.LOCATION_ANALYSIS,
     }
     
     report_type = report_type_map.get(template.slug, ReportType.MARKET_ANALYSIS)

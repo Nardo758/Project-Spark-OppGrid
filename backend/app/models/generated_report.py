@@ -41,6 +41,7 @@ class ReportType(str, enum.Enum):
     PRICING_STRATEGY = "pricing_strategy"
     COMPETITIVE_ANALYSIS = "competitive_analysis"
     CUSTOMER_INTERVIEW = "customer_interview"
+    LOCATION_ANALYSIS = "location_analysis"
 
 
 class ReportStatus(str, enum.Enum):

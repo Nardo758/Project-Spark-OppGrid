@@ -53,6 +53,7 @@ class ReportProductType(str, Enum):
     STRATEGIC_ASSESSMENT = "strategic_assessment"
     PESTLE_ANALYSIS = "pestle_analysis"
     PITCH_DECK = "pitch_deck"
+    LOCATION_ANALYSIS = "location_analysis"
 
 
 class BundleType(str, Enum):
@@ -132,6 +133,13 @@ REPORT_PRODUCTS: Dict[str, ReportProduct] = {
         description="Comprehensive strategy document",
         price_cents=14900,
         included_in_tier="pro",
+    ),
+    ReportProductType.LOCATION_ANALYSIS.value: ReportProduct(
+        id=ReportProductType.LOCATION_ANALYSIS.value,
+        name="Location Analysis Report",
+        description="Top 5 locations ranked by 8 proprietary formulas including Traffic Anomaly Index",
+        price_cents=11900,
+        included_in_tier=None,
     ),
 }
 

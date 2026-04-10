@@ -111,6 +111,11 @@ REPORT_PRICING = {
         "business_base": 14900,
         "delivery_hours": "2-3",
     },
+    "location_analysis": {
+        "individual_base": 11900,
+        "business_base": 17900,
+        "delivery_hours": "10-15 min",
+    },
 }
 
 REPORT_BUNDLES = {

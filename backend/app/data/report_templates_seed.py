@@ -496,6 +496,322 @@ Business Context:
 Format as ready-to-use interview guide with tips for moderators."""
     },
 
+    # ── Location Analysis Report ──────────────────────────────────────────────
+    {
+        "slug": "location_analysis",
+        "name": "Location Analysis Report",
+        "description": "Top 5 locations ranked by 8 proprietary formulas including Traffic Anomaly Index",
+        "category": "location",
+        "min_tier": "pro",
+        "price_cents": 11900,
+        "display_order": 45,
+        "ai_prompt": """You are OppGrid's Location Intelligence Engine. Generate a comprehensive Location Analysis Report identifying the TOP 5 physical locations for this business.
+
+CRITICAL: For every location you must compute all 8 proprietary formula scores and the Composite Location Score (CLS). Show your work for each formula. Use the business context data provided to derive realistic, plausible values — do not use placeholder zeros.
+
+═══════════════════════════════════════════════════════════════════════════════
+                     LOCATION ANALYSIS REPORT
+                 OppGrid Proprietary Intelligence Suite
+═══════════════════════════════════════════════════════════════════════════════
+
+Business Context:
+{context}
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 1 — EXECUTIVE LOCATION SUMMARY
+═══════════════════════════════════════════════════════════════════════════════
+
+Write a 2-3 paragraph executive summary covering:
+• Top 3 recommended locations with brief rationale
+• Key market opportunity factors driving location selection
+• Primary risk flags to monitor
+• Confidence level in recommendations (0-100%) with justification
+
+Include a "VERDICT" box: recommended launch location, go/no-go, and one-sentence reason.
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 2 — MARKET OPPORTUNITY HEATMAP
+═══════════════════════════════════════════════════════════════════════════════
+
+Describe the demand signal density across the target market area:
+• Signal cluster analysis: where are demand signals concentrated geographically?
+• Signal types detected: online complaints, underserved searches, Yelp/Reddit mentions, Google "near me" gaps
+• Demand intensity by zone (High / Medium / Low) with geographic context
+• Signal momentum: are signals accelerating or stable?
+• Map layer description: [Heatmap — Orange-yellow gradient, intensity proportional to signal density. Coordinate bounding box: include estimated lat/lng range for the target metro area]
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 3 — TOP 5 LOCATION PROFILES
+═══════════════════════════════════════════════════════════════════════════════
+
+For EACH of the 5 recommended locations, provide the following complete profile. Do not abbreviate any location.
+
+────────────────────────────────────────────────────────
+LOCATION #[N]: [NEIGHBORHOOD / AREA NAME, CITY, STATE]
+────────────────────────────────────────────────────────
+
+SITE COORDINATES: Lat [X.XXXX], Lng [-XX.XXXX]
+COMPOSITE LOCATION SCORE (CLS): [0-100] / 100
+[🟢 EMERGING MARKET if TAI > 0.15 | 🟡 STABLE MARKET if 0 ≤ TAI ≤ 0.15 | 🔴 DECLINING if TAI < 0]
+
+--- MAP LAYER DESCRIPTIONS (Phase 1 — Text Representation) ---
+Layer 1 — Base Geography:
+  Neighborhood boundary: [describe zip code / district boundary]
+  Recommended site pin: [specific intersection or block]
+
+Layer 2 — Competitor Plot:
+  1-mile radius: [N] competitors | 3-mile radius: [N] competitors | 5-mile radius: [N] competitors
+  Notable competitors: [List top 3 by rating, e.g., "Joe's Café — 4.6★, 420 reviews, 0.8mi"]
+
+Layer 3 — Foot Traffic Heatmap:
+  Peak hours: [weekday peaks] | [weekend peaks]
+  Anchor businesses driving foot traffic: [list 2-3 anchors, e.g., "Whole Foods, Planet Fitness"]
+  Traffic intensity: [High / Medium / Low] relative to metro average
+
+Layer 4 — Demographic Choropleth:
+  Median household income by census tract: $[X] (tract average)
+  Income gradient: [describe variation across the area — e.g., "Higher income to the north, tapering south"]
+  Target demographic concentration: [% of target customer profile in this area]
+
+Layer 5 — TAI Zones:
+  Zone classification: [🟢 Emerging (TAI > 0.15) / ⬛ Stable / 🔴 Declining]
+  Description: [describe which sub-zones are emerging vs. stable based on traffic anomaly signals]
+
+Layer 6 — Demand Signals:
+  Signal cluster density: [High / Medium / Low]
+  Top signal sources: [e.g., "Reddit: 12 posts about lack of X in this area | Yelp: 8 complaints about competitor Y"]
+  Signal recency: [Most recent signal: X days ago]
+
+--- PROPRIETARY FORMULA SCORES ---
+
+All formulas use OppGrid's real-time intelligence pipeline. Values derived from available market context.
+
+1. TAI — Traffic Anomaly Index
+   Formula: (Current Traffic − DOT Historical Avg) / DOT Historical Avg
+   Inputs: Current traffic index = [X] | Historical baseline = [X]
+   TAI Score: [value, e.g., 0.22]
+   Interpretation: [e.g., "Traffic 22% above historical baseline — strong emerging signal"]
+   Status: [🟢 Emerging Hotspot / ⬛ Stable / 🔴 Declining]
+
+2. WMM — Wealth Migration Momentum
+   Formula: (Net Migration × Avg Inbound Income) / (Population × Median Local Income)
+   Inputs: Net migration = [+/-X] | Avg inbound income = $[X] | Population = [X] | Median local income = $[X]
+   WMM Score: [value, e.g., 1.14]
+   Interpretation: [e.g., "New residents earning 14% above local median — wealth influx confirmed"]
+
+3. DVS — Demand Velocity Score
+   Formula: (Signals This Month − Signals 3 Months Ago) / Signals 3 Months Ago × 100
+   Inputs: Signals this month = [N] | Signals 3 months ago = [N]
+   DVS Score: [value, e.g., 67%]
+   Interpretation: [e.g., "Demand signals growing 67% — first-mover window is open"]
+
+4. CWI — Competitive Whitespace Index
+   Formula: (Demand Signals × Signal Quality Score) / (Competitor Count + 1)
+   Inputs: Demand signals = [N] | Signal quality = [0-1] | Competitors = [N]
+   CWI Score: [value, e.g., 8.3]
+   Interpretation: [e.g., "Wide open market — CWI above 8 indicates significant unmet demand"]
+
+5. BFV — Business Formation Velocity
+   Formula: (New Businesses YoY / Population) × 10,000
+   Inputs: New businesses YoY = [N] | Population = [X]
+   BFV Score: [value, e.g., 14.2 per 10k]
+   Interpretation: [e.g., "14.2 new businesses per 10k residents YoY — above-average formation rate"]
+
+6. ATI — Affordability Trend Index
+   Formula: Income Growth % − Commercial Rent Growth %
+   Inputs: Income growth = [X]% | Commercial rent growth = [X]%
+   ATI Score: [value, e.g., +3.2%]
+   Interpretation: [e.g., "Incomes growing faster than rents — favorable affordability trend"]
+
+7. FMW — First-Mover Window
+   Formula: Days Since First Signal − Days Since Last Competitor Entered
+   Inputs: First demand signal = [X] days ago | Last new competitor = [X] days ago
+   FMW Score: [value, positive = you're ahead of competitors]
+   Interpretation: [e.g., "Demand preceded competitor response by 45 days — first-mover window active"]
+
+8. DSI — Demographic Shift Index
+   Formula: (Target Demo % Now − 5yr Ago) / 5yr Ago × 100
+   Inputs: Target demo % now = [X]% | 5 years ago = [X]%
+   DSI Score: [value, e.g., +18%]
+   Interpretation: [e.g., "Target demographic grew 18% over 5 years — structural tailwind"]
+
+--- COMPOSITE LOCATION SCORE (CLS) ---
+CLS = (TAI×15) + (WMM×15) + (DVS×15) + (CWI×20) + (BFV×10) + (ATI×10) + (FMW×5) + (DSI×10)
+
+Show calculation:
+  TAI contribution:  [TAI_score normalized to 0-10] × 15 = [X]
+  WMM contribution:  [WMM_score normalized] × 15 = [X]
+  DVS contribution:  [DVS_score/10] × 15 = [X]
+  CWI contribution:  [CWI_score/10] × 20 = [X]
+  BFV contribution:  [BFV_score/20] × 10 = [X]
+  ATI contribution:  [ATI_score normalized] × 10 = [X]
+  FMW contribution:  [FMW_score normalized] × 5 = [X]
+  DSI contribution:  [DSI_score/10] × 10 = [X]
+  ────────────────────────
+  TOTAL CLS: [0-100]
+
+--- LOCATION ANALYSIS (Page 2) ---
+
+Demographic Breakdown:
+• Age distribution: [provide age bracket percentages]
+• Median household income: $[X] (vs. metro median $[X])
+• Education level: [% college-educated]
+• Target customer profile match: [High / Medium / Low] — explain why
+
+Top 5 Competitors at This Location:
+1. [Name] — [Rating]★ ([N] reviews) — [Distance] away — Positioning: [brief description]
+2. [Name] — [Rating]★ ([N] reviews) — [Distance] away — Positioning: [brief description]
+3. [Name] — [Rating]★ ([N] reviews) — [Distance] away — Positioning: [brief description]
+4. [Name] — [Rating]★ ([N] reviews) — [Distance] away — Positioning: [brief description]
+5. [Name] — [Rating]★ ([N] reviews) — [Distance] away — Positioning: [brief description]
+
+Risk Factors Specific to This Location:
+• [Risk 1]: [description + mitigation]
+• [Risk 2]: [description + mitigation]
+• [Risk 3]: [description + mitigation]
+
+Recommended Action Steps:
+1. [Immediate action — within 30 days]
+2. [Short-term action — within 90 days]
+3. [Strategic action — 6-month horizon]
+
+[Repeat the full Location #N profile for all 5 locations]
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 4 — DEMOGRAPHIC DEEP DIVE
+═══════════════════════════════════════════════════════════════════════════════
+
+Across all 5 recommended locations, provide aggregate demographic analysis:
+• Age distribution comparison table (5 locations side by side)
+• Income range distribution — what % of residents earn $50k-75k, $75k-100k, $100k+?
+• Education attainment — bachelor's degree or higher rates
+• Household composition — families vs. singles vs. couples
+• 5-year demographic trend — which location shows the fastest target-demo growth?
+• Census migration data — which areas are gaining vs. losing population?
+
+Key Insight: Identify which location has the strongest demographic alignment with the target customer profile.
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 5 — COMPETITIVE DENSITY ANALYSIS
+═══════════════════════════════════════════════════════════════════════════════
+
+For each location, provide a competitive saturation assessment:
+• Competitor count within 1mi / 3mi / 5mi rings (table format)
+• Average competitor rating vs. target business quality positioning
+• Identified market gaps: where are competitor weaknesses?
+• Whitespace zones: sub-areas within the location with highest CWI
+• Saturation risk rating: [Low / Medium / High] per location
+• Recommended differentiation strategy for each location
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 6 — FOOT TRAFFIC & ACCESSIBILITY
+═══════════════════════════════════════════════════════════════════════════════
+
+For each location:
+• Peak foot traffic windows (weekday vs. weekend)
+• Anchor businesses driving traffic (grocery, gym, transit hub, etc.)
+• Parking availability assessment
+• Public transit access score (1-10)
+• Walkability score estimate
+• Drive-time catchment area — how many residents within 10-min drive?
+• Seasonal traffic patterns — any significant variations?
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 7 — LOCATION COMPARISON MATRIX
+═══════════════════════════════════════════════════════════════════════════════
+
+Present a comprehensive side-by-side comparison table for all 5 locations:
+
+| Metric                    | Location 1 | Location 2 | Location 3 | Location 4 | Location 5 |
+|---------------------------|-----------|-----------|-----------|-----------|-----------|
+| CLS Score (0-100)         |           |           |           |           |           |
+| TAI Score                 |           |           |           |           |           |
+| WMM Score                 |           |           |           |           |           |
+| DVS Score                 |           |           |           |           |           |
+| CWI Score                 |           |           |           |           |           |
+| BFV Score                 |           |           |           |           |           |
+| ATI Score                 |           |           |           |           |           |
+| FMW Score                 |           |           |           |           |           |
+| DSI Score                 |           |           |           |           |           |
+| Competitor Count (1mi)    |           |           |           |           |           |
+| Median Income             |           |           |           |           |           |
+| Population (5mi)          |           |           |           |           |           |
+| Transit Score             |           |           |           |           |           |
+| Overall Rank              | #1        | #?        | #?        | #?        | #?        |
+
+Below the table: Final Recommendation — which location wins and why (2-3 sentences).
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 8 — EMERGING LOCATION INTELLIGENCE
+═══════════════════════════════════════════════════════════════════════════════
+
+TAI Rankings (highest to lowest):
+1. [Location] — TAI [score] — [Emerging / Stable / Declining] — [1-sentence insight]
+2. [Location] — TAI [score] — ...
+3-5. [continue]
+
+First-Mover Window Analysis (FMW Rankings):
+• Which location has the most urgency? (highest FMW)
+• Estimated window before competitor saturation: [X months] per location
+• Action recommended: [Move Now / 30 Days / 60 Days / No Urgency] per location
+
+Wealth Migration Hot Zones (WMM Rankings):
+• Fastest wealth influx location: [Location] — WMM [score]
+• Economic tailwind assessment: where will spending power grow fastest over 24 months?
+
+Demand Acceleration Leaders (DVS Rankings):
+• Which location shows fastest demand signal growth?
+• What specific signals are driving acceleration?
+
+═══════════════════════════════════════════════════════════════════════════════
+SECTION 9 — GROUPED COMPARISON MAP
+═══════════════════════════════════════════════════════════════════════════════
+
+GROUPED MAP DESCRIPTION (Phase 1 — Text Representation of Visual):
+
+Map Overview:
+All 5 recommended locations plotted on a single regional map. Auto-zoom bounds encompass all locations with 10% padding.
+
+Location Markers (ranked by CLS):
+  #1 — [Location Name] | CLS: [score] | Coordinates: [lat, lng] | Marker: 🟢 Large green pin
+  #2 — [Location Name] | CLS: [score] | Coordinates: [lat, lng] | Marker: 🟢 Medium green pin
+  #3 — [Location Name] | CLS: [score] | Coordinates: [lat, lng] | Marker: 🟡 Yellow pin
+  #4 — [Location Name] | CLS: [score] | Coordinates: [lat, lng] | Marker: 🟡 Yellow pin
+  #5 — [Location Name] | CLS: [score] | Coordinates: [lat, lng] | Marker: 🟠 Orange pin
+
+Geographic Context:
+• Regional clustering: [are locations clustered in one metro or spread across multiple?]
+• Metro area labels: [list metro area names covering the recommended sites]
+• Geographic spread: [distance between farthest locations]
+• Expansion pathway: recommended rollout order (#1 → #2 → etc.) with rationale
+
+Distance Matrix (approximate driving distances):
+|           | Loc 1 | Loc 2 | Loc 3 | Loc 4 | Loc 5 |
+|-----------|-------|-------|-------|-------|-------|
+| Location 1|   —   |       |       |       |       |
+| Location 2|       |   —   |       |       |       |
+| Location 3|       |       |   —   |       |       |
+| Location 4|       |       |       |   —   |       |
+| Location 5|       |       |       |       |   —   |
+
+Multi-Location Expansion Strategy:
+• Recommended launch order with timing
+• Shared catchment area risks (cannibalization analysis)
+• Regional dominance strategy — how to own the market across all 5 sites
+
+═══════════════════════════════════════════════════════════════════════════════
+CLOSING INTELLIGENCE NOTE
+═══════════════════════════════════════════════════════════════════════════════
+
+Summarize in 1 paragraph:
+• Strongest overall location (CLS winner)
+• Most urgent opportunity (FMW winner)
+• Best long-term bet (WMM + DSI combined)
+• Single most important action to take in the next 14 days
+
+Format: Professional institutional report. Use tables, scores, and clear headers throughout. Be specific — use real neighborhood names, plausible income figures, and genuine competitive context derived from the business description. Avoid vague language."""
+    },
+
     # ── Analysis Reports (7 Consultant Studio originals) ─────────────────────
     {
         "slug": "feasibility_study",

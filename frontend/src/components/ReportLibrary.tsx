@@ -161,6 +161,34 @@ const REPORT_CATEGORIES: ReportCategory[] = [
       { slug: 'feasibility_study', title: 'Feasibility Study', description: 'Quick viability check with market validation data.', price: '$25', priceCents: 2500, consultantPrice: '$1,500 - $15,000', icon: Target, accentColor: '#0F6E56', sections: ['Executive Summary', 'Market Opportunity', 'Technical Feasibility', 'Financial Viability', 'Risk Assessment'], deliveryTime: '1-2 hrs', isStudio: true },
     ]
   },
+  {
+    id: 'location', label: 'Location Intelligence', icon: MapPin, color: '#10B981',
+    reports: [
+      {
+        slug: 'location_analysis',
+        title: 'Location Analysis Report',
+        description: 'Identify the top 5 launch locations using 8 proprietary formulas — including the Traffic Anomaly Index that spots emerging markets before competitors.',
+        price: '$119',
+        priceCents: 11900,
+        consultantPrice: '$5,000 - $25,000',
+        icon: MapPin,
+        accentColor: '#10B981',
+        sections: [
+          'Executive Location Summary',
+          'Market Opportunity Heatmap',
+          'Top 5 Location Profiles',
+          'Demographic Deep Dive',
+          'Competitive Density Analysis',
+          'Foot Traffic & Accessibility',
+          'Location Comparison Matrix',
+          'Emerging Location Intelligence',
+          'Grouped Comparison Map',
+        ],
+        deliveryTime: '15 min',
+        isStudio: true,
+      },
+    ]
+  },
 ]
 
 const TOTAL_REPORTS = REPORT_CATEGORIES.reduce((sum, cat) => sum + cat.reports.length, 0)
