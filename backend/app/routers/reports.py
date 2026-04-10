@@ -514,19 +514,23 @@ async def generate_report(
         if template.slug in ORCHESTRATED_TYPES:
             from app.services.report_orchestrator import ReportOrchestrator
             _orchestrator = ReportOrchestrator()
+            _safe_business_type = str(business_type or "Business Opportunity").strip().strip('"').strip("'") or "Business Opportunity"
             content = await _orchestrator.generate(
                 report_type=template.slug,
-                business_type=business_type or "Business Opportunity",
+                business_type=_safe_business_type,
                 city=city or "",
                 state=state or "",
                 db=db,
                 user_notes=request.custom_context or "",
-                category=business_type,
+                category=_safe_business_type,
                 target_audience=None,
                 opportunity_id=request.opportunity_id,
             )
             if not content:
                 raise Exception("AI returned empty response")
+            # Normalise title to "Report Name: Business in City" for orchestrated types
+            _city_part = f" in {city}" if city else ""
+            generated_report.title = f"{template.name}: {_safe_business_type}{_city_part}"[:255]
         else:
             data_instruction = ""
             if report_data_text:

@@ -948,13 +948,20 @@ async def trigger_report_generation(
 
         from app.services.report_orchestrator import ReportOrchestrator
         orchestrator = ReportOrchestrator()
+        # Sanitize business_type before passing to orchestrator (handles dict/str)
+        _raw_biz = report_context.get("businessConcept", "Business Opportunity")
+        _safe_biz = (
+            next((str(v).strip() for v in _raw_biz.values() if isinstance(v, str) and v.strip()), "Business Opportunity")
+            if isinstance(_raw_biz, dict)
+            else str(_raw_biz).strip().strip('"').strip("'") or "Business Opportunity"
+        )
         report_content = await orchestrator.generate(
             report_type=report_type,
-            business_type=report_context.get("businessConcept", "Business Opportunity"),
+            business_type=_safe_biz,
             city=city,
             state=state,
             db=db,
-            user_notes=report_context.get("businessConcept", ""),
+            user_notes=_safe_biz,
             category=report_context.get("category"),
             target_audience=report_context.get("targetMarket"),
         )
