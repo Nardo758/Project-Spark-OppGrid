@@ -120,22 +120,37 @@ class StaticMapGenerator:
         radius_miles: float = 5.0,
     ) -> List[Tuple[float, float, str]]:
         """
-        Async fetch of competitor coordinates via SerpAPI.
+        Fetch competitor coordinates via SerpAPI Google Maps Search.
 
-        Returns list of (lat, lng, name) tuples.  Returns [] on any error.
+        Runs the synchronous SerpAPI call in a threadpool executor so it
+        does not block the async event loop.
+
+        Returns list of (lat, lng, name) tuples.  Returns [] on any error
+        or when SerpAPI is not configured.
         """
         try:
             from app.services.serpapi_service import serpapi_service
+            import asyncio
+            from concurrent.futures import ThreadPoolExecutor
 
-            radius_meters = int(radius_miles * 1609.34)
-            query = f"{business_type} near {lat:.4f},{lng:.4f}"
+            if not serpapi_service.is_configured:
+                logger.info("[StaticMap] SerpAPI not configured — competitor pins skipped")
+                return []
 
-            results = await serpapi_service.search_local_businesses(
-                query=query,
-                lat=lat,
-                lng=lng,
-                radius_meters=radius_meters,
-            )
+            # SerpAPI `ll` format: "@{lat},{lng},{zoom}z"
+            zoom_approx = 13
+            ll_param = f"@{lat:.6f},{lng:.6f},{zoom_approx}z"
+            query = business_type
+
+            def _sync_call():
+                return serpapi_service.google_maps_search(
+                    query=query,
+                    ll=ll_param,
+                )
+
+            loop = asyncio.get_event_loop()
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                results = await loop.run_in_executor(pool, _sync_call)
 
             competitors: List[Tuple[float, float, str]] = []
             for biz in results.get("local_results", []):
@@ -143,17 +158,21 @@ class StaticMapGenerator:
                 c_lat = gps.get("latitude")
                 c_lng = gps.get("longitude")
                 name = biz.get("title", "Competitor")
-                if c_lat and c_lng:
-                    competitors.append((float(c_lat), float(c_lng), name))
+                if c_lat is not None and c_lng is not None:
+                    c_lat_f = float(c_lat)
+                    c_lng_f = float(c_lng)
+                    # Basic sanity: filter out coords that match the center exactly
+                    if abs(c_lat_f - lat) > 0.00001 or abs(c_lng_f - lng) > 0.00001:
+                        competitors.append((c_lat_f, c_lng_f, name))
 
             logger.info(
                 f"[StaticMap] {len(competitors)} competitors for '{business_type}' "
-                f"near {lat:.3f},{lng:.3f}"
+                f"near {lat:.4f},{lng:.4f}"
             )
             return competitors
 
         except Exception as exc:
-            logger.warning(f"[StaticMap] SerpAPI fetch failed: {exc}")
+            logger.warning(f"[StaticMap] SerpAPI fetch failed (non-fatal): {exc}")
             return []
 
     async def competitor_density_map_html(
