@@ -1010,7 +1010,11 @@ async def trigger_report_generation(
                 f"You are OppGrid's Location Intelligence Engine producing institutional-grade location analysis reports.\n\n{loc_prompt}",
                 model="claude"
             )
+            if loc_result.get("error"):
+                raise Exception(f"AI service error for location_analysis: {loc_result.get('error_message', loc_result.get('error'))}")
             report_content = loc_result.get("response") or loc_result.get("raw") or ""
+            if not report_content:
+                raise Exception("AI returned empty response for location_analysis report")
         else:
             report_content = generator.generate_executive_summary(opportunity_context)
         

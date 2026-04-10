@@ -677,6 +677,7 @@ def _handle_studio_report_purchase(session: dict, db: Session):
         "pitch_deck": GenReportType.PITCH_DECK,
         "feasibility": GenReportType.FEASIBILITY,
         "feasibility_study": GenReportType.FEASIBILITY_STUDY,
+        "location_analysis": GenReportType.LOCATION_ANALYSIS,
     }
     gen_report_type = report_type_map.get(report_type, GenReportType.MARKET_ANALYSIS)
     
