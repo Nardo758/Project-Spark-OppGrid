@@ -1006,8 +1006,9 @@ async def trigger_report_generation(
                 f"Target Market: {report_context.get('targetMarket', opportunity_context.get('target_audience', ''))}",
             ])
             loc_prompt = location_template.ai_prompt.replace("{context}", loc_context)
+            from app.services.ai_report_generator import AIReportGenerator as _ARG
             loc_result = await _llm_svc.generate_response(
-                f"You are OppGrid's Location Intelligence Engine producing institutional-grade location analysis reports.\n\n{loc_prompt}",
+                f"You are OppGrid's senior market intelligence analyst producing institutional-grade location analysis reports.\n\n{_ARG.INSTITUTIONAL_STYLE_INSTRUCTIONS}\n\n{loc_prompt}",
                 model="claude"
             )
             if loc_result.get("error"):
@@ -1759,21 +1760,26 @@ Business Context:
 {context}""",
     }
 
-    # For location_analysis, prefer the DB template prompt to keep a single source of truth
+    # For location_analysis, prefer the DB template prompt and use institutional system prompt
     if request_data.report_type == "location_analysis":
         from app.models.report_template import ReportTemplate as _RT
+        from app.services.ai_report_generator import AIReportGenerator as _ARG
         _loc_tmpl = db.query(_RT).filter(_RT.slug == "location_analysis").first()
         if _loc_tmpl and _loc_tmpl.ai_prompt:
             prompt = _loc_tmpl.ai_prompt.replace("{context}", context)
         else:
             prompt = report_prompts.get("location_analysis", f"""Create a detailed business report.\n\nBusiness Context:\n{context}""")
+        full_prompt = f"""You are OppGrid's senior market intelligence analyst producing institutional-grade location analysis reports.
+
+{_ARG.INSTITUTIONAL_STYLE_INSTRUCTIONS}
+
+{prompt}"""
     else:
         prompt = report_prompts.get(request_data.report_type, f"""Create a detailed business report.
 
 Business Context:
 {context}""")
-
-    full_prompt = f"""You are a business strategy expert creating professional reports for entrepreneurs.
+        full_prompt = f"""You are a business strategy expert creating professional reports for entrepreneurs.
 Provide actionable, specific, and well-structured content. Use HTML formatting for headings, lists, tables, and emphasis.
 Format your response as clean HTML (use <h1>, <h2>, <h3>, <p>, <ul>, <li>, <table>, <strong>, <em> tags).
 Do NOT include <html>, <head>, or <body> tags - just the content HTML.
