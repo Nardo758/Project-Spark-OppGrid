@@ -995,6 +995,7 @@ async def trigger_report_generation(
         elif report_type in ("location_analysis",):
             # Use template-based generation for Location Analysis Report
             from app.models.report_template import ReportTemplate as RT
+            from app.services.llm_ai_engine import llm_ai_engine_service as _llm_svc
             location_template = db.query(RT).filter(RT.slug == "location_analysis").first()
             if location_template and location_template.ai_prompt:
                 loc_context = "\n".join([
@@ -1004,7 +1005,7 @@ async def trigger_report_generation(
                     f"Target Market: {report_context.get('targetMarket', opportunity_context.get('target_audience', ''))}",
                 ])
                 loc_prompt = location_template.ai_prompt.replace("{context}", loc_context)
-                loc_result = await llm_ai_engine_service.generate_response(
+                loc_result = await _llm_svc.generate_response(
                     f"You are OppGrid's Location Intelligence Engine producing institutional-grade location analysis reports.\n\n{loc_prompt}",
                     model="claude"
                 )
