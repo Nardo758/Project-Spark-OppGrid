@@ -961,7 +961,14 @@ async def trigger_report_generation(
         
         # Update report — normalise title to "Type: Business in City"
         _type_display = report_type.replace("_", " ").title()
-        _business_name = str(report_context.get("businessConcept", "Business Opportunity")).strip().strip('"').strip("'")
+        _raw_concept = report_context.get("businessConcept", "Business Opportunity")
+        if isinstance(_raw_concept, dict):
+            _business_name = next(
+                (str(v).strip() for v in _raw_concept.values() if isinstance(v, str) and v.strip()),
+                "Business Opportunity"
+            )
+        else:
+            _business_name = str(_raw_concept).strip().strip('"').strip("'")
         _city_part = f" in {city}" if city else ""
         pending_report.title = f"{_type_display}: {_business_name}{_city_part}"[:255]
         pending_report.status = ReportStatus.COMPLETED
@@ -1580,10 +1587,23 @@ async def generate_free_report(
 
     report_product = REPORT_PRODUCTS[request_data.report_type]
 
-    # Normalise title to "Product Name: Business in City" (sanitise — no JSON fragments)
+    # Normalise title to "Product Name: Business in City" (robust — handles str/dict/object)
+    def _safe_plain_str(v) -> str:
+        if isinstance(v, dict):
+            for key in ("title", "name", "businessConcept", "concept", "description"):
+                if key in v and isinstance(v[key], str):
+                    return v[key].strip()
+            for val in v.values():
+                if isinstance(val, str) and val.strip():
+                    return val.strip()
+            return "Business Opportunity"
+        return str(v).strip().strip('"').strip("'").replace("{", "").replace("}", "")
+
     _location_hint = (request_data.location or "").split(",")[0].strip()
+    if not _location_hint and opportunity and getattr(opportunity, "city", None):
+        _location_hint = opportunity.city
     _city_suffix = f" in {_location_hint}" if _location_hint else ""
-    _safe_title_suffix = str(title_suffix).strip().strip('"').strip("'").replace("{", "").replace("}", "")
+    _safe_title_suffix = _safe_plain_str(title_suffix)
     raw_title = f"{report_product.name}: {_safe_title_suffix}{_city_suffix}"
     report = GeneratedReport(
         user_id=current_user.id if current_user else None,
@@ -1598,14 +1618,15 @@ async def generate_free_report(
     db.refresh(report)
 
     # Extract city and state from location for orchestrator
-    _free_location = request_data.location or (opportunity.city if opportunity else "") or ""
+    # Prefer explicit location string; fall back to opportunity city + region
     _free_city, _free_state = "", ""
-    if "," in _free_location:
-        _free_parts = _free_location.split(",")
+    if request_data.location:
+        _free_parts = request_data.location.split(",")
         _free_city = _free_parts[0].strip()
         _free_state = _free_parts[1].strip() if len(_free_parts) > 1 else ""
-    else:
-        _free_city = _free_location
+    elif opportunity:
+        _free_city = getattr(opportunity, "city", "") or ""
+        _free_state = getattr(opportunity, "region", "") or ""
 
     _free_business_type = (
         request_data.idea_description
