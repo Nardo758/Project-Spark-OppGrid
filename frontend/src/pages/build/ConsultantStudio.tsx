@@ -1142,22 +1142,22 @@ export default function ConsultantStudio() {
 
         <div className="grid md:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-            <input
-              type="text"
-              value={locationCity}
-              onChange={(e) => setLocationCity(e.target.value)}
-              placeholder="e.g., Miami, Florida"
-              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
-            />
-          </div>
-          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Business Type</label>
             <input
               type="text"
               value={locationBusiness}
               onChange={(e) => setLocationBusiness(e.target.value)}
-              placeholder="e.g., Coffee shop, Fitness studio, Dog grooming..."
+              placeholder="e.g., Self Storage, Coffee Shop, Gym..."
+              className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">City or Location</label>
+            <input
+              type="text"
+              value={locationCity}
+              onChange={(e) => setLocationCity(e.target.value)}
+              placeholder="e.g., Miami, FL or Denver, CO"
               className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[#D97757] focus:border-[#D97757]"
             />
           </div>

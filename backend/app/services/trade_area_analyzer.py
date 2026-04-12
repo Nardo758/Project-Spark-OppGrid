@@ -333,15 +333,15 @@ class TradeAreaAnalyzer:
         business_description = opportunity.get('business_description') or opportunity.get('title') or ''
         category = opportunity.get('category', '')
         city = opportunity.get('city', '')
-        
-        if business_description and city:
-            search_query = f"{business_description} in {city}"
-        elif business_description:
-            search_query = business_description
-        elif category and city:
-            search_query = f"{category} near {city}"
+
+        # Prefer the AI-inferred category for the search query — it's clean and concise.
+        # Fall back to business_description only when no category is available.
+        # Never embed the full description in the query (SerpAPI returns poor results).
+        search_term = category or business_description or "business"
+        if city:
+            search_query = f"{search_term} in {city}"
         else:
-            search_query = category or "business"
+            search_query = search_term
         
         logger.info(f"Competitor search query: '{search_query}' at ({lat}, {lng})")
         
