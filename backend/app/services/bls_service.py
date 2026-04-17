@@ -1,20 +1,19 @@
 """
-BLS Service — Fetches industry labor market data from the Bureau of Labor Statistics QCEW API.
+BLS Service — Fetches industry labor market data from the Bureau of Labor Statistics.
 
-Uses the BLS QCEW (Quarterly Census of Employment and Wages) flat-file API to retrieve
-national-level employment and wage data for a given NAICS industry code.
+Primary approach: BLS CES (Current Employment Statistics) timeseries API.
+  - Works without API key authentication at the public rate limit
+  - Series format: CEU{supersector_code}{datatype}
+    datatype 01 = employment (thousands), 03 = avg weekly hours, 11 = avg weekly earnings
+  - Falls back to the registered API key (BLS_API_KEY) for higher rate limits
 
-Endpoint: https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/{naics_code}.json
-  - Filters for area_fips="US000" (national total), own_code="0" (all ownerships),
-    agglvl_code="14" (national industry aggregate)
-
-Industry → NAICS mapping covers 10 verticals per the OppGrid spec.
+Industry → CES series mapping covers the core OppGrid business verticals.
 Results are cached in LocationAnalysisCache for 7 days.
-Returns None gracefully when the API is unreachable or the NAICS code has no data.
+Returns None gracefully when the API is unreachable or the NAICS code has no mapping.
 """
 import logging
 import os
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Tuple, TYPE_CHECKING
 
 import httpx
@@ -26,53 +25,77 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-QCEW_BASE_URL = "https://data.bls.gov/cew/data/api"
+BLS_API_V1 = "https://api.bls.gov/publicAPI/v1/timeseries/data/"
+BLS_API_V2 = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
 CACHE_TTL_DAYS = 7
 
-# Business type keyword → (NAICS code, industry name)
-NAICS_MAPPING: Dict[str, Tuple[str, str]] = {
-    "self storage":   ("531130", "Lessors of Miniwarehouses & Self-Storage Units"),
-    "self_storage":   ("531130", "Lessors of Miniwarehouses & Self-Storage Units"),
-    "restaurant":     ("722511", "Full-Service Restaurants"),
-    "gym":            ("713940", "Fitness & Recreational Sports Centers"),
-    "fitness":        ("713940", "Fitness & Recreational Sports Centers"),
-    "car wash":       ("811192", "Car Washes"),
-    "car_wash":       ("811192", "Car Washes"),
-    "coffee":         ("722515", "Snack & Nonalcoholic Beverage Bars"),
-    "coffee shop":    ("722515", "Snack & Nonalcoholic Beverage Bars"),
-    "cafe":           ("722515", "Snack & Nonalcoholic Beverage Bars"),
-    "dental":         ("621210", "Offices of Dentists"),
-    "pet":            ("812910", "Pet Care Services (except Veterinary)"),
-    "pet grooming":   ("812910", "Pet Care Services (except Veterinary)"),
-    "auto repair":    ("811111", "General Automotive Repair"),
-    "daycare":        ("624410", "Child Day Care Services"),
-    "pharmacy":       ("446110", "Pharmacies & Drug Stores"),
-    "hotel":          ("721110", "Hotels (except Casino Hotels) and Motels"),
-    "laundromat":     ("812310", "Coin-Operated Laundries & Drycleaners"),
-    "brewery":        ("312120", "Breweries"),
-    "yoga":           ("713940", "Fitness & Recreational Sports Centers"),
-    "spa":            ("812199", "Other Personal Care Services"),
-    "salon":          ("812112", "Beauty Salons"),
-    "barbershop":     ("812111", "Barber Shops"),
+# Business type keyword → (CES employment series, CES earnings series, NAICS code, industry name)
+# CES format: CEU{supersector/industry_group}{datatype}
+#   01 = all employees (thousands)
+#   11 = average weekly earnings ($)
+BUSINESS_TO_CES: Dict[str, Tuple[str, str, str, str]] = {
+    "restaurant":    ("CEU7072100001", "CEU7072100011", "722511", "Full-Service Restaurants"),
+    "cafe":          ("CEU7072100001", "CEU7072100011", "722515", "Snack & Nonalcoholic Beverage Bars"),
+    "coffee shop":   ("CEU7072100001", "CEU7072100011", "722515", "Snack & Nonalcoholic Beverage Bars"),
+    "coffee":        ("CEU7072100001", "CEU7072100011", "722515", "Snack & Nonalcoholic Beverage Bars"),
+    "gym":           ("CEU7071100001", "CEU7071100011", "713940", "Fitness & Recreational Sports Centers"),
+    "fitness":       ("CEU7071100001", "CEU7071100011", "713940", "Fitness & Recreational Sports Centers"),
+    "yoga":          ("CEU7071100001", "CEU7071100011", "713940", "Fitness & Recreational Sports Centers"),
+    "self storage":  ("CEU5500000001", "CEU5500000011", "531130", "Lessors of Miniwarehouses & Self-Storage Units"),
+    "self_storage":  ("CEU5500000001", "CEU5500000011", "531130", "Lessors of Miniwarehouses & Self-Storage Units"),
+    "car wash":      ("CEU6056100001", "CEU6056100011", "811192", "Car Washes"),
+    "car_wash":      ("CEU6056100001", "CEU6056100011", "811192", "Car Washes"),
+    "dental":        ("CEU6562100001", "CEU6562100011", "621210", "Offices of Dentists"),
+    "pet grooming":  ("CEU7071400001", "CEU7071400011", "812910", "Pet Care Services"),
+    "pet":           ("CEU7071400001", "CEU7071400011", "812910", "Pet Care Services"),
+    "salon":         ("CEU7071400001", "CEU7071400011", "812112", "Beauty Salons"),
+    "barbershop":    ("CEU7071400001", "CEU7071400011", "812111", "Barber Shops"),
+    "spa":           ("CEU7071400001", "CEU7071400011", "812199", "Other Personal Care Services"),
+    "daycare":       ("CEU6562400001", "CEU6562400011", "624410", "Child Day Care Services"),
+    "laundromat":    ("CEU7071400001", "CEU7071400011", "812310", "Coin-Operated Laundries"),
+    "auto repair":   ("CEU6058100001", "CEU6058100011", "811111", "General Automotive Repair"),
+    "hotel":         ("CEU7070000001", "CEU7070000011", "721110", "Hotels & Motels"),
+    "bar":           ("CEU7072100001", "CEU7072100011", "722511", "Accommodation and Food Services"),
 }
 
-# BLS QCEW filter constants for national industry totals
-NATIONAL_AREA_FIPS = "US000"
-ALL_OWNERSHIPS = "0"
-NATIONAL_INDUSTRY_AGGLVL = "14"
+# Fallback: high-level supersector series for any unmatched business type
+# Maps broad category keywords to supersector CES series
+SUPERSECTOR_FALLBACKS: Dict[str, Tuple[str, str, str, str]] = {
+    "health":   ("CEU6562000001", "CEU6562000011", "621", "Health Care & Social Assistance"),
+    "medical":  ("CEU6562000001", "CEU6562000011", "621", "Health Care & Social Assistance"),
+    "tech":     ("CEU5051800001", "CEU5051800011", "518", "Information Technology"),
+    "retail":   ("CEU4200000001", "CEU4200000011", "44-45", "Retail Trade"),
+    "real estate": ("CEU5500000001", "CEU5500000011", "53", "Real Estate & Rental"),
+}
 
 
 class BLSService:
-    """Fetches and caches BLS QCEW industry labor data."""
+    """Fetches and caches BLS CES industry labor data."""
 
-    def get_naics_for_business(self, business_type: str) -> Optional[Tuple[str, str]]:
-        """Map a business type string to (naics_code, industry_name), or None."""
+    def __init__(self):
+        self.api_key = os.environ.get("BLS_API_KEY", "").strip()
+
+    def _get_api_url(self) -> str:
+        return BLS_API_V2 if self.api_key else BLS_API_V1
+
+    def get_ces_for_business(self, business_type: str) -> Optional[Tuple[str, str, str, str]]:
+        """Map a business type string to (emp_series, wage_series, naics_code, industry_name)."""
         if not business_type:
             return None
         lower = business_type.lower()
-        for keyword, mapping in NAICS_MAPPING.items():
+        for keyword, mapping in BUSINESS_TO_CES.items():
             if keyword in lower:
                 return mapping
+        for keyword, mapping in SUPERSECTOR_FALLBACKS.items():
+            if keyword in lower:
+                return mapping
+        return None
+
+    def get_naics_for_business(self, business_type: str) -> Optional[Tuple[str, str]]:
+        """Map a business type string to (naics_code, industry_name) for legacy callers."""
+        mapping = self.get_ces_for_business(business_type)
+        if mapping:
+            return (mapping[2], mapping[3])
         return None
 
     async def get_industry_data(
@@ -82,18 +105,28 @@ class BLSService:
         db: Optional["Session"] = None,
     ) -> Optional[IndustryLaborData]:
         """
-        Return IndustryLaborData for the given NAICS code.
-        Checks database cache first (7-day TTL), then fetches from BLS QCEW.
-        Returns None on any failure.
+        Return IndustryLaborData for the given NAICS code by finding the CES series.
+        Checks database cache first (7-day TTL), then fetches from BLS.
         """
-        cache_key = f"bls_industry_{naics_code}"
+        # Find the CES series for this NAICS code
+        emp_series = wage_series = None
+        for keyword, (emp_s, wage_s, naics, name) in BUSINESS_TO_CES.items():
+            if naics == naics_code:
+                emp_series, wage_series = emp_s, wage_s
+                industry_name = industry_name or name
+                break
 
+        if not emp_series:
+            logger.debug(f"[BLS] No CES series mapped for NAICS {naics_code}")
+            return None
+
+        cache_key = f"bls_ces_{naics_code}"
         if db is not None:
             cached = self._read_cache(db, cache_key)
             if cached is not None:
                 return cached
 
-        result = await self._fetch_live(naics_code, industry_name)
+        result = await self._fetch_ces(emp_series, wage_series, naics_code, industry_name)
 
         if result is not None and db is not None:
             self._write_cache(db, cache_key, result, naics_code)
@@ -106,111 +139,124 @@ class BLSService:
         db: Optional["Session"] = None,
     ) -> Optional[IndustryLaborData]:
         """
-        Convenience wrapper: looks up the NAICS code from the business type string
-        and returns IndustryLaborData, or None if the business type isn't mapped.
+        Main entry point: looks up the CES series from the business type string
+        and returns IndustryLaborData, or None if not mapped.
         """
-        mapping = self.get_naics_for_business(business_type)
+        mapping = self.get_ces_for_business(business_type)
         if not mapping:
-            logger.debug(f"[BLS] No NAICS mapping for business type: '{business_type}'")
+            logger.debug(f"[BLS] No CES mapping for business type: '{business_type}'")
             return None
-        naics_code, industry_name = mapping
-        return await self.get_industry_data(naics_code, industry_name, db=db)
 
-    async def _fetch_live(
-        self, naics_code: str, industry_name: str
+        emp_series, wage_series, naics_code, industry_name = mapping
+        cache_key = f"bls_ces_{naics_code}"
+
+        if db is not None:
+            cached = self._read_cache(db, cache_key)
+            if cached is not None:
+                return cached
+
+        result = await self._fetch_ces(emp_series, wage_series, naics_code, industry_name)
+
+        if result is not None and db is not None:
+            self._write_cache(db, cache_key, result, naics_code)
+
+        return result
+
+    async def _fetch_ces(
+        self,
+        emp_series: str,
+        wage_series: str,
+        naics_code: str,
+        industry_name: str,
     ) -> Optional[IndustryLaborData]:
         """
-        Fetch national QCEW data for the given NAICS code.
-        Tries annual data for the most recent completed year; falls back to prior year.
+        Fetch employment and wage CES series and combine into IndustryLaborData.
+        Uses v2 API with key if available, otherwise v1 (public, lower rate limit).
         """
-        current_year = datetime.utcnow().year
-        for year in [current_year - 1, current_year - 2]:
-            result = await self._fetch_annual(naics_code, industry_name, year)
-            if result is not None:
-                return result
-        logger.warning(f"[BLS] No QCEW data found for NAICS {naics_code}")
-        return None
+        series_ids = [emp_series, wage_series]
+        payload: dict = {"seriesid": series_ids, "startyear": "2023", "endyear": "2025"}
+        if self.api_key:
+            payload["registrationkey"] = self.api_key
 
-    async def _fetch_annual(
-        self, naics_code: str, industry_name: str, year: int
-    ) -> Optional[IndustryLaborData]:
-        """Fetch annual QCEW data for a specific year and NAICS code."""
-        url = f"{QCEW_BASE_URL}/{year}/A/industry/{naics_code}.json"
+        url = self._get_api_url()
+        data = None
+
         try:
             async with httpx.AsyncClient(timeout=20.0) as client:
-                resp = await client.get(url)
-                if resp.status_code == 404:
-                    return None
+                resp = await client.post(url, json=payload)
                 resp.raise_for_status()
-                records = resp.json()
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                return None
-            logger.warning(f"[BLS] HTTP error for NAICS {naics_code} year {year}: {e}")
-            return None
+                data = resp.json()
         except Exception as exc:
-            logger.warning(f"[BLS] Fetch failed for NAICS {naics_code} year {year}: {exc}")
+            logger.warning(f"[BLS] CES fetch failed for {emp_series}: {exc}")
             return None
 
-        if not isinstance(records, list):
+        # If registered key is rejected (not yet email-verified), retry with v1 (no key)
+        if data.get("status") == "REQUEST_NOT_PROCESSED" and self.api_key:
+            logger.debug("[BLS] Registered key rejected — retrying with public v1 API")
+            payload_v1 = {k: v for k, v in payload.items() if k != "registrationkey"}
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    resp = await client.post(BLS_API_V1, json=payload_v1)
+                    resp.raise_for_status()
+                    data = resp.json()
+            except Exception as exc:
+                logger.warning(f"[BLS] v1 fallback failed for {emp_series}: {exc}")
+                return None
+
+        if data.get("status") not in ("REQUEST_SUCCEEDED", "REQUEST_SUCCEEDED_WITH_MESSAGE"):
+            logger.warning(f"[BLS] API error: {data.get('message', [])}")
             return None
 
-        # Find the national industry total row
-        national_row = None
-        for record in records:
-            if (
-                record.get("area_fips") == NATIONAL_AREA_FIPS
-                and str(record.get("own_code", "")) == ALL_OWNERSHIPS
-                and str(record.get("agglvl_code", "")) == NATIONAL_INDUSTRY_AGGLVL
-            ):
-                national_row = record
-                break
+        series_data = {s["seriesID"]: s.get("data", []) for s in data.get("Results", {}).get("series", [])}
 
-        # Fallback: look for just the US000 row with any own_code
-        if national_row is None:
-            for record in records:
-                if record.get("area_fips") == NATIONAL_AREA_FIPS:
-                    national_row = record
-                    break
+        emp_items = series_data.get(emp_series, [])
+        wage_items = series_data.get(wage_series, [])
 
-        if national_row is None:
-            logger.debug(f"[BLS] No national row found for NAICS {naics_code} year {year}")
+        if not emp_items:
+            logger.debug(f"[BLS] No employment data for series {emp_series}")
             return None
+
+        # Get latest month values
+        latest_emp = emp_items[0] if emp_items else None
+        latest_wage = wage_items[0] if wage_items else None
+
+        # Compute YoY employment change
+        employment_change_yoy = 0.0
+        if len(emp_items) >= 13:
+            try:
+                current = float(emp_items[0]["value"])
+                prior_year = float(emp_items[12]["value"])
+                if prior_year and prior_year != 0:
+                    employment_change_yoy = round(((current - prior_year) / prior_year) * 100, 2)
+            except (ValueError, KeyError, TypeError):
+                pass
 
         try:
-            total_employment = int(national_row.get("annual_avg_emplvl", 0) or 0)
-            avg_weekly_wage = float(national_row.get("annual_avg_wkly_wage", 0) or 0)
-            establishment_count = int(national_row.get("annual_avg_estabs", 0) or 0)
+            # CES employment is in thousands
+            total_employment = int(float(latest_emp["value"]) * 1000) if latest_emp else 0
+            avg_weekly_wage = float(latest_wage["value"]) if latest_wage else 0.0
 
-            # Year-over-year employment change (percentage)
-            oty_pct = national_row.get("oty_annual_avg_emplvl_pct_chg")
-            if oty_pct is not None and oty_pct != "":
-                employment_change_yoy = float(oty_pct)
-            else:
-                employment_change_yoy = 0.0
-
-            data_period = f"{year} Annual"
-
-            if not industry_name:
-                industry_name = f"NAICS {naics_code}"
+            period_year = latest_emp.get("year", "")
+            period_month = latest_emp.get("periodName", "")
+            data_period = f"{period_month} {period_year}".strip()
 
             logger.info(
-                f"[BLS] NAICS {naics_code} ({year} Annual): "
-                f"{total_employment:,} employees, ${avg_weekly_wage:,.0f}/wk avg wage, "
-                f"{employment_change_yoy:+.1f}% YoY"
+                f"[BLS] CES {emp_series}: {total_employment:,} employed, "
+                f"${avg_weekly_wage:,.2f}/wk avg earnings, {employment_change_yoy:+.1f}% YoY"
             )
+
             return IndustryLaborData(
                 naics_code=naics_code,
                 industry_name=industry_name,
                 total_employment=total_employment,
                 employment_change_yoy=employment_change_yoy,
                 avg_weekly_wage=avg_weekly_wage,
-                establishment_count=establishment_count,
+                establishment_count=0,
                 data_period=data_period,
-                source=f"BLS QCEW {data_period}",
+                source=f"BLS CES {data_period}",
             )
         except (ValueError, TypeError, KeyError) as exc:
-            logger.warning(f"[BLS] Parse error for NAICS {naics_code}: {exc}")
+            logger.warning(f"[BLS] Parse error for {emp_series}: {exc}")
             return None
 
     # ── Cache helpers ────────────────────────────────────────────────────────
@@ -296,7 +342,7 @@ class BLSService:
                 avg_weekly_wage=float(payload["avg_weekly_wage"]),
                 establishment_count=int(payload.get("establishment_count", 0)),
                 data_period=payload.get("data_period", ""),
-                source=payload.get("source", "BLS QCEW"),
+                source=payload.get("source", "BLS CES"),
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning(f"[BLS] Deserialize failed: {exc}")

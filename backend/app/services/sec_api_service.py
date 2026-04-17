@@ -195,51 +195,96 @@ class SECAPIService:
     def _parse_comp(ticker: str, filing: dict, financials: dict) -> Optional[PublicCompData]:
         """Extract revenue, operating income from XBRL JSON and build PublicCompData."""
         try:
-            company_name = filing.get("companyName") or filing.get("company_name") or ticker
+            company_name = (
+                filing.get("companyName") or filing.get("companyNameLong")
+                or filing.get("company_name") or ticker
+            )
+            # Derive fiscal year from periodOfReport (e.g. "2025-12-31") or fiscalYear field
             fiscal_year = filing.get("fiscalYear") or filing.get("fiscal_year") or 0
-            try:
-                fiscal_year = int(str(fiscal_year)[:4])
-            except (ValueError, TypeError):
-                fiscal_year = datetime.utcnow().year - 1
+            if not fiscal_year or fiscal_year == "None":
+                period = filing.get("periodOfReport", "") or ""
+                try:
+                    fiscal_year = int(period[:4])
+                except (ValueError, TypeError):
+                    fiscal_year = datetime.utcnow().year - 1
+            else:
+                try:
+                    fiscal_year = int(str(fiscal_year)[:4])
+                except (ValueError, TypeError):
+                    fiscal_year = datetime.utcnow().year - 1
 
-            # XBRL income statement fields — try multiple common XBRL tag names
-            def extract(data: dict, *keys) -> Optional[float]:
-                for k in keys:
-                    # Direct key
-                    val = data.get(k)
-                    if val is not None:
-                        try:
-                            return float(val)
-                        except (ValueError, TypeError):
-                            pass
-                    # Nested under StatementsOfIncome / IncomeStatement
-                    for section in ["StatementsOfIncome", "IncomeStatement",
-                                    "ConsolidatedStatementsOfOperations",
-                                    "StatementsOfOperations"]:
-                        stmt = data.get(section, {})
-                        val = stmt.get(k)
-                        if val is not None:
+            # sec-api.io XBRL JSON structure:
+            # financials["StatementsOfIncome"]["Revenues"] = [
+            #   {"decimals": "-3", "unitRef": "usd", "period": {...}, "value": "3840000"}
+            # ]
+            def extract_xbrl_value(val) -> Optional[float]:
+                """Parse a single XBRL field value (scalar or list of period entries)."""
+                if val is None:
+                    return None
+                # List of period observations — take the one with the longest period (annual)
+                if isinstance(val, list):
+                    best = None
+                    best_days = -1
+                    for item in val:
+                        if not isinstance(item, dict):
+                            continue
+                        raw = item.get("value")
+                        if raw is None or raw == "":
+                            continue
+                        # Prefer annual (startDate→endDate span of ~365 days)
+                        period = item.get("period", {})
+                        start = period.get("startDate", "")
+                        end = period.get("endDate", "")
+                        days = 0
+                        if start and end:
                             try:
-                                # XBRL values are often [{value, date}, ...]
-                                if isinstance(val, list) and val:
-                                    return float(val[0].get("value", val[0]) if isinstance(val[0], dict) else val[0])
-                                return float(val)
-                            except (ValueError, TypeError):
-                                pass
+                                from datetime import datetime as _dt
+                                days = (_dt.strptime(end, "%Y-%m-%d") - _dt.strptime(start, "%Y-%m-%d")).days
+                            except Exception:
+                                days = 0
+                        if days > best_days:
+                            best_days = days
+                            best = raw
+                    if best is None:
+                        return None
+                    try:
+                        return float(best)
+                    except (ValueError, TypeError):
+                        return None
+                # Scalar
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return None
+
+            def extract(data: dict, *keys) -> Optional[float]:
+                """Search for a financial metric across all known income statement sections."""
+                for section in [None, "StatementsOfIncome", "IncomeStatement",
+                                "ConsolidatedStatementsOfOperations",
+                                "StatementsOfOperations"]:
+                    stmt = data.get(section, {}) if section else data
+                    for k in keys:
+                        result = extract_xbrl_value(stmt.get(k))
+                        if result is not None:
+                            return result
                 return None
 
             revenue = extract(
                 financials,
                 "Revenues", "Revenue", "RevenueFromContractWithCustomerExcludingAssessedTax",
                 "SalesRevenueNet", "RevenueFromContractWithCustomer",
+                "RealEstateRevenueNet", "TotalRevenues",
             )
             operating_income = extract(
                 financials,
-                "OperatingIncomeLoss", "OperatingIncome", "IncomeLossFromContinuingOperationsBeforeIncomeTaxes",
+                "OperatingIncomeLoss", "OperatingIncome",
+                "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+                "IncomeLossFromContinuingOperationsBeforeIncomeTaxes",
             )
             net_income = extract(
                 financials,
                 "NetIncomeLoss", "NetIncome", "ProfitLoss",
+                "NetIncomeLossAvailableToCommonStockholdersBasic",
             )
 
             if revenue is None or operating_income is None:
