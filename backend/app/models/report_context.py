@@ -5,7 +5,7 @@ Every report type receives the same ReportContext so the secret sauce (formulas,
 competitor data, demographics) is consistently applied regardless of which generator is called.
 """
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, date
 from typing import Dict, List, Optional
 
 
@@ -141,6 +141,77 @@ class FormulaScores:
         return "—"
 
 
+# ── Economic Data Models (FRED / BLS / SEC) ─────────────────────────────────
+
+@dataclass
+class EconomicIndicator:
+    """A single macroeconomic data point from FRED."""
+    series_id: str
+    name: str
+    value: float
+    date: date
+    units: str
+    source: str = "FRED"
+
+
+@dataclass
+class MacroeconomicContext:
+    """Macroeconomic environment data from FRED."""
+    gdp_growth: Optional[EconomicIndicator] = None
+    inflation_rate: Optional[EconomicIndicator] = None
+    fed_funds_rate: Optional[EconomicIndicator] = None
+    unemployment: Optional[EconomicIndicator] = None
+    consumer_sentiment: Optional[EconomicIndicator] = None
+    mortgage_rate: Optional[EconomicIndicator] = None
+    retrieved_at: str = ""
+
+
+@dataclass
+class IndustryLaborData:
+    """Industry labor market data from BLS QCEW."""
+    naics_code: str
+    industry_name: str
+    total_employment: int
+    employment_change_yoy: float
+    avg_weekly_wage: float
+    establishment_count: int = 0
+    data_period: str = ""
+    source: str = "BLS QCEW"
+
+
+@dataclass
+class PublicCompData:
+    """Parsed financials from a single public company's 10-K (via SEC-API.io)."""
+    ticker: str
+    company_name: str
+    fiscal_year: int
+    revenue: float
+    operating_income: float
+    net_income: Optional[float] = None
+    source: str = "SEC 10-K"
+
+    def __post_init__(self):
+        pass
+
+    @property
+    def operating_margin(self) -> Optional[float]:
+        """Operating income / revenue, or None if revenue is zero/missing."""
+        if self.revenue and self.revenue != 0:
+            return self.operating_income / self.revenue
+        return None
+
+
+@dataclass
+class IndustryBenchmarks:
+    """Aggregated public-comp benchmarks for an industry vertical."""
+    avg_operating_margin: float
+    avg_revenue_growth_3yr: Optional[float] = None
+    public_comps: List[PublicCompData] = field(default_factory=list)
+    source: str = "SEC 10-K filings via sec-api.io"
+
+
+# ── Main Report Context ──────────────────────────────────────────────────────
+
 @dataclass
 class ReportContext:
     """Single source of truth for all data passed to every report generator."""
@@ -154,6 +225,11 @@ class ReportContext:
     signals: List[Signal] = field(default_factory=list)
 
     formula_scores: Optional[FormulaScores] = None
+
+    # Economic intelligence (optional — populated for business_plan + market_analysis)
+    macro_context: Optional[MacroeconomicContext] = None
+    labor_data: Optional[IndustryLaborData] = None
+    industry_benchmarks: Optional[IndustryBenchmarks] = None
 
     maps: Dict[str, bytes] = field(default_factory=dict)
 

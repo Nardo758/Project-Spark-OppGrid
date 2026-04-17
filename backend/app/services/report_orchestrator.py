@@ -8,9 +8,13 @@ must pass through here. This ensures that:
   3. SecretSauceInjector always builds the intelligence context block
   4. Claude always receives real data rather than inventing values
 
+Economic intelligence (FRED / BLS / SEC) is fetched in parallel and injected for
+business_plan and market_analysis report types only.
+
 To add a new report type in the future, register it in REPORT_TYPE_MAP and
 create a generator method — the secret sauce injection is inherited automatically.
 """
+import asyncio
 import logging
 from typing import Optional, TYPE_CHECKING
 
@@ -37,6 +41,9 @@ REPORT_TYPE_MAP = {
     "market_analysis":      "generate_market_analysis_report",
     "location_analysis":    "_generate_location_analysis",
 }
+
+# Report types that receive full economic intelligence (FRED + BLS + SEC)
+ECONOMIC_INTEL_REPORT_TYPES = {"business_plan", "market_analysis"}
 
 
 class ReportOrchestrator:
@@ -116,7 +123,18 @@ class ReportOrchestrator:
             except Exception as fe:
                 logger.warning(f"[Orchestrator] FormulaEngine failed: {fe}")
 
-        # ── 3. Build shared intelligence context block ───────────────────────
+        # ── 3. Fetch economic intelligence (FRED / BLS / SEC) ────────────────
+        macro_context = None
+        labor_data = None
+        industry_benchmarks = None
+
+        if norm_type in ECONOMIC_INTEL_REPORT_TYPES:
+            macro_context, labor_data, industry_benchmarks = await self._fetch_economic_intel(
+                business_type=category or business_type,
+                db=db,
+            )
+
+        # ── 4. Build shared intelligence context block ───────────────────────
         secret_sauce_block = ""
         if rdc and formula_scores:
             try:
@@ -126,12 +144,15 @@ class ReportOrchestrator:
                     business_type=business_type,
                     city=city,
                     state=state,
+                    macro_context=macro_context,
+                    labor_data=labor_data,
+                    industry_benchmarks=industry_benchmarks,
                 )
                 logger.info("[Orchestrator] SecretSauceInjector block built successfully")
             except Exception as si_err:
                 logger.warning(f"[Orchestrator] SecretSauceInjector failed: {si_err}")
 
-        # ── 4. Route to correct generator ────────────────────────────────────
+        # ── 5. Route to correct generator ────────────────────────────────────
         opportunity_context = {
             "title": business_type,
             "category": category or business_type,
@@ -153,7 +174,7 @@ class ReportOrchestrator:
             user_notes=user_notes,
         )
 
-        # ── 5. Inject static maps into Business Plan HTML ────────────────────
+        # ── 6. Inject static maps into Business Plan HTML ────────────────────
         if norm_type == "business_plan" and city and state:
             content = await self._inject_business_plan_maps(
                 html=content,
@@ -164,6 +185,51 @@ class ReportOrchestrator:
 
         logger.info(f"[Orchestrator] Generation complete ({len(content)} chars)")
         return content
+
+    async def _fetch_economic_intel(self, business_type: str, db: "Session"):
+        """
+        Fetch FRED macro, BLS labor, and SEC benchmark data concurrently.
+        All three are fire-and-forget — any failure returns None for that source.
+        Returns: (macro_context, labor_data, industry_benchmarks)
+        """
+        try:
+            from app.services.fred_service import FREDService
+            from app.services.bls_service import BLSService
+            from app.services.sec_api_service import SECAPIService
+
+            fred = FREDService()
+            bls = BLSService()
+            sec = SECAPIService()
+
+            results = await asyncio.gather(
+                fred.get_macro_context(db=db),
+                bls.get_industry_data_for_business(business_type, db=db),
+                sec.get_industry_benchmarks(business_type, db=db),
+                return_exceptions=True,
+            )
+
+            macro_context = results[0] if not isinstance(results[0], Exception) else None
+            labor_data = results[1] if not isinstance(results[1], Exception) else None
+            industry_benchmarks = results[2] if not isinstance(results[2], Exception) else None
+
+            sources_found = []
+            if macro_context:
+                sources_found.append("FRED")
+            if labor_data:
+                sources_found.append(f"BLS QCEW ({labor_data.naics_code})")
+            if industry_benchmarks:
+                sources_found.append(f"SEC ({len(industry_benchmarks.public_comps)} comps)")
+
+            if sources_found:
+                logger.info(f"[Orchestrator] Economic intel fetched: {', '.join(sources_found)}")
+            else:
+                logger.info("[Orchestrator] Economic intel: no data available (keys may not be configured)")
+
+            return macro_context, labor_data, industry_benchmarks
+
+        except Exception as exc:
+            logger.warning(f"[Orchestrator] Economic intel fetch failed: {exc}")
+            return None, None, None
 
     async def _inject_business_plan_maps(
         self,

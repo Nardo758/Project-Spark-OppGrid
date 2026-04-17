@@ -8,6 +8,9 @@ structured block, ensuring:
   • Actual demographics with Census citations
   • All 8 proprietary formula scores with interpretations
   • Signal evidence ("Why This Opportunity?")
+  • Macroeconomic context with FRED citations (business_plan / market_analysis)
+  • Industry labor data with BLS QCEW citations (business_plan / market_analysis)
+  • Public-comp benchmarks with SEC 10-K citations (business_plan / market_analysis)
   • Data Sources section
   • Critical instructions telling Claude to use only provided data
 """
@@ -15,7 +18,12 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from app.models.report_context import FormulaScores
+from app.models.report_context import (
+    FormulaScores,
+    MacroeconomicContext,
+    IndustryLaborData,
+    IndustryBenchmarks,
+)
 
 if TYPE_CHECKING:
     from app.services.report_data_service import ReportDataContext
@@ -27,7 +35,7 @@ class SecretSauceInjector:
     """
     Builds the intelligence context block for ANY report type.
     Accepts the existing ReportDataContext from ReportDataService together
-    with pre-calculated FormulaScores.
+    with pre-calculated FormulaScores and optional economic data.
     """
 
     @staticmethod
@@ -37,10 +45,14 @@ class SecretSauceInjector:
         business_type: str,
         city: str,
         state: str,
+        macro_context: Optional[MacroeconomicContext] = None,
+        labor_data: Optional[IndustryLaborData] = None,
+        industry_benchmarks: Optional[IndustryBenchmarks] = None,
     ) -> str:
         """
         Return the complete OppGrid intelligence block to prepend to any Claude prompt.
         All sections degrade gracefully when data is unavailable.
+        Economic data sections are only included when the corresponding argument is provided.
         """
         sections = [
             SecretSauceInjector._build_header(business_type, city, state),
@@ -48,9 +60,23 @@ class SecretSauceInjector:
             SecretSauceInjector._build_demographics_section(rdc),
             SecretSauceInjector._build_formula_scores_section(formula_scores),
             SecretSauceInjector._build_signal_evidence_section(rdc, business_type, city),
-            SecretSauceInjector._build_data_sources_section(rdc),
-            SecretSauceInjector._build_instructions(),
         ]
+
+        # Economic intelligence sections (optional — provided for business_plan / market_analysis)
+        if macro_context is not None:
+            sections.append(SecretSauceInjector._build_macro_context_section(macro_context))
+        if labor_data is not None:
+            sections.append(SecretSauceInjector._build_labor_section(labor_data))
+        if industry_benchmarks is not None:
+            sections.append(SecretSauceInjector._build_benchmarks_section(industry_benchmarks))
+
+        sections.append(SecretSauceInjector._build_data_sources_section(
+            rdc, macro_context, labor_data, industry_benchmarks
+        ))
+        sections.append(SecretSauceInjector._build_instructions(
+            has_economic_data=any(x is not None for x in [macro_context, labor_data, industry_benchmarks])
+        ))
+
         return "\n\n".join(s for s in sections if s)
 
     @staticmethod
@@ -254,8 +280,119 @@ class SecretSauceInjector:
 
         return "\n".join(lines)
 
+    # ── Economic Intelligence Sections ───────────────────────────────────────
+
     @staticmethod
-    def _build_data_sources_section(rdc: "ReportDataContext") -> str:
+    def _build_macro_context_section(ctx: MacroeconomicContext) -> str:
+        """Format FRED macroeconomic indicators for Claude's context block."""
+        lines = ["### Macroeconomic Environment (FRED — Federal Reserve Bank of St. Louis)"]
+
+        def fmt_indicator(ind, fmt_value=None):
+            if ind is None:
+                return None
+            val_str = fmt_value(ind.value) if fmt_value else f"{ind.value}"
+            date_str = ind.date.strftime("%b %Y") if hasattr(ind.date, "strftime") else str(ind.date)
+            return f"{ind.name}: {val_str} ({ind.source or 'FRED'}, {date_str})"
+
+        rows = [
+            fmt_indicator(ctx.fed_funds_rate,    lambda v: f"{v:.2f}%"),
+            fmt_indicator(ctx.inflation_rate,    lambda v: f"{v:.1f} (index)"),
+            fmt_indicator(ctx.unemployment,      lambda v: f"{v:.1f}%"),
+            fmt_indicator(ctx.gdp_growth,        lambda v: f"{v:+.1f}% annualised"),
+            fmt_indicator(ctx.consumer_sentiment, lambda v: f"{v:.1f}"),
+            fmt_indicator(ctx.mortgage_rate,     lambda v: f"{v:.2f}%"),
+        ]
+        lines.extend(r for r in rows if r)
+
+        if ctx.retrieved_at:
+            try:
+                dt = datetime.fromisoformat(ctx.retrieved_at)
+                lines.append(f"\nData retrieved: {dt.strftime('%B %d, %Y')}")
+            except Exception:
+                pass
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_labor_section(data: IndustryLaborData) -> str:
+        """Format BLS QCEW industry labor data for Claude's context block."""
+        lines = [
+            f"### Industry Labor Market — NAICS {data.naics_code}: {data.industry_name}",
+            f"Source: {data.source}",
+            "",
+        ]
+
+        if data.total_employment:
+            lines.append(f"National Employment: {data.total_employment:,} workers")
+        if data.employment_change_yoy is not None:
+            direction = "▲" if data.employment_change_yoy >= 0 else "▼"
+            lines.append(
+                f"Employment Change (YoY): {direction} {abs(data.employment_change_yoy):.1f}%"
+            )
+        if data.avg_weekly_wage:
+            annual = data.avg_weekly_wage * 52
+            lines.append(
+                f"Avg Weekly Wage: ${data.avg_weekly_wage:,.0f} "
+                f"(~${annual:,.0f}/year annualised)"
+            )
+        if data.establishment_count:
+            lines.append(f"National Establishments: {data.establishment_count:,}")
+        if data.data_period:
+            lines.append(f"Data Period: {data.data_period}")
+
+        lines.append(
+            "\nIMPORTANT: Use these BLS QCEW figures when estimating staffing costs and "
+            "labour market conditions. Cite as '(BLS QCEW)' inline."
+        )
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_benchmarks_section(benchmarks: IndustryBenchmarks) -> str:
+        """Format SEC 10-K public-comp benchmarks for Claude's context block."""
+        lines = [
+            "### Industry Financial Benchmarks (SEC 10-K Public Company Comparables)",
+            f"Source: {benchmarks.source}",
+            "",
+        ]
+
+        if benchmarks.avg_operating_margin is not None:
+            lines.append(
+                f"Industry Average Operating Margin: {benchmarks.avg_operating_margin:.1%}"
+            )
+        if benchmarks.avg_revenue_growth_3yr is not None:
+            lines.append(
+                f"Avg 3-Year Revenue Growth: {benchmarks.avg_revenue_growth_3yr:.1%}"
+            )
+
+        if benchmarks.public_comps:
+            lines.append("")
+            lines.append("| Company | Ticker | Revenue | Op. Income | Op. Margin | FY |")
+            lines.append("|---------|--------|---------|------------|------------|----|")
+            for comp in benchmarks.public_comps:
+                rev_str = f"${comp.revenue / 1e9:.1f}B" if comp.revenue >= 1e9 else f"${comp.revenue / 1e6:.0f}M"
+                oi_str = f"${comp.operating_income / 1e9:.1f}B" if abs(comp.operating_income) >= 1e9 else f"${comp.operating_income / 1e6:.0f}M"
+                margin_str = f"{comp.operating_margin:.1%}" if comp.operating_margin is not None else "N/A"
+                lines.append(
+                    f"| {comp.company_name} | {comp.ticker} | {rev_str} | {oi_str} | "
+                    f"{margin_str} | FY{comp.fiscal_year} |"
+                )
+
+        lines.append(
+            "\nIMPORTANT: Use these SEC 10-K operating margins when building financial projections. "
+            "Cite each figure inline as '({ticker} SEC 10-K FY{year})'. "
+            "Do NOT invent different margin assumptions."
+        )
+        return "\n".join(lines)
+
+    # ── Supporting Sections ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _build_data_sources_section(
+        rdc: "ReportDataContext",
+        macro_context: Optional[MacroeconomicContext] = None,
+        labor_data: Optional[IndustryLaborData] = None,
+        industry_benchmarks: Optional[IndustryBenchmarks] = None,
+    ) -> str:
         sources = [
             "U.S. Census Bureau, American Community Survey 5-Year Estimates (2020-2024)",
         ]
@@ -272,6 +409,18 @@ class SecretSauceInjector:
         if rdc and rdc.price and rdc.price.zillow_home_value:
             sources.append("Zillow Research — real estate market data")
 
+        if macro_context is not None:
+            sources.append("FRED (Federal Reserve Bank of St. Louis) — macroeconomic indicators")
+
+        if labor_data is not None:
+            sources.append(f"BLS QCEW — {labor_data.industry_name} industry labor data")
+
+        if industry_benchmarks is not None:
+            tickers = ", ".join(c.ticker for c in (industry_benchmarks.public_comps or []))
+            sources.append(
+                f"SEC 10-K filings via sec-api.io — public company financials ({tickers})"
+            )
+
         sources.append("OppGrid FormulaEngine v1.0 — proprietary composite scoring")
 
         lines = ["### Data Sources"]
@@ -279,8 +428,8 @@ class SecretSauceInjector:
         return "\n".join(lines)
 
     @staticmethod
-    def _build_instructions() -> str:
-        return (
+    def _build_instructions(has_economic_data: bool = False) -> str:
+        base = (
             "### CRITICAL INSTRUCTIONS FOR CLAUDE\n"
             "1. Use ONLY the data provided above — do NOT invent statistics, competitor names, or counts\n"
             "2. Cite sources inline when referencing demographics: 'median income is $X (Census ACS 2024)'\n"
@@ -289,3 +438,15 @@ class SecretSauceInjector:
             "5. Include the signal evidence to justify the opportunity assessment\n"
             "6. If any data section above says 'pending' or 'not available', acknowledge it — do NOT fabricate replacement values"
         )
+        if has_economic_data:
+            base += (
+                "\n7. USE THE MACROECONOMIC ENVIRONMENT DATA — cite FRED figures inline "
+                "(e.g., 'Fed funds rate 4.25% (FRED, Apr 2026)') in any interest-rate or "
+                "financing discussion\n"
+                "8. USE THE BLS QCEW LABOR DATA — cite BLS figures when estimating staffing "
+                "costs (e.g., 'avg weekly wage $1,234 (BLS QCEW 2024 Annual)')\n"
+                "9. USE THE SEC 10-K BENCHMARKS — cite public-comp operating margins when "
+                "building financial projections. Do NOT invent margin assumptions when real "
+                "SEC data is provided above"
+            )
+        return base
