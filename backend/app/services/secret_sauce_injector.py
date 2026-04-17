@@ -377,9 +377,15 @@ class SecretSauceInjector:
                     f"{margin_str} | FY{comp.fiscal_year} |"
                 )
 
+        # Build a concrete example citation string from the first comp if available
+        if benchmarks.public_comps:
+            eg = benchmarks.public_comps[0]
+            eg_cite = f"(e.g. '{eg.ticker} SEC 10-K FY{eg.fiscal_year}')"
+        else:
+            eg_cite = "(e.g. 'PSA SEC 10-K FY2025')"
         lines.append(
-            "\nIMPORTANT: Use these SEC 10-K operating margins when building financial projections. "
-            "Cite each figure inline as '({ticker} SEC 10-K FY{year})'. "
+            f"\nIMPORTANT: Use these SEC 10-K operating margins when building financial projections. "
+            f"Cite each figure inline using the company ticker and fiscal year {eg_cite}. "
             "Do NOT invent different margin assumptions."
         )
         return "\n".join(lines)

@@ -342,7 +342,8 @@ Target Audience: {opportunity.get('target_audience', '')}
         competitors: Optional[List[Dict[str, Any]]] = None,
         demand_signals: Optional[Dict[str, Any]] = None,
         market_economics: Optional[Dict[str, Any]] = None,
-        report_data: Optional[Any] = None  # ReportDataContext from ReportDataService
+        report_data: Optional[Any] = None,  # ReportDataContext from ReportDataService
+        secret_sauce_block: str = "",
     ) -> str:
         """Generate market insights for Layer 2 report with demographics, competitive, demand data, and 4 P's."""
         system = """You are a market research analyst providing deep-dive market insights.
@@ -979,7 +980,8 @@ Target Audience: {opportunity.get('target_audience', '')}
         industry: Optional[str] = None,
         demand_signals: Optional[Dict[str, Any]] = None,
         market_economics: Optional[Dict[str, Any]] = None,
-        report_data: Optional[Any] = None  # ReportDataContext from ReportDataService
+        report_data: Optional[Any] = None,  # ReportDataContext from ReportDataService
+        secret_sauce_block: str = "",
     ) -> str:
         """Generate comprehensive market analysis report with full 4 P's data."""
         system = f"""You are a senior market research analyst at OppGrid creating institutional-grade market analysis reports.
@@ -1147,6 +1149,8 @@ Target Audience: {opportunity.get('target_audience', '')}
 {promotion_info}
 {data_quality_note}
 """
+        if secret_sauce_block:
+            prompt = f"{secret_sauce_block}\n\n{prompt}"
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Market Analysis")
     

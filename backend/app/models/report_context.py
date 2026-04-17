@@ -190,9 +190,6 @@ class PublicCompData:
     net_income: Optional[float] = None
     source: str = "SEC 10-K"
 
-    def __post_init__(self):
-        pass
-
     @property
     def operating_margin(self) -> Optional[float]:
         """Operating income / revenue, or None if revenue is zero/missing."""

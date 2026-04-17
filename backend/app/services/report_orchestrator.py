@@ -316,6 +316,7 @@ class ReportOrchestrator:
             return generator.generate_market_analysis_report(
                 opportunity_context,
                 report_data=rdc,
+                secret_sauce_block=secret_sauce_block,
             )
 
         # All other generators accept (opportunity, secret_sauce_block)

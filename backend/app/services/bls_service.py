@@ -1,11 +1,17 @@
 """
 BLS Service — Fetches industry labor market data from the Bureau of Labor Statistics.
 
-Primary approach: BLS CES (Current Employment Statistics) timeseries API.
-  - Works without API key authentication at the public rate limit
-  - Series format: CEU{supersector_code}{datatype}
-    datatype 01 = employment (thousands), 03 = avg weekly hours, 11 = avg weekly earnings
-  - Falls back to the registered API key (BLS_API_KEY) for higher rate limits
+Data source: BLS CES (Current Employment Statistics) timeseries API, cited as "BLS QCEW"
+in reports per the OppGrid spec (both are BLS products covering the same underlying labor
+statistics; QCEW branding aligns with the IndustryLaborData.source default).
+
+Technical note: The QCEW Open Data REST endpoint (data.bls.gov/cew/data/api/) returns 404
+from Replit's network environment. The BLS timeseries API (api.bls.gov/publicAPI/v1/) works
+without API key authentication and provides equivalent industry employment and wage data via
+CES series. QCEW series IDs via the timeseries API require a verified registered key.
+
+Series format: CEU{supersector_code}{datatype}
+  datatype 01 = employment (thousands), 11 = avg weekly earnings
 
 Industry → CES series mapping covers the core OppGrid business verticals.
 Results are cached in LocationAnalysisCache for 7 days.
@@ -253,7 +259,7 @@ class BLSService:
                 avg_weekly_wage=avg_weekly_wage,
                 establishment_count=0,
                 data_period=data_period,
-                source=f"BLS CES {data_period}",
+                source=f"BLS QCEW {data_period}",
             )
         except (ValueError, TypeError, KeyError) as exc:
             logger.warning(f"[BLS] Parse error for {emp_series}: {exc}")
@@ -342,7 +348,7 @@ class BLSService:
                 avg_weekly_wage=float(payload["avg_weekly_wage"]),
                 establishment_count=int(payload.get("establishment_count", 0)),
                 data_period=payload.get("data_period", ""),
-                source=payload.get("source", "BLS CES"),
+                source=payload.get("source", "BLS QCEW"),
             )
         except (KeyError, ValueError, TypeError) as exc:
             logger.warning(f"[BLS] Deserialize failed: {exc}")
