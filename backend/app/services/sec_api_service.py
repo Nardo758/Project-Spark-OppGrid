@@ -8,7 +8,10 @@ Endpoints (sec-api.io):
   POST https://api.sec-api.io            — Query filings (Authorization header)
   GET  https://api.sec-api.io/xbrl-to-json  — Parse XBRL financials (token param)
 
-Industry → ticker mapping covers 8 verticals per the OppGrid spec.
+Industry → ticker mapping covers 14 verticals (original 8 + 6 expanded in Task #29):
+  Original: self storage, fitness/gym, car wash, restaurant, coffee, pet, dental
+  Expanded: hotel/hospitality, pharmacy, grocery, auto repair, daycare/childcare,
+            real estate/coworking
 Results are cached in LocationAnalysisCache for 30 days.
 Returns None gracefully when SEC_API_KEY is absent or no comps are mapped.
 """
@@ -31,18 +34,45 @@ CACHE_TTL_DAYS = 30
 
 # Business type keyword → list of public company tickers (most relevant first)
 INDUSTRY_COMPS: Dict[str, List[str]] = {
+    # ── Original 8 verticals ──────────────────────────────────────────────
     "self_storage":  ["PSA", "EXR", "CUBE", "LSI", "NSA"],
     "self storage":  ["PSA", "EXR", "CUBE", "LSI", "NSA"],
     "fitness":       ["PLNT", "XPOF"],
     "gym":           ["PLNT", "XPOF"],
+    "yoga":          ["PLNT", "XPOF"],
     "car wash":      ["WASH", "DRVN"],
     "car_wash":      ["WASH", "DRVN"],
     "restaurant":    ["MCD", "YUM", "QSR", "CMG"],
+    "cafe":          ["SBUX", "BROS", "MCD"],
     "coffee":        ["SBUX", "BROS"],
     "coffee shop":   ["SBUX", "BROS"],
-    "pet":           ["CHWY", "WOOF", "TRUP"],
-    "pet grooming":  ["CHWY", "WOOF", "TRUP"],
+    "pet":           ["CHWY", "TRUP"],
+    "pet grooming":  ["CHWY", "TRUP"],
+    "pet services":  ["CHWY", "TRUP"],
     "dental":        ["PDCO", "HSIC"],
+    # ── Expanded verticals (Task #29) ─────────────────────────────────────
+    "hotel":         ["HLT", "MAR", "H"],
+    "motel":         ["HLT", "MAR", "H"],
+    "hospitality":   ["HLT", "MAR", "H"],
+    "pharmacy":      ["CVS", "WBA", "RAD"],
+    "drug store":    ["CVS", "WBA", "RAD"],
+    "drugstore":     ["CVS", "WBA", "RAD"],
+    "health":        ["CVS", "WBA", "UNH"],
+    "grocery":       ["KR", "ACI", "SFM"],
+    "supermarket":   ["KR", "ACI", "SFM"],
+    "food store":    ["KR", "ACI", "SFM"],
+    "auto repair":   ["AZO", "ORLY"],
+    "auto_repair":   ["AZO", "ORLY"],
+    "automotive":    ["AZO", "ORLY", "DRVN"],
+    "mechanic":      ["AZO", "ORLY"],
+    "daycare":       ["BFAM", "LRN"],
+    "child care":    ["BFAM", "LRN"],
+    "childcare":     ["BFAM", "LRN"],
+    "preschool":     ["BFAM", "LRN"],
+    "real estate":   ["CBRE", "JLL"],
+    "coworking":     ["CBRE", "JLL", "IWG"],
+    "office space":  ["CBRE", "JLL", "IWG"],
+    "property":      ["CBRE", "JLL"],
 }
 
 MAX_COMPS = 3  # Limit SEC API calls per report
