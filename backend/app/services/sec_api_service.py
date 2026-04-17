@@ -46,14 +46,14 @@ INDUSTRY_COMPS: Dict[str, List[str]] = {
     "cafe":          ["SBUX", "BROS", "MCD"],
     "coffee":        ["SBUX", "BROS"],
     "coffee shop":   ["SBUX", "BROS"],
-    "pet":           ["CHWY", "TRUP"],
-    "pet grooming":  ["CHWY", "TRUP"],
-    "pet services":  ["CHWY", "TRUP"],
+    "pet":           ["CHWY", "WOOF", "TRUP"],
+    "pet grooming":  ["CHWY", "WOOF", "TRUP"],
+    "pet services":  ["CHWY", "WOOF", "TRUP"],
     "dental":        ["PDCO", "HSIC"],
     # ── Expanded verticals (Task #29) ─────────────────────────────────────
-    "hotel":         ["HLT", "MAR", "H"],
-    "motel":         ["HLT", "MAR", "H"],
-    "hospitality":   ["HLT", "MAR", "H"],
+    "hotel":         ["HLT", "MAR", "H", "STAY"],
+    "motel":         ["HLT", "MAR", "H", "STAY"],
+    "hospitality":   ["HLT", "MAR", "H", "STAY"],
     "pharmacy":      ["CVS", "WBA", "RAD"],
     "drug store":    ["CVS", "WBA", "RAD"],
     "drugstore":     ["CVS", "WBA", "RAD"],
@@ -69,10 +69,10 @@ INDUSTRY_COMPS: Dict[str, List[str]] = {
     "child care":    ["BFAM", "LRN"],
     "childcare":     ["BFAM", "LRN"],
     "preschool":     ["BFAM", "LRN"],
-    "real estate":   ["CBRE", "JLL"],
+    "real estate":   ["CBRE", "JLL", "IWG"],
     "coworking":     ["CBRE", "JLL", "IWG"],
     "office space":  ["CBRE", "JLL", "IWG"],
-    "property":      ["CBRE", "JLL"],
+    "property":      ["CBRE", "JLL", "IWG"],
 }
 
 MAX_COMPS = 3  # Limit SEC API calls per report
