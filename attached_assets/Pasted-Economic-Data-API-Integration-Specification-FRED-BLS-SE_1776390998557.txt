@@ -1,0 +1,703 @@
+Economic Data API Integration Specification
+
+FRED + BLS + SEC-API.io Integration for Report Generation
+
+  ------------------ --------------------------------------------------------
+  Version            2.0
+
+  Date               April 2026
+
+  Priority           HIGH - Prerequisite for credible financial projections
+
+  Effort             5-6 days implementation
+
+  Monthly Cost       $49/mo (SEC-API.io) — FRED and BLS are free
+  ------------------ --------------------------------------------------------
+
+Executive Summary
+
+This specification adds three external data APIs to OppGrid's report pipeline: FRED (macroeconomic indicators), BLS (industry labor data), and SEC-API.io (public company financials). Together they provide the economic context, labor benchmarks, and industry operating metrics needed to ground financial projections in verifiable data.
+
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| WHY THIS MATTERS                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+|                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Current reports cite statistics with no source. "The self-storage industry averages 72% operating margins" — where did that come from? With these APIs wired to the pipeline, Claude receives actual data: PSA's 10-K shows 74.2% NOI margin, BLS QCEW shows industry employment up 3.1% YoY, FRED shows fed funds at 4.25%. Reports cite "SEC 10-K FY2025" and "BLS QCEW 2025 Q4" inline. This transforms perceived quality from "AI-generated" to "data-driven." |
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+Data Coverage Summary
+
+  ------------ --------- ------------------------------------------------------------------ -----------------------------------------------------
+  API          Cost      Data Provided                                                      Report Use Case
+
+  FRED         Free      GDP, inflation, interest rates, consumer sentiment, unemployment   Economic context, risk factors, market timing
+
+  BLS          Free      Industry employment, wages by occupation, establishment counts     Labor cost modeling, hiring wage benchmarks
+
+  SEC-API.io   $49/mo    Revenue, margins, operating metrics from 10-K/10-Q filings         Industry comps, financial projections, benchmarking
+  ------------ --------- ------------------------------------------------------------------ -----------------------------------------------------
+
+1. FRED API Integration
+
+1.1 API Overview
+
+Base URL: https://api.stlouisfed.org/fred/
+
+Authentication: API key (free registration at fred.stlouisfed.org)
+
+Rate Limit: 120 requests per minute
+
+Cost: Free
+
+1.2 Key Series for OppGrid Reports
+
+  -------------- ---------------------------------- ---------------- ------------------------
+  Series ID      Description                        Frequency        Report Section
+
+  GDP            Real Gross Domestic Product        Quarterly        Economic Context
+
+  CPIAUCSL       Consumer Price Index (All Urban)   Monthly          Pricing Strategy
+
+  FEDFUNDS       Federal Funds Effective Rate       Daily            Financing Costs
+
+  UMCSENT        U. Michigan Consumer Sentiment     Monthly          Market Timing
+
+  UNRATE         Unemployment Rate                  Monthly          Labor Market
+
+  MORTGAGE30US   30-Year Fixed Mortgage Rate        Weekly           Financing, Real Estate
+  -------------- ---------------------------------- ---------------- ------------------------
+
+1.3 FRED Service Implementation
+
++---------------------------------------------------------------------------------------+
+| # backend/app/services/fred_service.py                                                |
+|                                                                                       |
+| import httpx                                                                          |
+|                                                                                       |
+| from datetime import datetime                                                         |
+|                                                                                       |
+| from typing import Optional, Dict, Any                                                |
+|                                                                                       |
+| import os                                                                             |
+|                                                                                       |
+| from app.models.report_context import EconomicIndicator, MacroeconomicContext         |
+|                                                                                       |
+| FRED_API_KEY = os.getenv('FRED_API_KEY')                                              |
+|                                                                                       |
+| FRED_BASE_URL = 'https://api.stlouisfed.org/fred'                                     |
+|                                                                                       |
+| CORE_SERIES = {                                                                       |
+|                                                                                       |
+| 'GDP': {'name': 'Real GDP Growth', 'units': '%'},                                     |
+|                                                                                       |
+| 'CPIAUCSL': {'name': 'Consumer Price Index', 'units': 'Index'},                       |
+|                                                                                       |
+| 'FEDFUNDS': {'name': 'Federal Funds Rate', 'units': '%'},                             |
+|                                                                                       |
+| 'UNRATE': {'name': 'Unemployment Rate', 'units': '%'},                                |
+|                                                                                       |
+| 'UMCSENT': {'name': 'Consumer Sentiment', 'units': 'Index'},                          |
+|                                                                                       |
+| 'MORTGAGE30US': {'name': '30-Year Mortgage', 'units': '%'},                           |
+|                                                                                       |
+| }                                                                                     |
+|                                                                                       |
+| class FREDService:                                                                    |
+|                                                                                       |
+| @staticmethod                                                                         |
+|                                                                                       |
+| async def get_series(series_id: str, limit: int = 12) -> Optional[Dict]:              |
+|                                                                                       |
+| params = {                                                                            |
+|                                                                                       |
+| 'series_id': series_id,                                                               |
+|                                                                                       |
+| 'api_key': FRED_API_KEY,                                                              |
+|                                                                                       |
+| 'file_type': 'json',                                                                  |
+|                                                                                       |
+| 'sort_order': 'desc',                                                                 |
+|                                                                                       |
+| 'limit': limit                                                                        |
+|                                                                                       |
+| }                                                                                     |
+|                                                                                       |
+| async with httpx.AsyncClient() as client:                                             |
+|                                                                                       |
+| resp = await client.get(                                                              |
+|                                                                                       |
+| f'{FRED_BASE_URL}/series/observations',                                               |
+|                                                                                       |
+| params=params, timeout=10.0                                                           |
+|                                                                                       |
+| )                                                                                     |
+|                                                                                       |
+| resp.raise_for_status()                                                               |
+|                                                                                       |
+| return resp.json()                                                                    |
+|                                                                                       |
+| @staticmethod                                                                         |
+|                                                                                       |
+| async def get_macro_context() -> MacroeconomicContext:                                |
+|                                                                                       |
+| indicators = {}                                                                       |
+|                                                                                       |
+| for series_id, meta in CORE_SERIES.items():                                           |
+|                                                                                       |
+| data = await FREDService.get_series(series_id)                                        |
+|                                                                                       |
+| if data and data.get('observations'):                                                 |
+|                                                                                       |
+| obs = data['observations'][0]                                                         |
+|                                                                                       |
+| indicators[series_id] = EconomicIndicator(                                            |
+|                                                                                       |
+| series_id=series_id,                                                                  |
+|                                                                                       |
+| name=meta['name'],                                                                    |
+|                                                                                       |
+| value=float(obs['value']),                                                            |
+|                                                                                       |
+| date=datetime.strptime(obs['date'], '%Y-%m-%d').date(),                               |
+|                                                                                       |
+| units=meta['units']                                                                   |
+|                                                                                       |
+| )                                                                                     |
+|                                                                                       |
+| return MacroeconomicContext(**indicators, retrieved_at=datetime.utcnow().isoformat()) |
++---------------------------------------------------------------------------------------+
+
+2. BLS Data API Integration
+
+2.1 API Overview
+
+Base URL: https://api.bls.gov/publicAPI/v2/
+
+Authentication: API key (free registration at bls.gov/developers)
+
+Rate Limit: 500 queries/day with 50 series per query
+
+Cost: Free
+
+2.2 NAICS Code Mapping
+
+Map business types to NAICS codes for BLS industry data lookup:
+
+  --------------------------- ----------- --------------------------------------------
+  Business Type               NAICS       NAICS Title
+
+  Self Storage                531130      Lessors of Miniwarehouses and Self-Storage
+
+  Restaurant (Full Service)   722511      Full-Service Restaurants
+
+  Fitness Center / Gym        713940      Fitness and Recreational Sports Centers
+
+  Car Wash                    811192      Car Washes
+
+  Coffee Shop                 722515      Snack and Nonalcoholic Beverage Bars
+
+  Pet Services                812910      Pet Care (except Veterinary) Services
+
+  Daycare                     624410      Child Day Care Services
+
+  Dental Practice             621210      Offices of Dentists
+
+  Laundromat                  812310      Coin-Operated Laundries and Drycleaners
+  --------------------------- ----------- --------------------------------------------
+
+3. SEC-API.io Integration
+
+3.1 API Overview
+
+Base URL: https://api.sec-api.io/
+
+Authentication: API key in Authorization header
+
+Rate Limit: 100 requests/minute on Starter plan
+
+Cost: $49/month (Starter plan)
+
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| WHY SEC-API.io INSTEAD OF RAW EDGAR                                                                                                                                                                                                                                                                                                      |
+|                                                                                                                                                                                                                                                                                                                                          |
+| Raw SEC EDGAR filings are XBRL (structured) + HTML (messy). Different companies tag the same metrics differently — "Revenue" vs "Total Revenues" vs "Net Sales". SEC-API.io pre-parses everything into normalized JSON, saving weeks of parsing dev work. You get clean income statements, balance sheets, and key metrics ready to use. |
++------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+3.2 Industry Comp Mapping (Secret Sauce)
+
+Map local business types to comparable public companies. This is proprietary knowledge — knowing which public companies provide relevant operating benchmarks for each business category.
+
+  ------------------ -------------------------------------------------------------------------------------------------------
+  Business Type      Public Company Comps (Tickers)
+
+  Self Storage       PSA (Public Storage), EXR (Extra Space), CUBE (CubeSmart), LSI (Life Storage), NSA (National Storage)
+
+  Fitness / Gym      PLNT (Planet Fitness), XPOF (Xponential Fitness)
+
+  Car Wash           WASH (Mister Car Wash), DRVN (Driven Brands)
+
+  Restaurant QSR     MCD (McDonald's), YUM (Yum! Brands), QSR (Restaurant Brands), CMG (Chipotle)
+
+  Coffee Shop        SBUX (Starbucks), BROS (Dutch Bros)
+
+  Pet Services       CHWY (Chewy), WOOF (Petco), TRUP (Trupanion)
+
+  Dental             PDCO (Patterson Companies), HSIC (Henry Schein)
+  ------------------ -------------------------------------------------------------------------------------------------------
+
+3.3 What You Extract from 10-Ks
+
+For a "Self Storage in Miami" report, pulling from PSA, EXR, CUBE gives you:
+
+-   Revenue per square foot: $15-22/sq ft (varies by market)
+
+-   Stabilized occupancy: 92-95%
+
+-   Operating margins: 70-75% NOI margin
+
+-   Same-store revenue growth: 5-8% annually
+
+-   Customer acquisition cost: $50-150 per move-in
+
+-   Average tenant duration: 14-18 months
+
+This is exactly what grounds a financial model in reality instead of Claude making up numbers.
+
+3.4 SEC-API Endpoints
+
+Query API (Full-Text Search)
+
+POST https://api.sec-api.io
+
+Search for filings by ticker, form type, date range, or full-text content.
+
++-----------------------------------------------------------------------+
+| POST https://api.sec-api.io                                           |
+|                                                                       |
+| Authorization: {SEC_API_KEY}                                          |
+|                                                                       |
+| {                                                                     |
+|                                                                       |
+| "query": {                                                            |
+|                                                                       |
+| "query_string": {                                                     |
+|                                                                       |
+| "query": "ticker:PSA AND formType:\"10-K\""                           |
+|                                                                       |
+| }                                                                     |
+|                                                                       |
+| },                                                                    |
+|                                                                       |
+| "from": 0,                                                            |
+|                                                                       |
+| "size": 1,                                                            |
+|                                                                       |
+| "sort": [{ "filedAt": { "order": "desc" } }]                          |
+|                                                                       |
+| }                                                                     |
++-----------------------------------------------------------------------+
+
+XBRL-to-JSON API (Financial Statements)
+
+GET https://api.sec-api.io/xbrl-to-json
+
+Returns parsed financial statements as clean JSON.
+
++-----------------------------------------------------------------------+
+| GET https://api.sec-api.io/xbrl-to-json                               |
+|                                                                       |
+| ?accession-no=0001193125-24-123456                                    |
+|                                                                       |
+| &token={SEC_API_KEY}                                                  |
+|                                                                       |
+| # Returns:                                                            |
+|                                                                       |
+| {                                                                     |
+|                                                                       |
+| "StatementsOfIncome": {                                               |
+|                                                                       |
+| "Revenues": 4200000000,                                               |
+|                                                                       |
+| "OperatingIncome": 1850000000,                                        |
+|                                                                       |
+| "NetIncome": 1420000000                                               |
+|                                                                       |
+| },                                                                    |
+|                                                                       |
+| "BalanceSheets": { ... },                                             |
+|                                                                       |
+| "StatementsOfCashFlows": { ... }                                      |
+|                                                                       |
+| }                                                                     |
++-----------------------------------------------------------------------+
+
+3.5 SEC Service Implementation
+
++--------------------------------------------------------------------------+
+| # backend/app/services/sec_api_service.py                                |
+|                                                                          |
+| import httpx                                                             |
+|                                                                          |
+| from typing import Optional, List, Dict                                  |
+|                                                                          |
+| import os                                                                |
+|                                                                          |
+| from app.models.report_context import PublicCompData, IndustryBenchmarks |
+|                                                                          |
+| SEC_API_KEY = os.getenv('SEC_API_KEY')                                   |
+|                                                                          |
+| SEC_API_BASE = 'https://api.sec-api.io'                                  |
+|                                                                          |
+| # SECRET SAUCE: Industry to public company ticker mapping                |
+|                                                                          |
+| INDUSTRY_COMPS = {                                                       |
+|                                                                          |
+| 'self_storage': ['PSA', 'EXR', 'CUBE', 'LSI', 'NSA'],                    |
+|                                                                          |
+| 'self storage': ['PSA', 'EXR', 'CUBE', 'LSI', 'NSA'],                    |
+|                                                                          |
+| 'fitness': ['PLNT', 'XPOF'],                                             |
+|                                                                          |
+| 'gym': ['PLNT', 'XPOF'],                                                 |
+|                                                                          |
+| 'car wash': ['WASH', 'DRVN'],                                            |
+|                                                                          |
+| 'restaurant': ['MCD', 'YUM', 'QSR', 'CMG'],                              |
+|                                                                          |
+| 'coffee': ['SBUX', 'BROS'],                                              |
+|                                                                          |
+| 'pet': ['CHWY', 'WOOF', 'TRUP'],                                         |
+|                                                                          |
+| 'dental': ['PDCO', 'HSIC'],                                              |
+|                                                                          |
+| }                                                                        |
+|                                                                          |
+| class SECAPIService:                                                     |
+|                                                                          |
+| @staticmethod                                                            |
+|                                                                          |
+| def get_comps_for_business(business_type: str) -> List[str]:             |
+|                                                                          |
+| """Map business type to relevant public company tickers."""              |
+|                                                                          |
+| business_lower = business_type.lower()                                   |
+|                                                                          |
+| for key, tickers in INDUSTRY_COMPS.items():                              |
+|                                                                          |
+| if key in business_lower:                                                |
+|                                                                          |
+| return tickers                                                           |
+|                                                                          |
+| return []                                                                |
+|                                                                          |
+| @staticmethod                                                            |
+|                                                                          |
+| async def get_latest_10k(ticker: str) -> Optional[Dict]:                 |
+|                                                                          |
+| """Fetch most recent 10-K filing for a ticker."""                        |
+|                                                                          |
+| query = {                                                                |
+|                                                                          |
+| "query": {"query_string": {                                              |
+|                                                                          |
+| "query": f'ticker:{ticker} AND formType:"10-K"'                          |
+|                                                                          |
+| }},                                                                      |
+|                                                                          |
+| "from": 0, "size": 1,                                                    |
+|                                                                          |
+| "sort": [{"filedAt": {"order": "desc"}}]                                 |
+|                                                                          |
+| }                                                                        |
+|                                                                          |
+| async with httpx.AsyncClient() as client:                                |
+|                                                                          |
+| resp = await client.post(                                                |
+|                                                                          |
+| SEC_API_BASE,                                                            |
+|                                                                          |
+| json=query,                                                              |
+|                                                                          |
+| headers={'Authorization': SEC_API_KEY},                                  |
+|                                                                          |
+| timeout=15.0                                                             |
+|                                                                          |
+| )                                                                        |
+|                                                                          |
+| resp.raise_for_status()                                                  |
+|                                                                          |
+| data = resp.json()                                                       |
+|                                                                          |
+| if data.get('filings'):                                                  |
+|                                                                          |
+| return data['filings'][0]                                                |
+|                                                                          |
+| return None                                                              |
++--------------------------------------------------------------------------+
+
++-----------------------------------------------------------------------+
+| @staticmethod                                                         |
+|                                                                       |
+| async def get_financials(accession_no: str) -> Optional[Dict]:        |
+|                                                                       |
+| """Get parsed financial statements from XBRL."""                      |
+|                                                                       |
+| async with httpx.AsyncClient() as client:                             |
+|                                                                       |
+| resp = await client.get(                                              |
+|                                                                       |
+| f'{SEC_API_BASE}/xbrl-to-json',                                       |
+|                                                                       |
+| params={'accession-no': accession_no, 'token': SEC_API_KEY},          |
+|                                                                       |
+| timeout=15.0                                                          |
+|                                                                       |
+| )                                                                     |
+|                                                                       |
+| resp.raise_for_status()                                               |
+|                                                                       |
+| return resp.json()                                                    |
+|                                                                       |
+| @staticmethod                                                         |
+|                                                                       |
+| async def get_industry_benchmarks(                                    |
+|                                                                       |
+| business_type: str                                                    |
+|                                                                       |
+| ) -> Optional[IndustryBenchmarks]:                                    |
+|                                                                       |
+| """                                                                   |
+|                                                                       |
+| Fetch financials for all relevant comps,                              |
+|                                                                       |
+| calculate industry averages.                                          |
+|                                                                       |
+| """                                                                   |
+|                                                                       |
+| tickers = SECAPIService.get_comps_for_business(business_type)         |
+|                                                                       |
+| if not tickers:                                                       |
+|                                                                       |
+| return None                                                           |
+|                                                                       |
+| comps = []                                                            |
+|                                                                       |
+| for ticker in tickers[:3]: # Limit to top 3 comps                     |
+|                                                                       |
+| filing = await SECAPIService.get_latest_10k(ticker)                   |
+|                                                                       |
+| if filing:                                                            |
+|                                                                       |
+| financials = await SECAPIService.get_financials(                      |
+|                                                                       |
+| filing['accessionNo']                                                 |
+|                                                                       |
+| )                                                                     |
+|                                                                       |
+| if financials:                                                        |
+|                                                                       |
+| comps.append(PublicCompData(                                          |
+|                                                                       |
+| ticker=ticker,                                                        |
+|                                                                       |
+| company_name=filing.get('companyName'),                               |
+|                                                                       |
+| fiscal_year=filing.get('fiscalYear'),                                 |
+|                                                                       |
+| revenue=financials.get('Revenues'),                                   |
+|                                                                       |
+| operating_income=financials.get('OperatingIncome'),                   |
+|                                                                       |
+| source=f'SEC 10-K FY{filing.get("fiscalYear")}'                       |
+|                                                                       |
+| ))                                                                    |
+|                                                                       |
+| # Calculate averages                                                  |
+|                                                                       |
+| if comps:                                                             |
+|                                                                       |
+| avg_margin = sum(c.operating_margin for c in comps) / len(comps)      |
+|                                                                       |
+| return IndustryBenchmarks(                                            |
+|                                                                       |
+| avg_operating_margin=avg_margin,                                      |
+|                                                                       |
+| public_comps=comps,                                                   |
+|                                                                       |
+| source='SEC 10-K filings via sec-api.io'                              |
+|                                                                       |
+| )                                                                     |
+|                                                                       |
+| return None                                                           |
++-----------------------------------------------------------------------+
+
+4. Data Models
+
+4.1 New Dataclasses
+
+Add to backend/app/models/report_context.py:
+
++-----------------------------------------------------------------------+
+| from dataclasses import dataclass                                     |
+|                                                                       |
+| from typing import Optional, List                                     |
+|                                                                       |
+| from datetime import date                                             |
+|                                                                       |
+| @dataclass                                                            |
+|                                                                       |
+| class EconomicIndicator:                                              |
+|                                                                       |
+| series_id: str                                                        |
+|                                                                       |
+| name: str                                                             |
+|                                                                       |
+| value: float                                                          |
+|                                                                       |
+| date: date                                                            |
+|                                                                       |
+| units: str                                                            |
+|                                                                       |
+| source: str = 'FRED'                                                  |
+|                                                                       |
+| @dataclass                                                            |
+|                                                                       |
+| class MacroeconomicContext:                                           |
+|                                                                       |
+| gdp_growth: Optional[EconomicIndicator] = None                        |
+|                                                                       |
+| inflation_rate: Optional[EconomicIndicator] = None                    |
+|                                                                       |
+| fed_funds_rate: Optional[EconomicIndicator] = None                    |
+|                                                                       |
+| unemployment: Optional[EconomicIndicator] = None                      |
+|                                                                       |
+| consumer_sentiment: Optional[EconomicIndicator] = None                |
+|                                                                       |
+| mortgage_rate: Optional[EconomicIndicator] = None                     |
+|                                                                       |
+| retrieved_at: str = ''                                                |
+|                                                                       |
+| @dataclass                                                            |
+|                                                                       |
+| class IndustryLaborData:                                              |
+|                                                                       |
+| naics_code: str                                                       |
+|                                                                       |
+| industry_name: str                                                    |
+|                                                                       |
+| total_employment: int                                                 |
+|                                                                       |
+| employment_change_yoy: float                                          |
+|                                                                       |
+| avg_weekly_wage: float                                                |
+|                                                                       |
+| data_period: str                                                      |
+|                                                                       |
+| source: str = 'BLS QCEW'                                              |
+|                                                                       |
+| @dataclass                                                            |
+|                                                                       |
+| class PublicCompData:                                                 |
+|                                                                       |
+| ticker: str                                                           |
+|                                                                       |
+| company_name: str                                                     |
+|                                                                       |
+| fiscal_year: int                                                      |
+|                                                                       |
+| revenue: float                                                        |
+|                                                                       |
+| operating_income: float                                               |
+|                                                                       |
+| net_income: Optional[float] = None                                    |
+|                                                                       |
+| operating_margin: Optional[float] = None                              |
+|                                                                       |
+| source: str = 'SEC 10-K'                                              |
+|                                                                       |
+| @dataclass                                                            |
+|                                                                       |
+| class IndustryBenchmarks:                                             |
+|                                                                       |
+| avg_operating_margin: float                                           |
+|                                                                       |
+| avg_revenue_growth_3yr: Optional[float] = None                        |
+|                                                                       |
+| public_comps: List[PublicCompData] = None                             |
+|                                                                       |
+| source: str = 'SEC filings'                                           |
++-----------------------------------------------------------------------+
+
+5. Environment Variables
+
+Add to Replit Secrets:
+
+  ------------------- ------------------------------------------------------------
+  Variable            Description
+
+  FRED_API_KEY        Register free at fred.stlouisfed.org/docs/api/api_key.html
+
+  BLS_API_KEY         Register free at bls.gov/developers/home.htm
+
+  SEC_API_KEY         Purchase at sec-api.io ($49/mo Starter plan)
+  ------------------- ------------------------------------------------------------
+
+6. Caching Strategy
+
+  --------------------- ------------- ------------------------------------
+  Data Type             TTL           Rationale
+
+  FRED macro context    24 hours      Most series update monthly
+
+  BLS industry data     7 days        QCEW updates quarterly
+
+  SEC 10-K filings      30 days       10-Ks filed annually
+  --------------------- ------------- ------------------------------------
+
+7. Implementation Checklist
+
+1.  Register for FRED API key (free, instant)
+
+2.  Register for BLS API key (free, instant)
+
+3.  Purchase SEC-API.io Starter plan ($49/mo)
+
+4.  Add all three API keys to Replit Secrets
+
+5.  Create dataclasses in models/report_context.py
+
+6.  Create services/fred_service.py
+
+7.  Create services/bls_service.py
+
+8.  Create services/sec_api_service.py
+
+9.  Add Redis caching layer
+
+10. Update ReportDataService.collect() to call all three services
+
+11. Update Claude prompt template with economic + comp data sections
+
+12. Test with "Self Storage in Miami" report
+
+13. Verify all citations appear (FRED, BLS QCEW, SEC 10-K)
+
++---------------------------------------------------------------------------+
+| SUCCESS CRITERIA                                                          |
+|                                                                           |
+| -   Report includes "Economic Environment" section citing FRED data       |
+|                                                                           |
+| -   Report includes "Industry Labor Market" section citing BLS QCEW       |
+|                                                                           |
+| -   Report includes "Industry Benchmarks" section citing SEC 10-K filings |
+|                                                                           |
+| -   Financial projections use actual operating margins from public comps  |
+|                                                                           |
+| -   Labor cost estimates cite BLS occupational wage data                  |
+|                                                                           |
+| -   No hallucinated statistics appear in output                           |
++---------------------------------------------------------------------------+
+
+OppGrid LLC — The Opportunity Intelligence Platform
+
+Confidential — April 2026
