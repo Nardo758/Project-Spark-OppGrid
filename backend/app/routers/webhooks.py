@@ -315,8 +315,9 @@ async def receive_apify_webhook(
             logger.warning(f"No dataset ID in Apify webhook. Body: {body}")
             raise HTTPException(status_code=400, detail="No datasetId provided")
 
-        # Guard against un-interpolated template payloads (old retries before
-        # shouldInterpolateStrings was enabled). Return 400 so Apify stops retrying.
+        # Guard against un-interpolated template payloads (legacy retries from before
+        # shouldInterpolateStrings was enabled on the Apify webhook).  Return 200 so
+        # Apify marks the dispatch as successful and stops retrying it.
         if "{" in str(dataset_id):
             logger.warning(
                 "Apify webhook payload not interpolated (legacy retry) — ignoring. "
