@@ -262,6 +262,10 @@ def start_background_jobs() -> None:
         logger.info("Started job: escrow_release")
 
     import os as _os
+    # Intentional: activate the Apify job as soon as the token is present,
+    # even if APIFY_IMPORT_JOB_ENABLED is False in config.  The flag can still
+    # be used to explicitly disable the job (e.g. in staging) by removing the
+    # token or setting APIFY_IMPORT_JOB_ENABLED=False AND unsetting APIFY_API_TOKEN.
     apify_job_enabled = settings.APIFY_IMPORT_JOB_ENABLED or bool(_os.getenv("APIFY_API_TOKEN"))
     if apify_job_enabled:
         loop.create_task(_loop("apify_import_and_analyze", settings.APIFY_IMPORT_JOB_INTERVAL_SECONDS, _apify_import_and_analyze_job))

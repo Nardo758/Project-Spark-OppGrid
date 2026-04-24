@@ -356,11 +356,14 @@ async def receive_apify_webhook(
 
         dataset_url = (
             f"https://api.apify.com/v2/datasets/{dataset_id}/items"
-            f"?format=json&clean=true&limit=1000&token={apify_token}"
+            f"?format=json&clean=true&limit=1000"
         )
 
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(dataset_url)
+            response = await client.get(
+                dataset_url,
+                headers={"Authorization": f"Bearer {apify_token}"},
+            )
             if response.status_code == 401:
                 logger.error("Apify dataset fetch unauthorised — check APIFY_API_TOKEN")
                 raise HTTPException(status_code=500, detail="Apify dataset fetch unauthorised")
