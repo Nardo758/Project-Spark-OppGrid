@@ -377,9 +377,45 @@ class GoogleScrapingService:
         signals_written = 0
 
         for result_item in all_results:
+            keyword: str = result_item.get("keyword", "")
+
+            # Handle google_search organic results
+            if "results" in result_item and "place" not in result_item:
+                for organic in result_item.get("results", []):
+                    link = organic.get("link") or ""
+                    title = organic.get("title") or "Unknown"
+                    snippet = (organic.get("snippet") or "").strip()
+                    if not snippet:
+                        continue
+                    source_id = hashlib.md5(
+                        (link or title + keyword).encode()
+                    ).hexdigest()
+                    meta = {"keyword": keyword, "job_id": job.id, "position": organic.get("position")}
+                    self.db.execute(
+                        text("""
+                            INSERT INTO scraped_data
+                                (source, source_id, content_type, title, content,
+                                 url, author, location, metadata, scraped_at)
+                            VALUES
+                                (:source, :source_id, 'web_result', :title, :content,
+                                 :url, NULL, :location, :metadata::jsonb, NOW())
+                            ON CONFLICT (source, source_id) DO NOTHING
+                        """),
+                        {
+                            "source": "serpapi_google_search",
+                            "source_id": source_id,
+                            "title": title,
+                            "content": snippet,
+                            "url": link,
+                            "location": location_name,
+                            "metadata": json.dumps(meta),
+                        },
+                    )
+                    signals_written += 1
+                continue
+
             place: Dict = result_item.get("place", {})
             reviews: List[Dict] = result_item.get("reviews", [])
-            keyword: str = result_item.get("keyword", "")
 
             place_id = place.get("data_id") or place.get("place_id")
             if not place_id:

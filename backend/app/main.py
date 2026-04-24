@@ -234,6 +234,18 @@ async def startup_event():
         logger.error(f"Failed to initialize database: {e}")
         logger.warning("Application starting without database connection. Check DATABASE_URL in Secrets.")
 
+    # Seed Google opportunity pipeline data on first run (idempotent)
+    try:
+        from app.db.database import SessionLocal
+        from app.services.startup_seeder import run_pipeline_seed
+        seed_db = SessionLocal()
+        try:
+            run_pipeline_seed(seed_db)
+        finally:
+            seed_db.close()
+    except Exception as e:
+        logger.warning("Pipeline seeder failed (non-fatal): %s", e)
+
     # Start background jobs (best-effort; will no-op if disabled)
     try:
         start_background_jobs()
