@@ -44,16 +44,9 @@ class GeneratedReportResponse(BaseModel):
     confidence_score: Optional[int] = None
     generation_time_ms: Optional[int] = None
     tokens_used: Optional[int] = None
+    economic_snapshot: Optional[dict] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
-class GeneratedReportDetail(GeneratedReportResponse):
-    content: Optional[str] = None
-    economic_snapshot: Optional[dict] = None
 
     @field_validator('economic_snapshot', mode='before')
     @classmethod
@@ -66,6 +59,13 @@ class GeneratedReportDetail(GeneratedReportResponse):
             except Exception:
                 return None
         return v
+
+    class Config:
+        from_attributes = True
+
+
+class GeneratedReportDetail(GeneratedReportResponse):
+    content: Optional[str] = None
 
     @classmethod
     def from_orm_with_snapshot(cls, obj):

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { X, Download, FileText, Lock, Loader2, CheckCircle, Printer, Mail, FileDown } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import EconomicIntelPanel, { EconomicSnapshot } from './EconomicIntelPanel'
 
 type ReportLayer = 'layer1' | 'layer2' | 'layer3'
 
@@ -11,6 +12,7 @@ type GeneratedReport = {
   report_type: string
   content: string
   created_at: string
+  economic_snapshot?: EconomicSnapshot | null
 }
 
 type ReportViewerProps = {
@@ -99,6 +101,7 @@ export default function ReportViewer({
         report_type: layer,
         content: report.content,
         created_at: report.created_at,
+        economic_snapshot: report.economic_snapshot ?? null,
       } as GeneratedReport
     },
     onSuccess: (data) => {
@@ -494,6 +497,9 @@ export default function ReportViewer({
                 className="prose prose-stone max-w-none bg-stone-50 rounded-xl p-8 border border-stone-200"
                 dangerouslySetInnerHTML={{ __html: displayReport.content }}
               />
+              {displayReport.economic_snapshot && (
+                <EconomicIntelPanel snapshot={displayReport.economic_snapshot} />
+              )}
             </div>
           ) : (
             <div className="text-center py-12">

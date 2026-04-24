@@ -228,7 +228,7 @@ def get_report(
 
 
 @router.post("/opportunity/{opportunity_id}/layer1")
-def generate_layer1_report(
+async def generate_layer1_report(
     opportunity_id: int,
     current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -247,7 +247,7 @@ def generate_layer1_report(
     - If needs payment: returns payment_required with pricing
     """
     from app.models.opportunity import Opportunity
-    from app.services.report_generator import ReportGenerator
+    from app.services.report_orchestrator import ReportOrchestrator
     
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
     if not opportunity:
@@ -274,9 +274,6 @@ def generate_layer1_report(
             "stripe_checkout_url": f"/checkout?tier=layer_1&opportunity_id={opportunity_id}",
         }
     
-    # User has quota or is eligible for free generation
-    generator = ReportGenerator(db)
-    
     # Check if report already exists
     if current_user:
         existing = db.query(GeneratedReport).filter(
@@ -287,6 +284,13 @@ def generate_layer1_report(
         ).first()
         
         if existing:
+            import json as _json
+            _snap = None
+            if existing.economic_snapshot:
+                try:
+                    _snap = _json.loads(existing.economic_snapshot)
+                except Exception:
+                    pass
             return {
                 "success": True,
                 "report_id": existing.id,
@@ -298,13 +302,23 @@ def generate_layer1_report(
                     "summary": existing.summary,
                     "content": existing.content,
                     "confidence_score": existing.confidence_score,
+                    "economic_snapshot": _snap,
                     "created_at": existing.created_at.isoformat() if existing.created_at else None,
                 }
             }
     
-    # Generate report
+    # Generate report through orchestrator (includes FRED/BLS/SEC economic data)
     demographics = opportunity.demographics if hasattr(opportunity, 'demographics') else None
-    report = generator.generate_layer1_report(opportunity, current_user, demographics)
+    orchestrator = ReportOrchestrator()
+    result = await orchestrator.generate_layer_report(
+        layer_type="layer_1",
+        opportunity=opportunity,
+        user=current_user,
+        db=db,
+        demographics=demographics,
+    )
+    report = result["report"]
+    economic_snapshot = result["economic_snapshot"]
     
     # Decrement quota if user had free allocation
     if current_user and price_cents == 0:
@@ -333,13 +347,14 @@ def generate_layer1_report(
             "content": report.content,
             "confidence_score": report.confidence_score,
             "generation_time_ms": report.generation_time_ms,
+            "economic_snapshot": economic_snapshot,
             "created_at": report.created_at.isoformat() if report.created_at else None,
         }
     }
 
 
 @router.post("/opportunity/{opportunity_id}/layer2")
-def generate_layer2_report(
+async def generate_layer2_report(
     opportunity_id: int,
     current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -354,7 +369,7 @@ def generate_layer2_report(
     - Business Members: 8 free/month + $15 overage
     """
     from app.models.opportunity import Opportunity
-    from app.services.report_generator import ReportGenerator
+    from app.services.report_orchestrator import ReportOrchestrator
     
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
     if not opportunity:
@@ -381,9 +396,6 @@ def generate_layer2_report(
             "stripe_checkout_url": f"/checkout?tier=layer_2&opportunity_id={opportunity_id}",
         }
     
-    # User has quota or is eligible for free generation
-    generator = ReportGenerator(db)
-    
     # Check if report already exists
     if current_user:
         existing = db.query(GeneratedReport).filter(
@@ -394,6 +406,13 @@ def generate_layer2_report(
         ).first()
         
         if existing:
+            import json as _json
+            _snap = None
+            if existing.economic_snapshot:
+                try:
+                    _snap = _json.loads(existing.economic_snapshot)
+                except Exception:
+                    pass
             return {
                 "success": True,
                 "report_id": existing.id,
@@ -405,13 +424,23 @@ def generate_layer2_report(
                     "summary": existing.summary,
                     "content": existing.content,
                     "confidence_score": existing.confidence_score,
+                    "economic_snapshot": _snap,
                     "created_at": existing.created_at.isoformat() if existing.created_at else None,
                 }
             }
     
-    # Generate report
+    # Generate report through orchestrator (includes FRED/BLS/SEC economic data)
     demographics = opportunity.demographics if hasattr(opportunity, 'demographics') else None
-    report = generator.generate_layer2_report(opportunity, current_user, demographics)
+    orchestrator = ReportOrchestrator()
+    result = await orchestrator.generate_layer_report(
+        layer_type="layer_2",
+        opportunity=opportunity,
+        user=current_user,
+        db=db,
+        demographics=demographics,
+    )
+    report = result["report"]
+    economic_snapshot = result["economic_snapshot"]
     
     # Decrement quota if user had free allocation
     if current_user and price_cents == 0:
@@ -440,13 +469,14 @@ def generate_layer2_report(
             "content": report.content,
             "confidence_score": report.confidence_score,
             "generation_time_ms": report.generation_time_ms,
+            "economic_snapshot": economic_snapshot,
             "created_at": report.created_at.isoformat() if report.created_at else None,
         }
     }
 
 
 @router.post("/opportunity/{opportunity_id}/layer3")
-def generate_layer3_report(
+async def generate_layer3_report(
     opportunity_id: int,
     current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -461,7 +491,7 @@ def generate_layer3_report(
     - Business Members: 3 free/month + $20 overage
     """
     from app.models.opportunity import Opportunity
-    from app.services.report_generator import ReportGenerator
+    from app.services.report_orchestrator import ReportOrchestrator
     
     opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
     if not opportunity:
@@ -488,9 +518,6 @@ def generate_layer3_report(
             "stripe_checkout_url": f"/checkout?tier=layer_3&opportunity_id={opportunity_id}",
         }
     
-    # User has quota or is eligible for free generation
-    generator = ReportGenerator(db)
-    
     # Check if report already exists
     if current_user:
         existing = db.query(GeneratedReport).filter(
@@ -501,6 +528,13 @@ def generate_layer3_report(
         ).first()
         
         if existing:
+            import json as _json
+            _snap = None
+            if existing.economic_snapshot:
+                try:
+                    _snap = _json.loads(existing.economic_snapshot)
+                except Exception:
+                    pass
             return {
                 "success": True,
                 "report_id": existing.id,
@@ -512,13 +546,23 @@ def generate_layer3_report(
                     "summary": existing.summary,
                     "content": existing.content,
                     "confidence_score": existing.confidence_score,
+                    "economic_snapshot": _snap,
                     "created_at": existing.created_at.isoformat() if existing.created_at else None,
                 }
             }
     
-    # Generate report
+    # Generate report through orchestrator (includes FRED/BLS/SEC economic data)
     demographics = opportunity.demographics if hasattr(opportunity, 'demographics') else None
-    report = generator.generate_layer3_report(opportunity, current_user, demographics)
+    orchestrator = ReportOrchestrator()
+    result = await orchestrator.generate_layer_report(
+        layer_type="layer_3",
+        opportunity=opportunity,
+        user=current_user,
+        db=db,
+        demographics=demographics,
+    )
+    report = result["report"]
+    economic_snapshot = result["economic_snapshot"]
     
     # Decrement quota if user had free allocation
     if current_user and price_cents == 0:
@@ -547,6 +591,7 @@ def generate_layer3_report(
             "content": report.content,
             "confidence_score": report.confidence_score,
             "generation_time_ms": report.generation_time_ms,
+            "economic_snapshot": economic_snapshot,
             "created_at": report.created_at.isoformat() if report.created_at else None,
         }
     }

@@ -8,8 +8,9 @@ must pass through here. This ensures that:
   3. SecretSauceInjector always builds the intelligence context block
   4. Claude always receives real data rather than inventing values
 
-Economic intelligence (FRED / BLS / SEC) is fetched in parallel and injected for
-business_plan and market_analysis report types only.
+Economic intelligence (FRED / BLS / SEC) is fetched and injected for:
+  - business_plan, market_analysis  (via the main `generate()` method)
+  - layer_1, layer_2, layer_3       (via `generate_layer_report()`)
 
 To add a new report type in the future, register it in REPORT_TYPE_MAP and
 create a generator method — the secret sauce injection is inherited automatically.
@@ -44,7 +45,7 @@ REPORT_TYPE_MAP = {
 }
 
 # Report types that receive full economic intelligence (FRED + BLS + SEC)
-ECONOMIC_INTEL_REPORT_TYPES = {"business_plan", "market_analysis"}
+ECONOMIC_INTEL_REPORT_TYPES = {"business_plan", "market_analysis", "layer_1", "layer_2", "layer_3"}
 
 
 class ReportOrchestrator:
@@ -190,6 +191,64 @@ class ReportOrchestrator:
         logger.info(f"[Orchestrator] Generation complete ({len(content)} chars)")
         economic_snapshot = self._build_economic_snapshot(macro_context, labor_data, industry_benchmarks)
         return {"content": content, "economic_snapshot": economic_snapshot}
+
+    async def generate_layer_report(
+        self,
+        layer_type: str,
+        opportunity,
+        user,
+        db: "Session",
+        demographics=None,
+    ) -> dict:
+        """
+        Generate a Layer 1/2/3 report through the full intelligence pipeline.
+
+        Fetches FRED/BLS/SEC economic data (concurrently across those three sources),
+        then generates layer-specific content via ReportGenerator, ensuring every
+        layer report gets the Economic Intelligence panel.
+
+        Returns dict with keys:
+            "report"            — the GeneratedReport ORM object saved to the DB
+            "economic_snapshot" — JSON-serialisable dict of FRED/BLS/SEC data (or None)
+        """
+        from app.services.report_generator import ReportGenerator
+
+        business_type = getattr(opportunity, "category", None) or getattr(opportunity, "title", "Business")
+        state = getattr(opportunity, "region", None) or ""
+
+        logger.info(
+            f"[Orchestrator] Starting {layer_type} for '{business_type}' (opportunity {opportunity.id})"
+        )
+
+        macro_context, labor_data, industry_benchmarks = await self._fetch_economic_intel(
+            business_type=business_type,
+            db=db,
+            state=state,
+        )
+
+        generator = ReportGenerator(db)
+        layer_method_map = {
+            "layer_1": "generate_layer1_report",
+            "layer_2": "generate_layer2_report",
+            "layer_3": "generate_layer3_report",
+        }
+        method_name = layer_method_map.get(layer_type)
+        if not method_name:
+            raise ValueError(f"Unknown layer type: {layer_type}")
+
+        generator_method = getattr(generator, method_name)
+        report = generator_method(opportunity, user, demographics)
+
+        economic_snapshot = self._build_economic_snapshot(macro_context, labor_data, industry_benchmarks)
+
+        if economic_snapshot:
+            import json as _json
+            report.economic_snapshot = _json.dumps(economic_snapshot)
+            db.commit()
+            db.refresh(report)
+            logger.info(f"[Orchestrator] Economic snapshot saved for {layer_type} report {report.id}")
+
+        return {"report": report, "economic_snapshot": economic_snapshot}
 
     async def _fetch_economic_intel(
         self, business_type: str, db: "Session", state: Optional[str] = None
