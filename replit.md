@@ -46,12 +46,24 @@ The following secrets must be configured in Replit → Secrets for full platform
 | Secret Key | Purpose | Pipeline |
 |---|---|---|
 | `SERPAPI_KEY` | Google Maps + Search scraping via SerpAPI | Google opportunity pipeline (`google_scraping_service.py`) |
+| `APIFY_API_TOKEN` | Triggers Reddit actor runs via Apify | Reddit signal pipeline (`apify_service.py`) |
+| `APIFY_WEBHOOK_SECRET` | Verifies Apify completion webhooks | Reddit webhook handler (`webhooks.py`) |
 | `BLS_API_KEY` | Bureau of Labor Statistics economic data | Economic intelligence appendix in reports |
 | `FRED_API_KEY` | Federal Reserve economic data | Economic intelligence appendix in reports |
 | `SEC_API_KEY` | SEC filings access | Market intelligence |
 | `OPPGRID_AGENT_KEY` | Internal agent authentication | Clawdbot agent API |
 
 **Google Opportunity Pipeline activation** (`SERPAPI_KEY`): Without this secret, all `GoogleScrapeJob` runs will fail with an authentication error. The key is read by `backend/app/services/serpapi_service.py` (env var name: `SERPAPI_KEY`). A startup log line confirms presence: `"SERPAPI_KEY is configured — Google opportunity pipeline is active"`. Default keyword groups (10 categories) and US metro locations (top 20 cities) are seeded automatically on first startup if the tables are empty (`backend/app/services/startup_seeder.py`).
+
+**Reddit Signal Pipeline activation** (`APIFY_API_TOKEN` + `APIFY_WEBHOOK_SECRET`):
+- Actor: `trudax/reddit-scraper-lite` (default, configured in `backend/app/services/apify_service.py`)
+- Default subreddits: `entrepreneur`, `smallbusiness`, `startups`, `sidehustle`, `business`, `mildlyinfuriating`, `firstworldproblems`, `Showerthoughts`, `somebodymakethis`, `doesanybodyelse`
+- Webhook URL to register in Apify: `https://<your-app>.replit.app/api/v1/webhook/apify`
+- Configure this webhook on the `trudax/reddit-scraper-lite` actor in Apify Console → Webhooks, set the secret to the same value as `APIFY_WEBHOOK_SECRET`
+- Trigger a run: admin `POST /api/v1/command-center/apify/reddit/run` (uses default config)
+- Daily background job auto-triggers runs when `APIFY_API_TOKEN` is present (interval: `APIFY_IMPORT_JOB_INTERVAL_SECONDS`, default 24h)
+- When Apify completes, it POSTs to the webhook → `receive_apify_webhook()` in `webhooks.py` fetches the dataset, stores items as `ScrapedSource` records, and triggers `OpportunityProcessor` in background
+- Startup log confirms status: `"APIFY_API_TOKEN + APIFY_WEBHOOK_SECRET configured — Reddit pipeline active"`
 
 ## Report Studio (`/build/reports`)
 Redesigned Report Studio page with:

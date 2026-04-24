@@ -701,6 +701,45 @@ async def run_apify_actor(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class RedditRunRequest(BaseModel):
+    subreddits: Optional[List[str]] = None
+    max_items: int = 200
+
+
+@router.post("/apify/reddit/run")
+async def run_reddit_scraper(
+    req: Optional[RedditRunRequest] = None,
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Trigger a Reddit scraper run using the trudax/reddit-scraper-lite actor.
+    Uses DEFAULT_REDDIT_SUBREDDITS and DEFAULT_REDDIT_ACTOR_INPUT when no
+    custom configuration is provided.
+
+    Apify will fire POST /api/v1/webhook/apify when the run completes.
+    Register that URL (with APIFY_WEBHOOK_SECRET) in your Apify actor webhook settings.
+    """
+    if not apify_service.is_configured():
+        raise HTTPException(status_code=400, detail="APIFY_API_TOKEN is not configured")
+
+    from app.services.apify_service import DEFAULT_REDDIT_SUBREDDITS, REDDIT_ACTOR_ID
+
+    subreddits = (req.subreddits if req else None) or DEFAULT_REDDIT_SUBREDDITS
+    max_items = req.max_items if req else 200
+
+    try:
+        run_info = apify_service.run_reddit_scraper(subreddits=subreddits, max_items=max_items)
+        return {
+            "message": "Reddit scraper run triggered",
+            "actor_id": REDDIT_ACTOR_ID,
+            "subreddits": subreddits,
+            "max_items": max_items,
+            "run": run_info,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/apify/runs")
 async def get_apify_runs(
     actor_id: Optional[str] = None,

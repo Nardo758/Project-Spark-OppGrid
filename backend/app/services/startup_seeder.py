@@ -208,10 +208,33 @@ def check_serpapi_key() -> bool:
     return False
 
 
+def check_apify_secrets() -> bool:
+    """Log whether the Apify secrets are present at startup."""
+    token = os.getenv("APIFY_API_TOKEN")
+    secret = os.getenv("APIFY_WEBHOOK_SECRET")
+    if token and secret:
+        logger.info("APIFY_API_TOKEN + APIFY_WEBHOOK_SECRET configured — Reddit pipeline active")
+        return True
+    if token and not secret:
+        logger.warning(
+            "APIFY_API_TOKEN is set but APIFY_WEBHOOK_SECRET is missing. "
+            "Reddit actor runs will succeed but webhooks cannot be verified. "
+            "Add APIFY_WEBHOOK_SECRET to Replit Secrets and configure it in the "
+            "trudax/reddit-scraper-lite actor webhook settings in Apify."
+        )
+        return False
+    logger.warning(
+        "APIFY_API_TOKEN is NOT set. "
+        "Reddit scraper jobs will fail until this Replit Secret is added."
+    )
+    return False
+
+
 def run_pipeline_seed(db: Session) -> None:
     """Run all pipeline seed operations idempotently. Safe to call on every startup."""
     try:
         check_serpapi_key()
+        check_apify_secrets()
         seed_locations(db)
         seed_keyword_groups(db)
     except Exception as exc:

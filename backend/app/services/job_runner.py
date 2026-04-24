@@ -132,22 +132,26 @@ async def _escrow_release_job(db: Session) -> dict:
 
 async def _apify_import_and_analyze_job(db: Session) -> dict:
     """
-    Fetch latest Apify dataset, import new opportunities, then run AI analysis batch.
+    Trigger a new Reddit actor run via Apify.
+
+    Apify will send a webhook (POST /api/v1/webhook/apify) when the run
+    completes; that handler fetches the dataset and passes items through
+    the OpportunityProcessor pipeline automatically.
     """
-    from app.routers.webhook import fetch_latest_apify_data
-    from app.routers.ai_analysis import analyze_batch, BatchAnalysisRequest
+    from app.services.apify_service import apify_service
 
-    actor_id = settings.APIFY_ACTOR_ID
-    import_result = await fetch_latest_apify_data(db=db, actor_id=actor_id)
+    if not apify_service.is_configured():
+        logger.warning("Apify not configured — skipping reddit import job")
+        return {"skipped": True, "reason": "APIFY_API_TOKEN not set"}
 
-    analyzed = None
-    if settings.AI_ANALYSIS_JOB_ENABLED:
-        try:
-            analyzed = await analyze_batch(BatchAnalysisRequest(limit=settings.AI_ANALYSIS_BATCH_SIZE), db=db)
-        except Exception as e:
-            analyzed = {"error": str(e)}
-
-    return {"actor_id": actor_id, "import": import_result, "analysis": analyzed}
+    try:
+        run_info = apify_service.run_reddit_scraper()
+        run_id = run_info.get("id", "unknown")
+        logger.info("Daily Reddit actor run triggered: run_id=%s", run_id)
+        return {"triggered": True, "run_id": run_id, "status": run_info.get("status")}
+    except Exception as exc:
+        logger.error("Failed to trigger Reddit actor run: %s", exc)
+        return {"triggered": False, "error": str(exc)}
 
 
 def _stripe_status_to_local(status: str | None) -> SubscriptionStatus:
@@ -257,7 +261,9 @@ def start_background_jobs() -> None:
         loop.create_task(_loop("escrow_release", settings.ESCROW_RELEASE_JOB_INTERVAL_SECONDS, _escrow_release_job))
         logger.info("Started job: escrow_release")
 
-    if settings.APIFY_IMPORT_JOB_ENABLED:
+    import os as _os
+    apify_job_enabled = settings.APIFY_IMPORT_JOB_ENABLED or bool(_os.getenv("APIFY_API_TOKEN"))
+    if apify_job_enabled:
         loop.create_task(_loop("apify_import_and_analyze", settings.APIFY_IMPORT_JOB_INTERVAL_SECONDS, _apify_import_and_analyze_job))
         logger.info("Started job: apify_import_and_analyze")
 

@@ -1,6 +1,34 @@
+import logging
 import os
-from typing import Optional
+from typing import Optional, List
 from apify_client import ApifyClient
+
+logger = logging.getLogger(__name__)
+
+REDDIT_ACTOR_ID = "trudax/reddit-scraper-lite"
+
+DEFAULT_REDDIT_SUBREDDITS: List[str] = [
+    "entrepreneur",
+    "smallbusiness",
+    "startups",
+    "sidehustle",
+    "business",
+    "mildlyinfuriating",
+    "firstworldproblems",
+    "Showerthoughts",
+    "somebodymakethis",
+    "doesanybodyelse",
+]
+
+REDDIT_ACTOR_DEFAULT_INPUT = {
+    "startUrls": [
+        {"url": f"https://www.reddit.com/r/{sub}/new/"} for sub in DEFAULT_REDDIT_SUBREDDITS
+    ],
+    "maxItems": 200,
+    "proxy": {"useApifyProxy": True},
+    "searchMode": "posts",
+}
+
 
 class ApifyService:
     def __init__(self):
@@ -191,7 +219,36 @@ class ApifyService:
         }
         
         return self.start_actor(actor_id, input_data)
-    
+
+    def run_reddit_scraper(
+        self,
+        subreddits: Optional[List[str]] = None,
+        max_items: int = 200,
+    ) -> dict:
+        """
+        Start a Reddit scraper run using the trudax/reddit-scraper-lite actor.
+
+        Uses DEFAULT_REDDIT_SUBREDDITS when no subreddits are specified.
+        Returns run info dict with id, status, defaultDatasetId.
+        """
+        target_subs = subreddits or DEFAULT_REDDIT_SUBREDDITS
+        run_input = {
+            "startUrls": [
+                {"url": f"https://www.reddit.com/r/{sub}/new/"} for sub in target_subs
+            ],
+            "maxItems": max_items,
+            "proxy": {"useApifyProxy": True},
+            "searchMode": "posts",
+        }
+        logger.info(
+            "Starting Reddit actor %s across %d subreddits (max_items=%d)",
+            REDDIT_ACTOR_ID, len(target_subs), max_items,
+        )
+        run_info = self.start_actor(REDDIT_ACTOR_ID, run_input)
+        run_id = (run_info or {}).get("id", "unknown")
+        logger.info("Reddit actor run started: run_id=%s", run_id)
+        return run_info or {}
+
     def get_run_results(self, run_id: str, limit: int = 1000) -> list:
         """Get results from an Apify run"""
         try:
