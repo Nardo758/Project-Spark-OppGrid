@@ -389,7 +389,7 @@ export default function ReportViewer({
   const hasAccess = canAccessLayer(selectedLayer)
   const existingReport = existingReportQuery.data
   const displayReport = generatedReport || existingReport
-  const isLoadingExisting = existingReportQuery.isFetching && !generatedReport
+  const isLoadingExisting = existingReportQuery.isLoading && !generatedReport
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
