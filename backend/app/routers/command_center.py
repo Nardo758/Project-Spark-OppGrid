@@ -703,7 +703,8 @@ async def run_apify_actor(
 
 class RedditRunRequest(BaseModel):
     subreddits: Optional[List[str]] = None
-    max_items: int = 200
+    keywords: Optional[List[str]] = None
+    max_items: int = 300
 
 
 @router.post("/apify/reddit/run")
@@ -722,17 +723,23 @@ async def run_reddit_scraper(
     if not apify_service.is_configured():
         raise HTTPException(status_code=400, detail="APIFY_API_TOKEN is not configured")
 
-    from app.services.apify_service import DEFAULT_REDDIT_SUBREDDITS, REDDIT_ACTOR_ID
+    from app.services.apify_service import DEFAULT_REDDIT_SUBREDDITS, REDDIT_ACTOR_ID, REDDIT_SEARCH_KEYWORDS
 
     subreddits = (req.subreddits if req else None) or DEFAULT_REDDIT_SUBREDDITS
-    max_items = req.max_items if req else 200
+    keywords = (req.keywords if req else None)
+    max_items = req.max_items if req else 300
 
     try:
-        run_info = apify_service.run_reddit_scraper(subreddits=subreddits, max_items=max_items)
+        run_info = apify_service.run_reddit_scraper(
+            subreddits=subreddits,
+            keywords=keywords,
+            max_items=max_items,
+        )
         return {
             "message": "Reddit scraper run triggered",
             "actor_id": REDDIT_ACTOR_ID,
             "subreddits": subreddits,
+            "keywords": keywords if keywords is not None else REDDIT_SEARCH_KEYWORDS,
             "max_items": max_items,
             "run": run_info,
         }

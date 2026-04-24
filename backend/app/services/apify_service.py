@@ -1,5 +1,6 @@
 import logging
 import os
+from urllib.parse import quote_plus
 from typing import Optional, List
 from apify_client import ApifyClient
 
@@ -20,11 +21,37 @@ DEFAULT_REDDIT_SUBREDDITS: List[str] = [
     "doesanybodyelse",
 ]
 
+# Pain-point / opportunity signal keywords ported from the reddit-scraper-pro task.
+# Each phrase is used as a Reddit site-wide search query so the actor surfaces
+# posts that express unmet needs, frustrations, and product requests.
+REDDIT_SEARCH_KEYWORDS: List[str] = [
+    "I wish there was",
+    "Why doesn't anyone make",
+    "There has to be a better way",
+    "I'd pay for a solution",
+    "This should exist by now",
+    "Am I the only one who",
+    "Can someone please build",
+    "So frustrating that",
+    "Does anyone else struggle with",
+    "How do you deal with",
+    "What alternatives exist for",
+    "Is there any way to",
+    "I can't believe we still",
+    "every single time",
+    "gave up on",
+]
+
+def _reddit_search_url(query: str) -> str:
+    return f"https://www.reddit.com/search/?q={quote_plus(query)}&sort=new&t=all"
+
+
 REDDIT_ACTOR_DEFAULT_INPUT = {
-    "startUrls": [
-        {"url": f"https://www.reddit.com/r/{sub}/new/"} for sub in DEFAULT_REDDIT_SUBREDDITS
-    ],
-    "maxItems": 200,
+    "startUrls": (
+        [{"url": f"https://www.reddit.com/r/{sub}/new/"} for sub in DEFAULT_REDDIT_SUBREDDITS]
+        + [{"url": _reddit_search_url(kw)} for kw in REDDIT_SEARCH_KEYWORDS]
+    ),
+    "maxItems": 300,
     "proxy": {"useApifyProxy": True},
     "searchMode": "posts",
 }
@@ -223,26 +250,33 @@ class ApifyService:
     def run_reddit_scraper(
         self,
         subreddits: Optional[List[str]] = None,
-        max_items: int = 200,
+        keywords: Optional[List[str]] = None,
+        max_items: int = 300,
     ) -> dict:
         """
         Start a Reddit scraper run using the trudax/reddit-scraper-lite actor.
 
-        Uses DEFAULT_REDDIT_SUBREDDITS when no subreddits are specified.
-        Returns run info dict with id, status, defaultDatasetId.
+        Combines subreddit browse URLs (DEFAULT_REDDIT_SUBREDDITS) with
+        site-wide Reddit search URLs for each keyword (REDDIT_SEARCH_KEYWORDS)
+        so the actor surfaces both fresh posts and pain-point signal posts.
         """
         target_subs = subreddits or DEFAULT_REDDIT_SUBREDDITS
+        target_keywords = keywords if keywords is not None else REDDIT_SEARCH_KEYWORDS
+
+        start_urls = (
+            [{"url": f"https://www.reddit.com/r/{sub}/new/"} for sub in target_subs]
+            + [{"url": _reddit_search_url(kw)} for kw in target_keywords]
+        )
+
         run_input = {
-            "startUrls": [
-                {"url": f"https://www.reddit.com/r/{sub}/new/"} for sub in target_subs
-            ],
+            "startUrls": start_urls,
             "maxItems": max_items,
             "proxy": {"useApifyProxy": True},
             "searchMode": "posts",
         }
         logger.info(
-            "Starting Reddit actor %s across %d subreddits (max_items=%d)",
-            REDDIT_ACTOR_ID, len(target_subs), max_items,
+            "Starting Reddit actor %s: %d subreddits + %d keyword searches (max_items=%d)",
+            REDDIT_ACTOR_ID, len(target_subs), len(target_keywords), max_items,
         )
         run_info = self.start_actor(REDDIT_ACTOR_ID, run_input)
         run_id = (run_info or {}).get("id", "unknown")
