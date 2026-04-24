@@ -281,6 +281,30 @@ class WebhookGateway:
                 except Exception as _score_exc:
                     logger.warning("Craigslist scoring failed for item: %s", _score_exc)
 
+            # Enrich Reddit posts with demand signal score before storage.
+            if source == "reddit":
+                try:
+                    from app.services.reddit_keyword_matrix import score_reddit_post
+                    post_text = " ".join(filter(None, [
+                        data.get("title", ""),
+                        data.get("body", data.get("selftext", data.get("text", ""))),
+                    ]))
+                    subreddit = (
+                        data.get("parsedCommunityName")
+                        or data.get("communityName", "").lstrip("r/")
+                        or data.get("subreddit", "")
+                    )
+                    reddit_score = score_reddit_post(
+                        text=post_text,
+                        subreddit=subreddit or None,
+                        upvotes=int(data.get("upVotes", data.get("score", 0)) or 0),
+                        num_comments=int(data.get("numberOfComments", data.get("numComments", 0)) or 0),
+                        flair=data.get("flair") or None,
+                    )
+                    data = {**data, "_oppgrid_signal": reddit_score}
+                except Exception as _score_exc:
+                    logger.warning("Reddit scoring failed for item: %s", _score_exc)
+
             result = self.db.execute(insert_sql, {
                 "external_id": external_id,
                 "source_type": source,
