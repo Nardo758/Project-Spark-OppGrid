@@ -1,0 +1,93 @@
+OppGrid Review Complete 🔍
+
+What OppGrid Is:
+An AI-powered opportunity discovery & business intelligence platform that helps users:
+
+1. Discover market opportunities (problems to solve)
+2. Validate business ideas with AI analysis
+3. Research markets with real data (FRED, BLS, SEC, Census)
+4. Generate professional reports (27 report types)
+5. Connect with experts and leads marketplace
+
+───
+
+Architecture Summary
+
+| Layer    | Stack                               | Status                              |
+| -------- | ----------------------------------- | ----------------------------------- |
+| Frontend | React 18 + Vite + TailwindCSS       | 95% built                           |
+| Backend  | Python FastAPI + SQLAlchemy         | 85% built (86 services, 74 routers) |
+| Database | PostgreSQL (Replit)                 | 100% ready                          |
+| AI       | DeepSeek (cheap) → Claude (polish)  | Needs API keys                      |
+| Payments | Stripe (subscriptions + per-report) | 30% wired                           |
+| Maps     | Mapbox + DOT traffic data           | Working                             |
+| Data     | FRED, BLS, SEC, Census, SerpAPI     | Partially wired                     |
+───
+
+What's Working
+
+✅ Full auth system (email, OAuth, magic link, 2FA)
+✅ Consultant Studio UI (4 tabs: Validate/Search/Location/Clone)
+✅ Report generation pipeline (ReportOrchestrator → FormulaEngine → Claude)
+✅ 27 report templates with Stripe checkout flow
+✅ Economic data integration (BLS labor costs, SEC public comps)
+✅ DOT traffic data + Mapbox live traffic
+✅ Custom polygon drawing for map analysis
+✅ Expert marketplace structure
+✅ Leads marketplace structure
+✅ Data Hub aggregation tables
+
+───
+
+Critical Gaps to Go Live
+
+1. Missing API Keys 🔴
+
+DEEPSEEK_API_KEY     ❌
+ANTHROPIC_API_KEY    ❌
+SERPAPI_KEY          ❌
+STRIPE_SECRET_KEY    ❌
+Without these, AI features and payments don't work.
+
+2. Stripe Checkout Not Complete 🔴
+
+• Checkout session endpoint exists
+• Webhook handler exists
+• Missing: Full payment flow testing, quota decrement logic
+
+3. Report Quota System 🟡
+
+• Model exists (user_report_quota.py)
+• Service exists (report_quota_service.py)
+• Missing: Full wiring to report generation endpoints
+
+4. Data Scraping Inactive 🟡
+
+• Google scraper stub exists (needs SERPAPI_KEY)
+• Reddit scraper not implemented
+• Scheduled job runner exists but not triggered
+
+───
+
+What Do You Want to Fix?
+
+Option A: Get it live fast (MVP)
+
+1. Set API keys in Replit Secrets
+2. Test Consultant Studio end-to-end
+3. Verify Stripe checkout works
+4. Deploy
+
+Option B: Fix data pipeline gaps
+
+1. Wire Google scraper (SerpAPI)
+2. Activate scheduled data jobs
+3. Populate real opportunity data
+4. Then deploy
+
+Option C: Complete payment gating
+
+1. Finish quota tracking logic
+2. Wire Stripe webhooks fully
+3. Test subscription tiers
+4. Then deploy
