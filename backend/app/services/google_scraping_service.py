@@ -1,14 +1,18 @@
+import json
+import logging
 import os
 import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, or_, case
+from sqlalchemy import desc, or_, case, text
 
 from app.models.google_scraping import (
     LocationCatalog, KeywordGroup, GoogleScrapeJob, GoogleMapsBusiness, GoogleSearchCache
 )
 from app.services.serpapi_service import SerpAPIService
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleScrapingService:
@@ -282,12 +286,24 @@ class GoogleScrapingService:
                 keyword_group.total_searches = (keyword_group.total_searches or 0) + 1
             
             self.db.commit()
-            
+
+            signals_written = self._persist_results_to_scraped_data(
+                job, all_results, location
+            )
+            logger.info(
+                "Job %s complete: %d result(s), %d signal(s) written to scraped_data",
+                job.id, len(all_results), signals_written
+            )
+
+            if signals_written > 0:
+                self._trigger_s2o(limit=min(signals_written * 10, 500))
+
             return {
                 "success": True,
                 "job_id": job.id,
                 "total_found": job.total_found,
-                "results": all_results
+                "signals_written": signals_written,
+                "results": all_results,
             }
         
         except Exception as e:
@@ -347,6 +363,136 @@ class GoogleScrapingService:
             )
             self.db.add(cache)
     
+    def _persist_results_to_scraped_data(
+        self,
+        job: GoogleScrapeJob,
+        all_results: List[Dict],
+        location: Optional[LocationCatalog],
+    ) -> int:
+        """Write scraped place and review data into the scraped_data table.
+
+        Returns the number of new rows inserted.
+        """
+        location_name = location.name if location else None
+        signals_written = 0
+
+        for result_item in all_results:
+            place: Dict = result_item.get("place", {})
+            reviews: List[Dict] = result_item.get("reviews", [])
+            keyword: str = result_item.get("keyword", "")
+
+            place_id = place.get("data_id") or place.get("place_id")
+            if not place_id:
+                continue
+
+            coords = place.get("gps_coordinates") or {}
+            lat = coords.get("latitude") if isinstance(coords, dict) else None
+            lng = coords.get("longitude") if isinstance(coords, dict) else None
+
+            business_meta = {
+                "category": keyword,
+                "rating": place.get("rating"),
+                "reviews_count": place.get("reviews"),
+                "phone": place.get("phone"),
+                "website": place.get("website"),
+                "keyword": keyword,
+                "job_id": job.id,
+            }
+
+            place_stmt = text("""
+                INSERT INTO scraped_data
+                    (source, source_id, content_type, title, content,
+                     url, author, location, latitude, longitude, metadata, scraped_at)
+                VALUES
+                    (:source, :source_id, :content_type, :title, :content,
+                     :url, :author, :location, :latitude, :longitude, :metadata::jsonb, NOW())
+                ON CONFLICT (source, source_id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    content = EXCLUDED.content,
+                    metadata = EXCLUDED.metadata,
+                    scraped_at = NOW()
+                RETURNING id
+            """)
+            self.db.execute(place_stmt, {
+                "source": "serpapi_google_maps",
+                "source_id": place_id,
+                "content_type": "business",
+                "title": place.get("title", "Unknown"),
+                "content": (
+                    f"Category: {keyword}\n"
+                    f"Rating: {place.get('rating', 'N/A')}\n"
+                    f"Reviews: {place.get('reviews', 0)}"
+                ),
+                "url": place.get("link"),
+                "author": None,
+                "location": location_name or place.get("address"),
+                "latitude": lat,
+                "longitude": lng,
+                "metadata": json.dumps(business_meta),
+            })
+            signals_written += 1
+
+            for review in reviews:
+                review_text = (review.get("snippet") or review.get("text") or "").strip()
+                if not review_text:
+                    continue
+
+                reviewer_id = review.get("user", {}).get("link", "") or review.get("user_id", "")
+                review_source_id = f"{place_id}_{reviewer_id}"
+                review_meta = {
+                    "rating": review.get("rating"),
+                    "business_name": place.get("title"),
+                    "business_category": keyword,
+                    "job_id": job.id,
+                }
+
+                review_stmt = text("""
+                    INSERT INTO scraped_data
+                        (source, source_id, content_type, title, content,
+                         url, author, location, latitude, longitude, metadata, scraped_at)
+                    VALUES
+                        (:source, :source_id, :content_type, :title, :content,
+                         :url, :author, :location, :latitude, :longitude, :metadata::jsonb, NOW())
+                    ON CONFLICT (source, source_id) DO NOTHING
+                """)
+                self.db.execute(review_stmt, {
+                    "source": "serpapi_google_maps_review",
+                    "source_id": review_source_id,
+                    "content_type": "review",
+                    "title": f"Review of {place.get('title', 'Unknown')}",
+                    "content": review_text,
+                    "url": place.get("link"),
+                    "author": (review.get("user") or {}).get("name"),
+                    "location": location_name or place.get("address"),
+                    "latitude": lat,
+                    "longitude": lng,
+                    "metadata": json.dumps(review_meta),
+                })
+                signals_written += 1
+
+        try:
+            self.db.commit()
+        except Exception as exc:
+            logger.warning("Failed to commit scraped_data rows: %s", exc)
+            self.db.rollback()
+            return 0
+
+        return signals_written
+
+    def _trigger_s2o(self, limit: int = 500) -> None:
+        """Trigger the Signal-to-Opportunity processor on freshly written scraped data."""
+        try:
+            from app.services.signal_to_opportunity import get_signal_processor
+            processor = get_signal_processor(self.db)
+            stats = processor.process_scraped_data(limit=limit)
+            logger.info(
+                "S2O processing complete: %d opportunities created from %d signals",
+                stats.get("opportunities_created", 0),
+                stats.get("total_signals", 0),
+            )
+        except Exception as exc:
+            logger.warning("S2O auto-trigger failed (non-fatal): %s", exc)
+
     def get_keyword_categories(self) -> List[str]:
         categories = self.db.query(KeywordGroup.category).distinct().filter(
             KeywordGroup.category.isnot(None),
