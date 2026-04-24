@@ -315,7 +315,13 @@ class SecretSauceInjector:
 
     @staticmethod
     def _build_labor_section(data: IndustryLaborData) -> str:
-        """Format BLS QCEW industry labor data for Claude's context block."""
+        """Format BLS QCEW / OES industry labor data for Claude's context block.
+
+        When source begins with 'BLS OES' the data is state-level; otherwise national.
+        """
+        is_state = data.source.startswith("BLS OES")
+        geo_label = "State" if is_state else "National"
+
         lines = [
             f"### Industry Labor Market — NAICS {data.naics_code}: {data.industry_name}",
             f"Source: {data.source}",
@@ -323,7 +329,7 @@ class SecretSauceInjector:
         ]
 
         if data.total_employment:
-            lines.append(f"National Employment: {data.total_employment:,} workers")
+            lines.append(f"{geo_label} Employment: {data.total_employment:,} workers")
         if data.employment_change_yoy is not None:
             direction = "▲" if data.employment_change_yoy >= 0 else "▼"
             lines.append(
@@ -332,17 +338,19 @@ class SecretSauceInjector:
         if data.avg_weekly_wage:
             annual = data.avg_weekly_wage * 52
             lines.append(
-                f"Avg Weekly Wage: ${data.avg_weekly_wage:,.0f} "
+                f"Avg Weekly Wage ({geo_label}): ${data.avg_weekly_wage:,.0f} "
                 f"(~${annual:,.0f}/year annualised)"
             )
         if data.establishment_count:
-            lines.append(f"National Establishments: {data.establishment_count:,}")
+            lines.append(f"{geo_label} Establishments: {data.establishment_count:,}")
         if data.data_period:
             lines.append(f"Data Period: {data.data_period}")
 
+        cite_as = data.source if is_state else "BLS QCEW"
         lines.append(
-            "\nIMPORTANT: Use these BLS QCEW figures when estimating staffing costs and "
-            "labour market conditions. Cite as '(BLS QCEW)' inline."
+            f"\nIMPORTANT: Use these {data.source} figures when estimating staffing costs and "
+            f"labour market conditions for this specific location. "
+            f"Cite as '({cite_as})' inline."
         )
         return "\n".join(lines)
 
@@ -419,7 +427,8 @@ class SecretSauceInjector:
             sources.append("FRED (Federal Reserve Bank of St. Louis) — macroeconomic indicators")
 
         if labor_data is not None:
-            sources.append(f"BLS QCEW — {labor_data.industry_name} industry labor data")
+            source_prefix = labor_data.source if labor_data.source else "BLS QCEW"
+            sources.append(f"{source_prefix} — {labor_data.industry_name} industry labor data")
 
         if industry_benchmarks is not None:
             tickers = ", ".join(c.ticker for c in (industry_benchmarks.public_comps or []))

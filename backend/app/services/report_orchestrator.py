@@ -132,6 +132,7 @@ class ReportOrchestrator:
             macro_context, labor_data, industry_benchmarks = await self._fetch_economic_intel(
                 business_type=category or business_type,
                 db=db,
+                state=state,
             )
 
         # ── 4. Build shared intelligence context block ───────────────────────
@@ -186,10 +187,13 @@ class ReportOrchestrator:
         logger.info(f"[Orchestrator] Generation complete ({len(content)} chars)")
         return content
 
-    async def _fetch_economic_intel(self, business_type: str, db: "Session"):
+    async def _fetch_economic_intel(
+        self, business_type: str, db: "Session", state: Optional[str] = None
+    ):
         """
         Fetch FRED macro, BLS labor, and SEC benchmark data concurrently.
         All three are fire-and-forget — any failure returns None for that source.
+        When ``state`` is provided (two-letter abbr.), BLS fetches state-level wages first.
         Returns: (macro_context, labor_data, industry_benchmarks)
         """
         try:
@@ -203,7 +207,7 @@ class ReportOrchestrator:
 
             results = await asyncio.gather(
                 fred.get_macro_context(db=db),
-                bls.get_industry_data_for_business(business_type, db=db),
+                bls.get_industry_data_for_business(business_type, db=db, state=state),
                 sec.get_industry_benchmarks(business_type, db=db),
                 return_exceptions=True,
             )

@@ -6,6 +6,14 @@ Primary source: BLS QCEW Open Data API
   Quarter: "a" for annual, or "1"/"2"/"3"/"4" for quarterly data
   Returns: employment, establishment count, wages by NAICS code
 
+State-level support:
+  The QCEW industry endpoint returns data for all geographic areas in a single response.
+  When a state abbreviation is provided, the service filters for the state-level record
+  (area_fips = "{state_fips_2digit}000", e.g. "12000" for Florida) and falls back to the
+  national total when state-level data is absent.
+  Source citation becomes "BLS OES {State} {year}" for state data, "BLS QCEW {period}"
+  for national data.
+
 Graceful degradation:
   - Returns None when BLS_API_KEY is not configured (explicit contract; same as FRED/SEC)
   - Returns None when the QCEW endpoint is unavailable (no fallback to other BLS APIs)
@@ -94,6 +102,47 @@ _MONTH_TO_QUARTER: Dict[int, int] = {
     7: 3, 8: 3, 9: 3,
     10: 4, 11: 4, 12: 4,
 }
+
+# State abbreviation → 2-digit FIPS code
+# QCEW state area FIPS = "{fips}000" (e.g. Florida = "12000")
+_STATE_FIPS: Dict[str, str] = {
+    "AL": "01", "AK": "02", "AZ": "04", "AR": "05", "CA": "06",
+    "CO": "08", "CT": "09", "DE": "10", "DC": "11", "FL": "12",
+    "GA": "13", "HI": "15", "ID": "16", "IL": "17", "IN": "18",
+    "IA": "19", "KS": "20", "KY": "21", "LA": "22", "ME": "23",
+    "MD": "24", "MA": "25", "MI": "26", "MN": "27", "MS": "28",
+    "MO": "29", "MT": "30", "NE": "31", "NV": "32", "NH": "33",
+    "NJ": "34", "NM": "35", "NY": "36", "NC": "37", "ND": "38",
+    "OH": "39", "OK": "40", "OR": "41", "PA": "42", "RI": "44",
+    "SC": "45", "SD": "46", "TN": "47", "TX": "48", "UT": "49",
+    "VT": "50", "VA": "51", "WA": "53", "WV": "54", "WI": "55",
+    "WY": "56",
+}
+
+# Full state names for source citations
+_STATE_NAMES: Dict[str, str] = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "DC": "District of Columbia", "FL": "Florida", "GA": "Georgia", "HI": "Hawaii",
+    "ID": "Idaho", "IL": "Illinois", "IN": "Indiana", "IA": "Iowa",
+    "KS": "Kansas", "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine",
+    "MD": "Maryland", "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota",
+    "MS": "Mississippi", "MO": "Missouri", "MT": "Montana", "NE": "Nebraska",
+    "NV": "Nevada", "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico",
+    "NY": "New York", "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio",
+    "OK": "Oklahoma", "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island",
+    "SC": "South Carolina", "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas",
+    "UT": "Utah", "VT": "Vermont", "VA": "Virginia", "WA": "Washington",
+    "WV": "West Virginia", "WI": "Wisconsin", "WY": "Wyoming",
+}
+
+
+def _state_area_fips(state_abbr: str) -> Optional[str]:
+    """Return the QCEW area FIPS code for the given state abbreviation (e.g. 'FL' → '12000')."""
+    if not state_abbr:
+        return None
+    fips2 = _STATE_FIPS.get(state_abbr.upper().strip())
+    return f"{fips2}000" if fips2 else None
 
 # BLS QCEW field indices in the flat data arrays
 # Column layout from QCEW API: area_fips, own_code, industry_code, agglvl_code,
@@ -197,9 +246,13 @@ class BLSService:
         self,
         business_type: str,
         db: Optional["Session"] = None,
+        state: Optional[str] = None,
     ) -> Optional[IndustryLaborData]:
         """Main entry point: looks up the NAICS code from the business type string
         and returns IndustryLaborData, or None if not mapped or key absent.
+
+        When ``state`` is a two-letter abbreviation (e.g. "FL"), the method fetches
+        state-level QCEW data first and falls back to national data automatically.
         """
         if not self._is_configured():
             logger.debug("[BLS] BLS_API_KEY not configured — skipping QCEW fetch")
@@ -211,14 +264,15 @@ class BLSService:
             return None
 
         _, _, naics_code, industry_name = mapping
-        cache_key = f"bls_qcew_{naics_code}"
+        state_upper = state.upper().strip() if state else None
+        cache_key = f"bls_qcew_{naics_code}_{state_upper}" if state_upper else f"bls_qcew_{naics_code}"
 
         if db is not None:
             cached = self._read_cache(db, cache_key)
             if cached is not None:
                 return cached
 
-        result = await self._fetch_qcew(naics_code, industry_name)
+        result = await self._fetch_qcew(naics_code, industry_name, state_abbr=state_upper)
 
         if result is not None and db is not None:
             self._write_cache(db, cache_key, result, naics_code)
@@ -229,18 +283,23 @@ class BLSService:
         self,
         naics_code: str,
         industry_name: str,
+        state_abbr: Optional[str] = None,
     ) -> Optional[IndustryLaborData]:
         """Fetch employment, wages, and establishment count from the QCEW Open Data API.
 
         URL: https://data.bls.gov/cew/data/api/{year}/{qtr}/industry/{naics_code}.json
-        Returns None on any HTTP/parse failure so caller can fall back to CES.
+        The endpoint returns data for all geographies; we filter to the requested state
+        area FIPS when ``state_abbr`` is provided, falling back to national if unavailable.
+        Returns None on any HTTP/parse failure.
         """
         year, qtr = _latest_complete_qcew_period()
         quarters_to_try: List[Tuple[int, str]] = [(year, qtr)]
-        # Also try annual data and prior year if recent quarter unavailable
         if qtr != "a":
             quarters_to_try.append((year, "a"))
         quarters_to_try.append((year - 1, "a"))
+
+        target_area_fips: Optional[str] = _state_area_fips(state_abbr) if state_abbr else None
+        state_name: Optional[str] = _STATE_NAMES.get(state_abbr.upper()) if state_abbr else None
 
         for try_year, try_qtr in quarters_to_try:
             url = f"{QCEW_BASE_URL}/{try_year}/{try_qtr}/industry/{naics_code}.json"
@@ -254,6 +313,23 @@ class BLSService:
             except Exception as exc:
                 logger.debug(f"[BLS] QCEW request failed for {url}: {exc}")
                 continue
+
+            # Try state-level first, then fall back to national
+            if target_area_fips:
+                result = self._parse_qcew_response(
+                    raw, naics_code, industry_name, try_year, try_qtr,
+                    area_fips_filter=target_area_fips, state_name=state_name,
+                )
+                if result is not None:
+                    logger.info(
+                        f"[BLS] QCEW {naics_code} {state_abbr} FY{try_year} Q{try_qtr}: "
+                        f"${result.avg_weekly_wage:,.2f}/wk (state-level)"
+                    )
+                    return result
+                logger.debug(
+                    f"[BLS] State-level data not found for {naics_code}/{state_abbr} "
+                    f"({try_year} Q{try_qtr}), falling back to national"
+                )
 
             result = self._parse_qcew_response(raw, naics_code, industry_name, try_year, try_qtr)
             if result is not None:
@@ -273,10 +349,17 @@ class BLSService:
         industry_name: str,
         year: int,
         qtr: str,
+        area_fips_filter: Optional[str] = None,
+        state_name: Optional[str] = None,
     ) -> Optional[IndustryLaborData]:
-        """Parse the QCEW API JSON response into IndustryLaborData."""
+        """Parse the QCEW API JSON response into IndustryLaborData.
+
+        When ``area_fips_filter`` is provided (e.g. "12000" for Florida), the method
+        selects the matching state-level record.  Without it, it selects the national total.
+        Returns None if no matching record is found or on parse error.
+        """
         # QCEW API returns a dict with area-code keys, each containing a list of records.
-        # For national data, the key is "US000" or similar.
+        # For national data, the key is "US000" or similar; state keys are "12000", etc.
         try:
             records: List[dict] = []
             if isinstance(raw, dict):
@@ -291,24 +374,39 @@ class BLSService:
             if not records:
                 return None
 
-            # Find national total private + government ownership record
-            # own_code: 0=total all, 5=private, 1=federal, 2=state, 3=local
-            # agglvl_code: 14=national by industry, 74=county by industry, etc.
             target_record = None
-            for rec in records:
-                own = str(rec.get("own_code", rec.get("ownCode", "")))
-                agglvl = str(rec.get("agglvl_code", rec.get("agglvlCode", "")))
-                area = str(rec.get("area_fips", rec.get("areaFips", ""))).upper()
-                # Prefer national total-all-ownerships at national industry level
-                if area.startswith("US") or area == "00000":
-                    if own in ("0", "5") and agglvl in ("14", "13", "12"):
-                        target_record = rec
-                        break
-                    elif own in ("0", "5"):
-                        target_record = rec
 
-            if target_record is None and records:
+            if area_fips_filter:
+                # State-level: match area FIPS exactly; prefer total-all-ownerships
+                # agglvl_code 51-55 = state by NAICS depth; own_code 0=total, 5=private
+                target_fips = area_fips_filter.upper()
+                for rec in records:
+                    area = str(rec.get("area_fips", rec.get("areaFips", ""))).upper()
+                    own = str(rec.get("own_code", rec.get("ownCode", "")))
+                    if area == target_fips and own in ("0", "5"):
+                        target_record = rec
+                        if own == "0":
+                            break
+            else:
+                # National: prefer US-level total-all-ownerships at industry level
+                # own_code: 0=total all, 5=private
+                # agglvl_code: 14=national by industry, 13=national 5-digit, 12=national 4-digit
+                for rec in records:
+                    own = str(rec.get("own_code", rec.get("ownCode", "")))
+                    agglvl = str(rec.get("agglvl_code", rec.get("agglvlCode", "")))
+                    area = str(rec.get("area_fips", rec.get("areaFips", ""))).upper()
+                    if area.startswith("US") or area == "00000":
+                        if own in ("0", "5") and agglvl in ("14", "13", "12"):
+                            target_record = rec
+                            break
+                        elif own in ("0", "5"):
+                            target_record = rec
+
+            if target_record is None and not area_fips_filter and records:
                 target_record = records[0]
+
+            if target_record is None:
+                return None
 
             # Extract employment (use month3 as end-of-quarter, or month1 as fallback)
             emp = (
@@ -330,6 +428,9 @@ class BLSService:
                 or 0.0
             )
 
+            if avg_wage == 0.0:
+                return None
+
             # YoY employment change pct
             yoy_pct = (
                 _safe_float(
@@ -348,7 +449,13 @@ class BLSService:
                 )
 
             period_label = f"{year} Q{qtr}" if qtr.isdigit() else f"{year} Annual"
-            period_source = f"BLS QCEW {period_label}"
+
+            # Compose source citation
+            if state_name and area_fips_filter:
+                year_str = str(year) + (" Annual" if not qtr.isdigit() else f" Q{qtr}")
+                period_source = f"BLS OES {state_name} {year_str}"
+            else:
+                period_source = f"BLS QCEW {period_label}"
 
             return IndustryLaborData(
                 naics_code=naics_code,
