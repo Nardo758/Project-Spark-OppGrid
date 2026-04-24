@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -55,16 +55,22 @@ class GeneratedReportDetail(GeneratedReportResponse):
     content: Optional[str] = None
     economic_snapshot: Optional[dict] = None
 
+    @field_validator('economic_snapshot', mode='before')
+    @classmethod
+    def parse_economic_snapshot(cls, v):
+        """Accept a JSON string (as stored in the DB Text column) or a dict."""
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except Exception:
+                return None
+        return v
+
     @classmethod
     def from_orm_with_snapshot(cls, obj):
-        import json
-        data = cls.model_validate(obj)
-        if obj.economic_snapshot:
-            try:
-                data.economic_snapshot = json.loads(obj.economic_snapshot)
-            except Exception:
-                pass
-        return data
+        """Convenience wrapper — field_validator handles JSON parsing automatically."""
+        return cls.model_validate(obj)
 
 
 class GeneratedReportList(BaseModel):
