@@ -259,6 +259,28 @@ class WebhookGateway:
                     retry_after=60
                 )
             
+            # Enrich Craigslist items with demand signal score before storage so
+            # OpportunityProcessor has the full keyword analysis immediately.
+            if source == "craigslist":
+                try:
+                    from app.services.craigslist_keyword_matrix import score_craigslist_post
+                    post_text = " ".join(filter(None, [
+                        data.get("title", ""),
+                        data.get("body", data.get("description", data.get("text", ""))),
+                    ]))
+                    cl_section = (
+                        data.get("category")
+                        or data.get("section")
+                        or data.get("subcategory", "")
+                    )
+                    cl_score = score_craigslist_post(
+                        text=post_text,
+                        category=cl_section or None,
+                    )
+                    data = {**data, "_oppgrid_signal": cl_score}
+                except Exception as _score_exc:
+                    logger.warning("Craigslist scoring failed for item: %s", _score_exc)
+
             result = self.db.execute(insert_sql, {
                 "external_id": external_id,
                 "source_type": source,

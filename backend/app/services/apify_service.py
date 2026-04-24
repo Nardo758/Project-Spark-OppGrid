@@ -61,15 +61,16 @@ CRAIGSLIST_METROS: List[str] = [
     "boston",
 ]
 
-# Craigslist "gigs" sections that expose market demand / service-request signals.
-# Each code maps to what people are paying others to do — a direct demand signal.
+# High-signal Craigslist sections ordered by priority (from craigslist_keyword_matrix).
+# "sss" (services wanted) and "ggg" (gigs) are the richest demand sources.
+# "waa" (for-sale wanted) captures product gaps; "ccc" captures raw complaints.
+# discussion_forums (/forums) excluded — requires a separate scraper (different DOM).
 CRAIGSLIST_SECTIONS: List[str] = [
-    "cpg",   # computer gigs (software/tech help wanted)
-    "crg",   # creative gigs (design/video/photo wanted)
-    "lbg",   # labor gigs (general work wanted)
-    "skg",   # skilled trades gigs (handyman/contractor wanted)
-    "wri",   # writing & editing gigs
-    "ggg",   # general gigs
+    "sss",   # services wanted — direct demand signals (critical priority)
+    "ggg",   # gigs — explicit willingness-to-pay signals (high priority)
+    "waa",   # for sale/wanted — product gaps (high priority)
+    "ccc",   # community general — raw complaints, unstructured asks (high priority)
+    "hsw",   # housing wanted — housing pain points (medium priority)
 ]
 
 # Maps Apify internal actor IDs (permanent, hash-based) to OppGrid source type strings.
