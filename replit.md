@@ -40,6 +40,19 @@ OppGrid utilizes a modern hybrid architecture with a React 18 frontend (Vite, Ta
 *   **Mapbox:** Used for map visualizations.
 *   **SBA (Small Business Administration):** Provides curated loan program data and financing course information.
 
+## Required Replit Secrets
+The following secrets must be configured in Replit → Secrets for full platform functionality:
+
+| Secret Key | Purpose | Pipeline |
+|---|---|---|
+| `SERPAPI_KEY` | Google Maps + Search scraping via SerpAPI | Google opportunity pipeline (`google_scraping_service.py`) |
+| `BLS_API_KEY` | Bureau of Labor Statistics economic data | Economic intelligence appendix in reports |
+| `FRED_API_KEY` | Federal Reserve economic data | Economic intelligence appendix in reports |
+| `SEC_API_KEY` | SEC filings access | Market intelligence |
+| `OPPGRID_AGENT_KEY` | Internal agent authentication | Clawdbot agent API |
+
+**Google Opportunity Pipeline activation** (`SERPAPI_KEY`): Without this secret, all `GoogleScrapeJob` runs will fail with an authentication error. The key is read by `backend/app/services/serpapi_service.py` (env var name: `SERPAPI_KEY`). A startup log line confirms presence: `"SERPAPI_KEY is configured — Google opportunity pipeline is active"`. Default keyword groups (10 categories) and US metro locations (top 20 cities) are seeded automatically on first startup if the tables are empty (`backend/app/services/startup_seeder.py`).
+
 ## Report Studio (`/build/reports`)
 Redesigned Report Studio page with:
 - **4 input mode tabs**: Validate Idea, Search Ideas, Identify Location, Clone Success
