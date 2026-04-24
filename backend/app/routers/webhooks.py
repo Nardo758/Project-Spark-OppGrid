@@ -371,8 +371,10 @@ async def receive_apify_webhook(
         
         if not items:
             return {"status": "success", "message": "No items in dataset", "count": 0}
-        
-        gateway = WebhookGateway(db)
+
+        # skip_hmac_validation=True: Apify path authenticates via X-Apify-Webhook-Secret
+        # so WEBHOOK_SECRET is not required here.
+        gateway = WebhookGateway(db, skip_hmac_validation=True)
         stats = {"accepted": 0, "duplicates": 0, "errors": 0}
         
         for item in items:

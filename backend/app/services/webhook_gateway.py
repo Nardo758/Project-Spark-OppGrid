@@ -64,15 +64,21 @@ class WebhookGateway:
         ],
     }
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, skip_hmac_validation: bool = False):
         self.db = db
         self.is_dev_mode = os.getenv("WEBHOOK_DEV_MODE", "0") == "1"
         self.webhook_secret = os.getenv("WEBHOOK_SECRET")
-        
+
         if not self.webhook_secret:
-            if self.is_dev_mode:
-                self.webhook_secret = "dev-mode-secret"
-                logger.debug("Using dev mode webhook secret")
+            if self.is_dev_mode or skip_hmac_validation:
+                # skip_hmac_validation is used by the Apify webhook path which
+                # authenticates independently via X-Apify-Webhook-Secret.
+                self.webhook_secret = "unused-apify-path"
+                if not self.is_dev_mode:
+                    logger.debug(
+                        "WebhookGateway initialised without WEBHOOK_SECRET "
+                        "(HMAC validation skipped — Apify webhook path)"
+                    )
             else:
                 raise ValueError(
                     "WEBHOOK_SECRET environment variable is required for production. "
