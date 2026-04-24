@@ -57,4 +57,5 @@ logs/
 sed*
 *.tmp
 *.bak
-*.orig
+*.origtest
+test-push
