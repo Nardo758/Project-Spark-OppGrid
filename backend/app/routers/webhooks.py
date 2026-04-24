@@ -376,6 +376,21 @@ async def receive_apify_webhook(
         if not items:
             return {"status": "success", "message": "No items in dataset", "count": 0}
 
+        # For Reddit sources, filter out comment-type items — they have no `title`
+        # and require parent-post context to be useful signals.
+        if source_type == "reddit":
+            posts_only = [i for i in items if i.get("dataType", "post") != "comment"]
+            skipped_comments = len(items) - len(posts_only)
+            if skipped_comments:
+                logger.info(
+                    f"Reddit dataset: skipped {skipped_comments} comments, "
+                    f"processing {len(posts_only)} posts"
+                )
+            items = posts_only
+
+        if not items:
+            return {"status": "success", "message": "No post-type items in dataset", "count": 0}
+
         # skip_hmac_validation=True: Apify path authenticates via X-Apify-Webhook-Secret
         # so WEBHOOK_SECRET is not required here.
         gateway = WebhookGateway(db, skip_hmac_validation=True)
