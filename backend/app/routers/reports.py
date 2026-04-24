@@ -721,6 +721,53 @@ def verify_report_view_token(report_id: int, token: str) -> bool:
         return False
 
 
+@router.get("/economic-preview")
+async def get_economic_preview(db: Session = Depends(get_db)):
+    """
+    Return current FRED macro indicators for display in the pre-generation UI.
+    Indicates which report types will have these indicators injected.
+    Returns gracefully if FRED_API_KEY is not configured.
+    """
+    from app.services.fred_service import FREDService
+    from app.services.report_orchestrator import ECONOMIC_INTEL_REPORT_TYPES
+
+    service = FREDService()
+    if not service.is_configured:
+        return {"available": False, "indicators": None, "report_types": list(ECONOMIC_INTEL_REPORT_TYPES)}
+
+    try:
+        ctx = await service.get_macro_context(db=db)
+    except Exception:
+        ctx = None
+
+    if ctx is None:
+        return {"available": False, "indicators": None, "report_types": list(ECONOMIC_INTEL_REPORT_TYPES)}
+
+    def _fmt(ind):
+        if ind is None:
+            return None
+        return {
+            "value": ind.value,
+            "date": ind.date.isoformat() if hasattr(ind.date, "isoformat") else str(ind.date),
+            "units": ind.units,
+            "name": ind.name,
+        }
+
+    return {
+        "available": True,
+        "retrieved_at": ctx.retrieved_at,
+        "report_types": list(ECONOMIC_INTEL_REPORT_TYPES),
+        "indicators": {
+            "fed_funds_rate": _fmt(ctx.fed_funds_rate),
+            "inflation_rate": _fmt(ctx.inflation_rate),
+            "unemployment": _fmt(ctx.unemployment),
+            "gdp_growth": _fmt(ctx.gdp_growth),
+            "consumer_sentiment": _fmt(ctx.consumer_sentiment),
+            "mortgage_rate": _fmt(ctx.mortgage_rate),
+        },
+    }
+
+
 @router.get("/public/{report_id}")
 async def get_public_report(
     report_id: int,

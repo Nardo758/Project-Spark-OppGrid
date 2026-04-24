@@ -47,6 +47,7 @@ import DOMPurify from 'dompurify'
 import { FourPsHorizontalBar, ScoreRing, OppRow } from './ConsultantResults/ResultCards'
 import { useAuthStore } from '../stores/authStore'
 import EconomicIntelPanel, { type EconomicSnapshot } from './EconomicIntelPanel'
+import EconomicPreviewCard from './EconomicPreviewCard'
 
 type InputMode = 'validate' | 'search' | 'location' | 'clone'
 
@@ -1382,6 +1383,7 @@ export default function ReportLibrary({
                             <span className="text-[#0F6E56] font-bold">$0 (included)</span>
                           </div>
                         </div>
+                        <EconomicPreviewCard reportType={intelCardReportType} />
                         {generateError && <p className="text-[10px] text-red-600">{generateError}</p>}
                         <button
                           onClick={() => handleSubscriberGenerate(intelCardReportType)}
@@ -1774,6 +1776,9 @@ export default function ReportLibrary({
                                   {report.sections.map((s, i) => (
                                     <span key={i} className="px-2.5 py-1 rounded-lg text-[10px] font-medium bg-gray-50 text-gray-500 border border-gray-100">{s}</span>
                                   ))}
+                                </div>
+                                <div className="mb-3">
+                                  <EconomicPreviewCard reportType={report.slug} />
                                 </div>
                                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
                                   <div className="flex items-center gap-4">
