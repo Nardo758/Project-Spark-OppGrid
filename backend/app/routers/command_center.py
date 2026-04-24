@@ -747,6 +747,59 @@ async def run_reddit_scraper(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CraigslistRunRequest(BaseModel):
+    metros: Optional[List[str]] = None
+    sections: Optional[List[str]] = None
+    max_items: int = 200
+
+
+@router.post("/apify/craigslist/run")
+async def run_craigslist_scraper(
+    req: Optional[CraigslistRunRequest] = None,
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Trigger a Craigslist scraper run using ivanvs~craigslist-scraper-pay-per-result.
+
+    Scrapes gig/services listings across top US metros to capture demand signals —
+    what people are actively paying to have done.  Defaults to CRAIGSLIST_METROS
+    and CRAIGSLIST_SECTIONS when no custom config is provided.
+
+    Apify will fire POST /api/v1/webhook/apify when the run completes.
+    The webhook handler automatically stores results as craigslist ScrapedSource
+    records and queues them for OpportunityProcessor.
+    """
+    if not apify_service.is_configured():
+        raise HTTPException(status_code=400, detail="APIFY_API_TOKEN is not configured")
+
+    from app.services.apify_service import (
+        CRAIGSLIST_ACTOR_ID,
+        CRAIGSLIST_METROS,
+        CRAIGSLIST_SECTIONS,
+    )
+
+    metros = (req.metros if req else None) or CRAIGSLIST_METROS
+    sections = (req.sections if req else None) or CRAIGSLIST_SECTIONS
+    max_items = req.max_items if req else 200
+
+    try:
+        run_info = apify_service.run_craigslist_scraper(
+            metros=metros,
+            sections=sections,
+            max_items=max_items,
+        )
+        return {
+            "message": "Craigslist scraper run triggered",
+            "actor_id": CRAIGSLIST_ACTOR_ID,
+            "metros": metros,
+            "sections": sections,
+            "max_items": max_items,
+            "run": run_info,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/apify/runs")
 async def get_apify_runs(
     actor_id: Optional[str] = None,

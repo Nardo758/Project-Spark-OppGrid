@@ -132,26 +132,44 @@ async def _escrow_release_job(db: Session) -> dict:
 
 async def _apify_import_and_analyze_job(db: Session) -> dict:
     """
-    Trigger a new Reddit actor run via Apify.
+    Trigger daily actor runs for all Apify scrapers.
 
-    Apify will send a webhook (POST /api/v1/webhook/apify) when the run
-    completes; that handler fetches the dataset and passes items through
-    the OpportunityProcessor pipeline automatically.
+    Currently fires:
+      • Reddit (trudax/reddit-scraper-lite) — community pain-point posts
+      • Craigslist (ivanvs~craigslist-scraper-pay-per-result) — gig/service demand
+
+    Apify sends a webhook (POST /api/v1/webhook/apify) when each run completes;
+    that handler fetches the dataset and passes items through OpportunityProcessor.
     """
     from app.services.apify_service import apify_service
 
     if not apify_service.is_configured():
-        logger.warning("Apify not configured — skipping reddit import job")
+        logger.warning("Apify not configured — skipping scraper import jobs")
         return {"skipped": True, "reason": "APIFY_API_TOKEN not set"}
 
+    results: dict = {}
+
+    # Reddit
     try:
         run_info = apify_service.run_reddit_scraper()
         run_id = run_info.get("id", "unknown")
         logger.info("Daily Reddit actor run triggered: run_id=%s", run_id)
-        return {"triggered": True, "run_id": run_id, "status": run_info.get("status")}
+        results["reddit"] = {"triggered": True, "run_id": run_id, "status": run_info.get("status")}
     except Exception as exc:
         logger.error("Failed to trigger Reddit actor run: %s", exc)
-        return {"triggered": False, "error": str(exc)}
+        results["reddit"] = {"triggered": False, "error": str(exc)}
+
+    # Craigslist
+    try:
+        run_info = apify_service.run_craigslist_scraper()
+        run_id = run_info.get("id", "unknown")
+        logger.info("Daily Craigslist actor run triggered: run_id=%s", run_id)
+        results["craigslist"] = {"triggered": True, "run_id": run_id, "status": run_info.get("status")}
+    except Exception as exc:
+        logger.error("Failed to trigger Craigslist actor run: %s", exc)
+        results["craigslist"] = {"triggered": False, "error": str(exc)}
+
+    return results
 
 
 def _stripe_status_to_local(status: str | None) -> SubscriptionStatus:

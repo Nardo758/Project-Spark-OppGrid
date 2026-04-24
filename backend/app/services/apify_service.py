@@ -7,6 +7,7 @@ from apify_client import ApifyClient
 logger = logging.getLogger(__name__)
 
 REDDIT_ACTOR_ID = "trudax/reddit-scraper-lite"
+CRAIGSLIST_ACTOR_ID = "ivanvs~craigslist-scraper-pay-per-result"
 
 DEFAULT_REDDIT_SUBREDDITS: List[str] = [
     "entrepreneur",
@@ -46,13 +47,39 @@ def _reddit_search_url(query: str) -> str:
     return f"https://www.reddit.com/search/?q={quote_plus(query)}&sort=new&t=all"
 
 
+# Top US metro Craigslist subdomains (most-populated, broadest signal coverage)
+CRAIGSLIST_METROS: List[str] = [
+    "newyork",
+    "losangeles",
+    "chicago",
+    "houston",
+    "sfbay",
+    "seattle",
+    "denver",
+    "austin",
+    "miami",
+    "boston",
+]
+
+# Craigslist "gigs" sections that expose market demand / service-request signals.
+# Each code maps to what people are paying others to do — a direct demand signal.
+CRAIGSLIST_SECTIONS: List[str] = [
+    "cpg",   # computer gigs (software/tech help wanted)
+    "crg",   # creative gigs (design/video/photo wanted)
+    "lbg",   # labor gigs (general work wanted)
+    "skg",   # skilled trades gigs (handyman/contractor wanted)
+    "wri",   # writing & editing gigs
+    "ggg",   # general gigs
+]
+
 # Maps Apify internal actor IDs (permanent, hash-based) to OppGrid source type strings.
 # Used by the webhook handler to classify incoming datasets correctly since the
 # run resource only exposes actId (hash), not the human-readable actor slug.
 ACTOR_ID_SOURCE_TYPE_MAP: dict = {
-    "oAuCIx3ItNrs2okjQ": "reddit",   # trudax/reddit-scraper-lite
-    "3XedXIRBcjfKrnsDJ": "reddit",   # trudax/reddit-scraper-pro
-    "nfp1fpt5gUlBwPcor": "twitter",  # Twitter/X Scraper Unlimited
+    "oAuCIx3ItNrs2okjQ": "reddit",       # trudax/reddit-scraper-lite
+    "3XedXIRBcjfKrnsDJ": "reddit",       # trudax/reddit-scraper-pro
+    "nfp1fpt5gUlBwPcor": "twitter",      # Twitter/X Scraper Unlimited
+    "owuUx043cdcXvJ6fa": "craigslist",   # ivanvs~craigslist-scraper-pay-per-result
 }
 
 
@@ -291,6 +318,51 @@ class ApifyService:
         run_info = self.start_actor(REDDIT_ACTOR_ID, run_input)
         run_id = (run_info or {}).get("id", "unknown")
         logger.info("Reddit actor run started: run_id=%s", run_id)
+        return run_info or {}
+
+    def run_craigslist_scraper(
+        self,
+        metros: Optional[List[str]] = None,
+        sections: Optional[List[str]] = None,
+        max_items: int = 200,
+    ) -> dict:
+        """
+        Start a Craigslist scraper run using ivanvs~craigslist-scraper-pay-per-result.
+
+        Builds startUrls from the cross-product of metro subdomains × gig sections so
+        the actor collects demand signals (what people are willing to pay for) across
+        top US cities.
+
+        Args:
+            metros:    Craigslist subdomain list (defaults to CRAIGSLIST_METROS)
+            sections:  Craigslist section codes (defaults to CRAIGSLIST_SECTIONS)
+            max_items: Maximum listings to scrape (default 200; pay-per-result actor)
+        """
+        target_metros = metros or CRAIGSLIST_METROS
+        target_sections = sections or CRAIGSLIST_SECTIONS
+
+        start_urls = [
+            {"url": f"https://{metro}.craigslist.org/search/{section}"}
+            for metro in target_metros
+            for section in target_sections
+        ]
+
+        run_input = {
+            "startUrls": start_urls,
+            "maxItems": max_items,
+            "proxy": {"useApifyProxy": True},
+        }
+
+        url_count = len(start_urls)
+        logger.info(
+            "Starting Craigslist actor %s: %d metros × %d sections = %d URLs "
+            "(max_items=%d)",
+            CRAIGSLIST_ACTOR_ID, len(target_metros), len(target_sections),
+            url_count, max_items,
+        )
+        run_info = self.start_actor(CRAIGSLIST_ACTOR_ID, run_input)
+        run_id = (run_info or {}).get("id", "unknown")
+        logger.info("Craigslist actor run started: run_id=%s", run_id)
         return run_info or {}
 
     def get_run_results(self, run_id: str, limit: int = 1000) -> list:

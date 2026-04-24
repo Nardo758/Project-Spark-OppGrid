@@ -12,6 +12,7 @@ class SourceType(str, enum.Enum):
     reddit = "reddit"
     twitter = "twitter"
     nextdoor = "nextdoor"
+    craigslist = "craigslist"
     custom = "custom"
 
 

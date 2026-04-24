@@ -40,6 +40,7 @@ class WebhookGateway:
         "reddit": SourceType.reddit,
         "twitter": SourceType.twitter,
         "nextdoor": SourceType.nextdoor,
+        "craigslist": SourceType.craigslist,
         "custom": SourceType.custom,
     }
 
@@ -49,6 +50,7 @@ class WebhookGateway:
         "reddit": ["title"],  # post_id/id and subreddit/communityName handled via FIELD_ALIASES
         "twitter": ["text"],  # tweet_id or tweetId accepted, text required
         "nextdoor": ["post_id", "neighborhood"],
+        "craigslist": ["title"],  # Craigslist listings always have a title
         "custom": ["id", "data"],
     }
 
@@ -61,6 +63,10 @@ class WebhookGateway:
             ("post_id", ["id", "parsedId"]),
             # reddit-scraper-lite uses "communityName"/"parsedCommunityName"
             ("subreddit", ["communityName", "parsedCommunityName"]),
+        ],
+        "craigslist": [
+            # ivanvs actor may use "id", "listingId", or "postingId"
+            ("id", ["listingId", "postingId", "pid"]),
         ],
     }
 
@@ -141,6 +147,16 @@ class WebhookGateway:
                 or data.get("parsedId")
             )
             return str(reddit_id) if reddit_id else None
+
+        if source == "craigslist":
+            # ivanvs actor may expose: "id", "listingId", "postingId", or "pid"
+            cl_id = (
+                data.get("id")
+                or data.get("listingId")
+                or data.get("postingId")
+                or data.get("pid")
+            )
+            return str(cl_id) if cl_id else None
 
         id_fields = {
             "google_maps": "place_id",
