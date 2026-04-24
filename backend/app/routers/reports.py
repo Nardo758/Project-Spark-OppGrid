@@ -220,6 +220,7 @@ class GeneratedReportResponse(BaseModel):
     title: Optional[str]
     summary: Optional[str]
     content: Optional[str]
+    economic_snapshot: Optional[dict] = None
     confidence_score: Optional[int]
     created_at: datetime
     completed_at: Optional[datetime]
@@ -515,7 +516,7 @@ async def generate_report(
             from app.services.report_orchestrator import ReportOrchestrator
             _orchestrator = ReportOrchestrator()
             _safe_business_type = str(business_type or "Business Opportunity").strip().strip('"').strip("'") or "Business Opportunity"
-            content = await _orchestrator.generate(
+            _gen_result = await _orchestrator.generate(
                 report_type=template.slug,
                 business_type=_safe_business_type,
                 city=city or "",
@@ -526,12 +527,15 @@ async def generate_report(
                 target_audience=None,
                 opportunity_id=request.opportunity_id,
             )
+            content = _gen_result["content"]
+            _econ_snap = _gen_result.get("economic_snapshot")
             if not content:
                 raise Exception("AI returned empty response")
             # Normalise title to "Report Name: Business in City" for orchestrated types
             _city_part = f" in {city}" if city else ""
             generated_report.title = f"{template.name}: {_safe_business_type}{_city_part}"[:255]
         else:
+            _econ_snap = None
             data_instruction = ""
             if report_data_text:
                 data_instruction = " Use the OppGrid Market Intelligence Data provided to ground your analysis in real data points. Cite specific metrics where relevant."
@@ -570,6 +574,9 @@ async def generate_report(
         generated_report.completed_at = datetime.utcnow()
         generated_report.generation_time_ms = generation_time_ms
         generated_report.confidence_score = confidence
+        if _econ_snap:
+            import json as _json
+            generated_report.economic_snapshot = _json.dumps(_econ_snap)
         
         db.commit()
         db.refresh(generated_report)
@@ -580,6 +587,14 @@ async def generate_report(
         db.commit()
         raise HTTPException(status_code=500, detail="Failed to generate report")
     
+    import json as _json
+    _snap = None
+    if generated_report.economic_snapshot:
+        try:
+            _snap = _json.loads(generated_report.economic_snapshot)
+        except Exception:
+            pass
+
     return GeneratedReportResponse(
         id=generated_report.id,
         report_type=generated_report.report_type.value,
@@ -587,6 +602,7 @@ async def generate_report(
         title=generated_report.title,
         summary=generated_report.summary,
         content=generated_report.content,
+        economic_snapshot=_snap,
         confidence_score=generated_report.confidence_score,
         created_at=generated_report.created_at,
         completed_at=generated_report.completed_at
@@ -604,6 +620,16 @@ async def get_my_reports(
         GeneratedReport.user_id == current_user.id
     ).order_by(GeneratedReport.created_at.desc()).offset(offset).limit(limit).all()
     
+    import json as _json
+
+    def _parse_snap(r):
+        if r.economic_snapshot:
+            try:
+                return _json.loads(r.economic_snapshot)
+            except Exception:
+                pass
+        return None
+
     return [GeneratedReportResponse(
         id=r.id,
         report_type=r.report_type.value,
@@ -611,6 +637,7 @@ async def get_my_reports(
         title=r.title,
         summary=r.summary,
         content=r.content,
+        economic_snapshot=_parse_snap(r),
         confidence_score=r.confidence_score,
         created_at=r.created_at,
         completed_at=r.completed_at

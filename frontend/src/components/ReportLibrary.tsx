@@ -46,6 +46,7 @@ import {
 import DOMPurify from 'dompurify'
 import { FourPsHorizontalBar, ScoreRing, OppRow } from './ConsultantResults/ResultCards'
 import { useAuthStore } from '../stores/authStore'
+import EconomicIntelPanel, { type EconomicSnapshot } from './EconomicIntelPanel'
 
 type InputMode = 'validate' | 'search' | 'location' | 'clone'
 
@@ -101,6 +102,7 @@ type GeneratedReport = {
   title?: string
   summary?: string
   content?: string
+  economic_snapshot?: EconomicSnapshot | null
   confidence_score?: number
   created_at: string
   completed_at?: string
@@ -2025,6 +2027,10 @@ export default function ReportLibrary({
                   <Loader2 className="w-6 h-6 animate-spin text-gray-400 mx-auto mb-2" />
                   <p className="text-sm text-gray-500">Report content is being generated...</p>
                 </div>
+              )}
+
+              {viewingReport.economic_snapshot && (
+                <EconomicIntelPanel snapshot={viewingReport.economic_snapshot} />
               )}
             </div>
 

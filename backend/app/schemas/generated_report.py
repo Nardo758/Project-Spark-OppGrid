@@ -53,6 +53,18 @@ class GeneratedReportResponse(BaseModel):
 
 class GeneratedReportDetail(GeneratedReportResponse):
     content: Optional[str] = None
+    economic_snapshot: Optional[dict] = None
+
+    @classmethod
+    def from_orm_with_snapshot(cls, obj):
+        import json
+        data = cls.model_validate(obj)
+        if obj.economic_snapshot:
+            try:
+                data.economic_snapshot = json.loads(obj.economic_snapshot)
+            except Exception:
+                pass
+        return data
 
 
 class GeneratedReportList(BaseModel):

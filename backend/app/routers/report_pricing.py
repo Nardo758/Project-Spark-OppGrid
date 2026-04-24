@@ -955,7 +955,7 @@ async def trigger_report_generation(
             if isinstance(_raw_biz, dict)
             else str(_raw_biz).strip().strip('"').strip("'") or "Business Opportunity"
         )
-        report_content = await orchestrator.generate(
+        _gen_result = await orchestrator.generate(
             report_type=report_type,
             business_type=_safe_biz,
             city=city,
@@ -965,6 +965,8 @@ async def trigger_report_generation(
             category=report_context.get("category"),
             target_audience=report_context.get("targetMarket"),
         )
+        report_content = _gen_result["content"]
+        _econ_snap = _gen_result.get("economic_snapshot")
         
         # Update report — normalise title to "Type: Business in City"
         _type_display = report_type.replace("_", " ").title()
@@ -980,6 +982,9 @@ async def trigger_report_generation(
         pending_report.title = f"{_type_display}: {_business_name}{_city_part}"[:255]
         pending_report.status = ReportStatus.COMPLETED
         pending_report.content = report_content
+        if _econ_snap:
+            import json as _json
+            pending_report.economic_snapshot = _json.dumps(_econ_snap)
         pending_report.completed_at = datetime.now(timezone.utc)
         db.commit()
         
@@ -1663,7 +1668,7 @@ async def generate_free_report(
 
     start_time = time.time()
     try:
-        content = await _orchestrator.generate(
+        _free_gen_result = await _orchestrator.generate(
             report_type=request_data.report_type,
             business_type=_free_business_type,
             city=_free_city,
@@ -1673,6 +1678,8 @@ async def generate_free_report(
             category=_free_category,
             target_audience=request_data.target_market,
         )
+        content = _free_gen_result["content"]
+        _free_econ_snap = _free_gen_result.get("economic_snapshot")
         if not content:
             raise Exception("AI returned empty response")
 
@@ -1692,6 +1699,9 @@ async def generate_free_report(
         report.completed_at = datetime.utcnow()
         report.generation_time_ms = generation_time_ms
         report.confidence_score = 85
+        if _free_econ_snap:
+            import json as _json
+            report.economic_snapshot = _json.dumps(_free_econ_snap)
 
         db.commit()
         db.refresh(report)
@@ -1723,6 +1733,15 @@ async def generate_free_report(
         },
     )
 
+    import json as _json
+
+    _snap_out = None
+    if report.economic_snapshot:
+        try:
+            _snap_out = _json.loads(report.economic_snapshot)
+        except Exception:
+            pass
+
     return {
         "success": True,
         "id": report.id,
@@ -1731,6 +1750,7 @@ async def generate_free_report(
         "title": report.title,
         "summary": report.summary,
         "content": report.content,
+        "economic_snapshot": _snap_out,
         "confidence_score": report.confidence_score,
         "generation_time_ms": report.generation_time_ms,
         "status": "completed",

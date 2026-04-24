@@ -4,7 +4,6 @@ from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
-
 class ReportType(str, enum.Enum):
     FEASIBILITY_STUDY = "feasibility_study"
     FEASIBILITY = "feasibility"
@@ -67,6 +66,7 @@ class GeneratedReport(Base):
     title = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
     content = Column(Text, nullable=True)
+    economic_snapshot = Column(Text, nullable=True)
     
     confidence_score = Column(Integer, nullable=True)
     

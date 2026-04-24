@@ -224,7 +224,7 @@ def get_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     
-    return report
+    return GeneratedReportDetail.from_orm_with_snapshot(report)
 
 
 @router.post("/opportunity/{opportunity_id}/layer1")

@@ -15,6 +15,7 @@ To add a new report type in the future, register it in REPORT_TYPE_MAP and
 create a generator method — the secret sauce injection is inherited automatically.
 """
 import asyncio
+import json
 import logging
 from typing import Optional, TYPE_CHECKING
 
@@ -77,11 +78,13 @@ class ReportOrchestrator:
         category: Optional[str] = None,
         target_audience: Optional[str] = None,
         opportunity_id: Optional[int] = None,
-    ) -> str:
+    ) -> dict:
         """
         Generate a report of any type with full OppGrid intelligence injection.
 
-        Returns HTML content string ready for storage / PDF rendering.
+        Returns dict with keys:
+            "content"           — HTML content string ready for storage / PDF rendering
+            "economic_snapshot" — JSON-serialisable dict of FRED/BLS/SEC data used (or None)
         Raises on generation failure (caller should catch and mark report as FAILED).
         """
         norm_type = report_type.lower().replace("-", "_")
@@ -185,7 +188,8 @@ class ReportOrchestrator:
             )
 
         logger.info(f"[Orchestrator] Generation complete ({len(content)} chars)")
-        return content
+        economic_snapshot = self._build_economic_snapshot(macro_context, labor_data, industry_benchmarks)
+        return {"content": content, "economic_snapshot": economic_snapshot}
 
     async def _fetch_economic_intel(
         self, business_type: str, db: "Session", state: Optional[str] = None
@@ -234,6 +238,66 @@ class ReportOrchestrator:
         except Exception as exc:
             logger.warning(f"[Orchestrator] Economic intel fetch failed: {exc}")
             return None, None, None
+
+    @staticmethod
+    def _build_economic_snapshot(macro_context, labor_data, industry_benchmarks) -> Optional[dict]:
+        """
+        Serialise the three economic data objects into a JSON-safe dict for DB storage.
+        Returns None when no economic data is available.
+        """
+        if not any([macro_context, labor_data, industry_benchmarks]):
+            return None
+
+        snap: dict = {}
+
+        if macro_context:
+            macro_dict: dict = {}
+            for field_name in ["fed_funds_rate", "inflation_rate", "unemployment",
+                                "consumer_sentiment", "mortgage_rate", "gdp_growth"]:
+                indicator = getattr(macro_context, field_name, None)
+                if indicator is not None:
+                    macro_dict[field_name] = {
+                        "value": indicator.value,
+                        "date": str(indicator.date),
+                        "units": indicator.units,
+                        "name": indicator.name,
+                    }
+            if macro_dict:
+                snap["macro"] = macro_dict
+                snap["macro_retrieved_at"] = macro_context.retrieved_at
+
+        if labor_data:
+            snap["labor"] = {
+                "naics_code": labor_data.naics_code,
+                "industry_name": labor_data.industry_name,
+                "total_employment": labor_data.total_employment,
+                "employment_change_yoy": labor_data.employment_change_yoy,
+                "avg_weekly_wage": labor_data.avg_weekly_wage,
+                "establishment_count": labor_data.establishment_count,
+                "data_period": labor_data.data_period,
+                "source": labor_data.source,
+            }
+
+        if industry_benchmarks:
+            comps = []
+            for c in industry_benchmarks.public_comps:
+                comps.append({
+                    "ticker": c.ticker,
+                    "company_name": c.company_name,
+                    "fiscal_year": c.fiscal_year,
+                    "revenue": c.revenue,
+                    "operating_income": c.operating_income,
+                    "operating_margin": c.operating_margin,
+                    "net_income": c.net_income,
+                })
+            snap["benchmarks"] = {
+                "avg_operating_margin": industry_benchmarks.avg_operating_margin,
+                "avg_revenue_growth_3yr": industry_benchmarks.avg_revenue_growth_3yr,
+                "public_comps": comps,
+                "source": industry_benchmarks.source,
+            }
+
+        return snap if snap else None
 
     async def _inject_business_plan_maps(
         self,
