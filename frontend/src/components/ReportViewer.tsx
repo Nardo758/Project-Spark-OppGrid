@@ -389,6 +389,7 @@ export default function ReportViewer({
   const hasAccess = canAccessLayer(selectedLayer)
   const existingReport = existingReportQuery.data
   const displayReport = generatedReport || existingReport
+  const isLoadingExisting = existingReportQuery.isFetching && !generatedReport
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -444,6 +445,11 @@ export default function ReportViewer({
               >
                 Upgrade to {config.tier}
               </a>
+            </div>
+          ) : isLoadingExisting ? (
+            <div className="flex items-center justify-center py-20 gap-3 text-stone-500">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span className="text-sm font-medium">Loading report…</span>
             </div>
           ) : displayReport ? (
             <div>

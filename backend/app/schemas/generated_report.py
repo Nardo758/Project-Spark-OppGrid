@@ -74,7 +74,7 @@ class GeneratedReportDetail(GeneratedReportResponse):
 
 
 class GeneratedReportList(BaseModel):
-    reports: List[GeneratedReportResponse]
+    reports: List[GeneratedReportDetail]
     total: int
     page: int
     page_size: int
