@@ -46,6 +46,16 @@ def _reddit_search_url(query: str) -> str:
     return f"https://www.reddit.com/search/?q={quote_plus(query)}&sort=new&t=all"
 
 
+# Maps Apify internal actor IDs (permanent, hash-based) to OppGrid source type strings.
+# Used by the webhook handler to classify incoming datasets correctly since the
+# run resource only exposes actId (hash), not the human-readable actor slug.
+ACTOR_ID_SOURCE_TYPE_MAP: dict = {
+    "oAuCIx3ItNrs2okjQ": "reddit",   # trudax/reddit-scraper-lite
+    "3XedXIRBcjfKrnsDJ": "reddit",   # trudax/reddit-scraper-pro
+    "nfp1fpt5gUlBwPcor": "twitter",  # Twitter/X Scraper Unlimited
+}
+
+
 REDDIT_ACTOR_DEFAULT_INPUT = {
     "startUrls": (
         [{"url": f"https://www.reddit.com/r/{sub}/new/"} for sub in DEFAULT_REDDIT_SUBREDDITS]

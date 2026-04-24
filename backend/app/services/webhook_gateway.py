@@ -46,10 +46,22 @@ class WebhookGateway:
     REQUIRED_FIELDS = {
         "google_maps": ["place_id", "name", "location"],
         "yelp": ["business_id", "name", "coordinates"],
-        "reddit": ["post_id", "subreddit", "title"],
+        "reddit": ["title"],  # post_id/id and subreddit/communityName handled via FIELD_ALIASES
         "twitter": ["text"],  # tweet_id or tweetId accepted, text required
         "nextdoor": ["post_id", "neighborhood"],
         "custom": ["id", "data"],
+    }
+
+    # Alternative field names accepted per source.  Each entry is a list of
+    # (canonical_name, [aliases...]) tuples.  At least one name in the group
+    # must be present for validation to pass.
+    FIELD_ALIASES: dict = {
+        "reddit": [
+            # reddit-scraper-lite uses "id"; older/custom feeds may use "post_id"
+            ("post_id", ["id", "parsedId"]),
+            # reddit-scraper-lite uses "communityName"/"parsedCommunityName"
+            ("subreddit", ["communityName", "parsedCommunityName"]),
+        ],
     }
 
     def __init__(self, db: Session):
@@ -88,9 +100,16 @@ class WebhookGateway:
         return hmac.compare_digest(expected_signature, provided_sig)
 
     def validate_schema(self, source: str, data: Dict[str, Any]) -> bool:
-        """Stage 2: Validate required fields exist"""
+        """Stage 2: Validate required fields exist (honours FIELD_ALIASES)."""
         required = self.REQUIRED_FIELDS.get(source, [])
-        return all(field in data for field in required)
+        if not all(field in data for field in required):
+            return False
+        # For each alias group, at least one name must be present
+        for _canonical, aliases in self.FIELD_ALIASES.get(source, []):
+            group = [_canonical] + aliases
+            if not any(field in data for field in group):
+                return False
+        return True
 
     def check_duplicate(self, source: str, external_id: str) -> bool:
         """Stage 3: Check for duplicate entries"""
@@ -107,10 +126,19 @@ class WebhookGateway:
             tweet_id = data.get("tweetId") or data.get("tweet_id") or data.get("id")
             return str(tweet_id) if tweet_id else None
         
+        if source == "reddit":
+            # reddit-scraper-lite: "id" (e.g. "t3_abc123") or "parsedId"
+            # older/custom feeds: "post_id"
+            reddit_id = (
+                data.get("post_id")
+                or data.get("id")
+                or data.get("parsedId")
+            )
+            return str(reddit_id) if reddit_id else None
+
         id_fields = {
             "google_maps": "place_id",
             "yelp": "business_id",
-            "reddit": "post_id",
             "nextdoor": "post_id",
             "custom": "id",
         }

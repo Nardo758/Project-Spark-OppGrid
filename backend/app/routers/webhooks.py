@@ -302,36 +302,68 @@ async def receive_apify_webhook(
     try:
         body = await request.json()
         logger.info(f"Received Apify webhook: {body.get('eventType', 'unknown')}")
-        
+
+        # Support both our flat payload template and the nested resource format.
+        # Flat (current): {"runId": "...", "actId": "...", "datasetId": "...", "status": "..."}
+        # Nested (legacy): {"resource": {"id": "...", "actId": "...", "defaultDatasetId": "..."}}
         resource = body.get("resource", {})
-        dataset_id = resource.get("defaultDatasetId")
-        actor_id = resource.get("actId", "")
-        run_id = resource.get("id", "")
-        
+        dataset_id = body.get("datasetId") or resource.get("defaultDatasetId")
+        actor_id = body.get("actId", "") or resource.get("actId", "")
+        run_id = body.get("runId") or resource.get("id", "")
+
         if not dataset_id:
             logger.warning(f"No dataset ID in Apify webhook. Body: {body}")
             raise HTTPException(status_code=400, detail="No datasetId provided")
-        
-        # Detect source type from actor ID
-        source_type = "custom"  # Default to custom for unknown actors
-        actor_lower = actor_id.lower()
-        if "twitter" in actor_lower or "tweet" in actor_lower:
-            source_type = "twitter"
-        elif "reddit" in actor_lower:
-            source_type = "reddit"
-        elif "yelp" in actor_lower:
-            source_type = "yelp"
-        elif "google" in actor_lower or "maps" in actor_lower:
-            source_type = "google_maps"
-        elif "craigslist" in actor_lower or "classifieds" in actor_lower:
-            source_type = "craigslist"
-        
-        logger.info(f"Detected source type: {source_type} from actor: {actor_id}")
-        
-        dataset_url = f"https://api.apify.com/v2/datasets/{dataset_id}/items?format=json&clean=true&limit=1000"
-        
+
+        # Guard against un-interpolated template payloads (old retries before
+        # shouldInterpolateStrings was enabled). Return 400 so Apify stops retrying.
+        if "{" in str(dataset_id):
+            logger.warning(
+                "Apify webhook payload not interpolated (legacy retry) — ignoring. "
+                f"datasetId={dataset_id}"
+            )
+            return {"status": "ignored", "reason": "un-interpolated payload (legacy retry)"}
+
+        # Detect source type from actor ID.
+        # Check the known actor-ID map first (Apify sends internal hash IDs, not slugs).
+        # Fall back to keyword matching for any actors added later.
+        from app.services.apify_service import ACTOR_ID_SOURCE_TYPE_MAP
+        if actor_id in ACTOR_ID_SOURCE_TYPE_MAP:
+            source_type = ACTOR_ID_SOURCE_TYPE_MAP[actor_id]
+        else:
+            source_type = "custom"
+            actor_lower = actor_id.lower()
+            if "twitter" in actor_lower or "tweet" in actor_lower:
+                source_type = "twitter"
+            elif "reddit" in actor_lower:
+                source_type = "reddit"
+            elif "yelp" in actor_lower:
+                source_type = "yelp"
+            elif "google" in actor_lower or "maps" in actor_lower:
+                source_type = "google_maps"
+            elif "craigslist" in actor_lower or "classifieds" in actor_lower:
+                source_type = "craigslist"
+
+        logger.info(f"Detected source type: {source_type} from actor: {actor_id}, run: {run_id}")
+
+        apify_token = os.getenv("APIFY_API_TOKEN", "")
+        if not apify_token:
+            logger.error("APIFY_API_TOKEN not configured — cannot fetch dataset items")
+            raise HTTPException(
+                status_code=500,
+                detail="APIFY_API_TOKEN not configured. Cannot fetch dataset items."
+            )
+
+        dataset_url = (
+            f"https://api.apify.com/v2/datasets/{dataset_id}/items"
+            f"?format=json&clean=true&limit=1000&token={apify_token}"
+        )
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(dataset_url)
+            if response.status_code == 401:
+                logger.error("Apify dataset fetch unauthorised — check APIFY_API_TOKEN")
+                raise HTTPException(status_code=500, detail="Apify dataset fetch unauthorised")
             response.raise_for_status()
             items = response.json()
         
