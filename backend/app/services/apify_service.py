@@ -97,7 +97,12 @@ REDDIT_ACTOR_DEFAULT_INPUT = {
 
 class ApifyService:
     def __init__(self):
-        self.token = os.getenv("APIFY_API_TOKEN")
+        # Prefer APIFY_API_TOKEN_2_Mdixon (enterprise account) when present,
+        # fall back to the original APIFY_API_TOKEN.
+        self.token = (
+            os.getenv("APIFY_API_TOKEN_2_Mdixon")
+            or os.getenv("APIFY_API_TOKEN")
+        )
         self._client: Optional[ApifyClient] = None
     
     @property
@@ -219,9 +224,20 @@ class ApifyService:
             print(f"Error fetching run {run_id}: {e}")
             return {}
     
-    def start_actor(self, actor_id: str, input_data: dict = None) -> dict:
+    def start_actor(
+        self,
+        actor_id: str,
+        input_data: dict = None,
+        max_items: Optional[int] = None,
+    ) -> dict:
         try:
-            run_info = self.client.actor(actor_id).start(run_input=input_data or {})
+            kwargs = {}
+            if max_items is not None:
+                kwargs["max_items"] = max_items
+            run_info = self.client.actor(actor_id).start(
+                run_input=input_data or {},
+                **kwargs,
+            )
             return run_info or {}
         except Exception as e:
             print(f"Error starting actor {actor_id}: {e}")
@@ -342,26 +358,26 @@ class ApifyService:
         target_metros = metros or CRAIGSLIST_METROS
         target_sections = sections or CRAIGSLIST_SECTIONS
 
-        start_urls = [
+        # Actor expects urls as array of {"url": "..."} objects (not plain strings
+        # and not startUrls).  maxItems is passed as a run-level option so the
+        # pay-per-result billing cap is respected.
+        urls = [
             {"url": f"https://{metro}.craigslist.org/search/{section}"}
             for metro in target_metros
             for section in target_sections
         ]
 
         run_input = {
-            "startUrls": start_urls,
-            "maxItems": max_items,
-            "proxy": {"useApifyProxy": True},
+            "urls": urls,
         }
 
-        url_count = len(start_urls)
         logger.info(
             "Starting Craigslist actor %s: %d metros × %d sections = %d URLs "
             "(max_items=%d)",
             CRAIGSLIST_ACTOR_ID, len(target_metros), len(target_sections),
-            url_count, max_items,
+            len(urls), max_items,
         )
-        run_info = self.start_actor(CRAIGSLIST_ACTOR_ID, run_input)
+        run_info = self.start_actor(CRAIGSLIST_ACTOR_ID, run_input, max_items=max_items)
         run_id = (run_info or {}).get("id", "unknown")
         logger.info("Craigslist actor run started: run_id=%s", run_id)
         return run_info or {}
