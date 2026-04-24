@@ -230,11 +230,68 @@ def check_apify_secrets() -> bool:
     return False
 
 
+def check_mapbox_config() -> bool:
+    """Log whether the Mapbox Access Token is present at startup."""
+    token = os.getenv("MAPBOX_ACCESS_TOKEN")
+    if token:
+        logger.info(
+            "MAPBOX_ACCESS_TOKEN configured — static map images and competitor "
+            "density maps are active for Business Plan reports."
+        )
+        return True
+    logger.warning(
+        "MAPBOX_ACCESS_TOKEN is NOT set. "
+        "Static map images will be omitted from Business Plan reports. "
+        "Add MAPBOX_ACCESS_TOKEN to Replit Secrets to enable map generation."
+    )
+    return False
+
+
+def check_census_config() -> bool:
+    """Log whether the Census API key is present at startup."""
+    key = os.getenv("CENSUS_API_KEY")
+    if key:
+        logger.info(
+            "CENSUS_API_KEY configured — demographic data enrichment "
+            "(population, income, housing) is active for opportunity scoring."
+        )
+        return True
+    logger.warning(
+        "CENSUS_API_KEY is NOT set. "
+        "Demographic enrichment will be skipped; opportunity scores will not "
+        "be adjusted for local population or income context. "
+        "Add CENSUS_API_KEY to Replit Secrets (free key at api.census.gov/data/key_signup.html)."
+    )
+    return False
+
+
+def check_deepseek_config() -> bool:
+    """Log whether the DeepSeek API key is present at startup."""
+    key = os.getenv("DEEPSEEK_API_KEY")
+    if key:
+        logger.info(
+            "DEEPSEEK_API_KEY configured — DeepSeek (deepseek-chat) is active "
+            "for data-side intelligence: signal extraction, clustering, and "
+            "market analysis before Claude's creative pass."
+        )
+        return True
+    logger.warning(
+        "DEEPSEEK_API_KEY is NOT set. "
+        "The DeepSeek coordinator will be skipped; signal extraction and "
+        "clustering will fall back to Claude-only processing (higher cost). "
+        "Add DEEPSEEK_API_KEY to Replit Secrets to enable the dual-AI pipeline."
+    )
+    return False
+
+
 def run_pipeline_seed(db: Session) -> None:
     """Run all pipeline seed operations idempotently. Safe to call on every startup."""
     try:
         check_serpapi_key()
         check_apify_secrets()
+        check_mapbox_config()
+        check_census_config()
+        check_deepseek_config()
         seed_locations(db)
         seed_keyword_groups(db)
     except Exception as exc:
