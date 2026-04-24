@@ -224,16 +224,53 @@ class ApifyService:
             print(f"Error fetching run {run_id}: {e}")
             return {}
     
+    def _build_webhook_url(self) -> Optional[str]:
+        """Return the Apify callback URL for this environment, or None if unavailable."""
+        domain = os.getenv("REPLIT_DEV_DOMAIN") or os.getenv("REPLIT_DOMAINS", "").split(",")[0].strip()
+        if not domain:
+            return None
+        return f"https://{domain}/api/v1/webhook/apify"
+
     def start_actor(
         self,
         actor_id: str,
         input_data: dict = None,
         max_items: Optional[int] = None,
+        webhook_url: Optional[str] = None,
     ) -> dict:
+        import json as _json
         try:
-            kwargs = {}
+            kwargs: dict = {}
             if max_items is not None:
                 kwargs["max_items"] = max_items
+
+            # Register a webhook so Apify POSTs the completed dataset back to us
+            # automatically rather than requiring manual polling.
+            effective_webhook = webhook_url or self._build_webhook_url()
+            if effective_webhook:
+                apify_secret = os.getenv("APIFY_WEBHOOK_SECRET", "")
+                kwargs["webhooks"] = [
+                    {
+                        "eventTypes": ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED"],
+                        "requestUrl": effective_webhook,
+                        "headersTemplate": _json.dumps(
+                            {"X-Apify-Webhook-Secret": apify_secret}
+                        ),
+                        "payloadTemplate": _json.dumps({
+                            "runId": "{{resource.id}}",
+                            "actId": "{{resource.actId}}",
+                            "datasetId": "{{resource.defaultDatasetId}}",
+                            "status": "{{resource.status}}",
+                        }),
+                        "shouldInterpolateStrings": True,
+                    }
+                ]
+                logger.info("Apify webhook registered: %s", effective_webhook)
+            else:
+                logger.warning(
+                    "REPLIT_DEV_DOMAIN not set — actor run started without webhook callback"
+                )
+
             run_info = self.client.actor(actor_id).start(
                 run_input=input_data or {},
                 **kwargs,
