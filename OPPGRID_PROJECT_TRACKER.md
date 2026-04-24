@@ -22,10 +22,97 @@
 | **Custom Report Types** | ❌ Backlog | 0% | Post-Launch Feature |
 | **Google Scraper** | ⚠️ Stub | 40% | SERPAPI_KEY + Job Scheduling |
 | **Reddit Scraper** | ❌ Missing | 0% | Not Implemented |
+| **Craigslist Scraper** | 📋 Designed | 10% | Keywords + Service TODO |
 | **Frontend-Backend Wiring** | ⚠️ Partial | 70% | Integration Testing |
 | **Production Readiness** | ⚠️ Dev Only | 30% | Optimization + Security |
 
 **Overall Progress: 72% Complete (April 1, 2026 - Phase 2A Payment Gating DONE, Phase 2B Stripe TODO)**
+
+---
+
+## 🔍 CRAIGSLIST SCRAPER DESIGN (April 24, 2026 - NEW)
+
+**Status:** 📋 **DESIGNED** (Keywords defined, service TODO)  
+**Owner:** Leon D  
+**Priority:** 🟡 MEDIUM  
+
+### Target Sections
+| Section | Signal Type |
+|---------|-------------|
+| community > general | Raw complaints, asks |
+| services > wanted | Direct demand signals |
+| gigs | What people pay for now |
+| for sale > wanted | Product gaps |
+| housing > wanted | Housing pain points |
+| discussion forums | Venting = opportunity |
+
+### Keywords by Category
+
+**💼 Work & Productivity**
+```
+"looking for someone to", "need help with", "can't find anyone who",
+"wish there was a service", "tired of", "frustrated with", "ISO",
+"seeking recommendations"
+```
+
+**💰 Money & Finance**
+```
+"affordable", "too expensive", "budget", "can't afford",
+"looking for cheaper", "payment plan", "financing", "cost of living"
+```
+
+**🏥 Health & Wellness**
+```
+"doctor won't", "insurance doesn't cover", "waiting list",
+"can't get appointment", "alternative to", "natural remedy",
+"home health", "caregiver needed"
+```
+
+**🏠 Home & Living**
+```
+"handyman needed", "contractor ghosted", "can't find", "same day",
+"emergency repair", "reliable", "trustworthy", "background checked"
+```
+
+**💻 Technology**
+```
+"doesn't work with", "no app for", "wish my phone could",
+"software that", "automation", "integrate", "sync", "broken website"
+```
+
+**🚗 Transportation**
+```
+"ride needed", "car won't", "mechanic recommendation", "shipping",
+"delivery", "moving help", "transport", "haul"
+```
+
+**📚 Education**
+```
+"tutor needed", "learn how to", "classes for", "training",
+"certification", "online course", "teach me", "mentor"
+```
+
+**🛒 Shopping & Services**
+```
+"where can I buy", "can't find in stores", "local", "same day delivery",
+"custom", "made to order", "personalized", "hard to find"
+```
+
+### Scoring Logic
+Weight posts higher when they contain:
+- **Agreement signals:** "me too", "same here", replies agreeing
+- **Urgency words:** "ASAP", "urgent", "emergency", "today"
+- **Willingness to pay:** "$", "will pay", "budget is", "how much"
+- **Repeat posts:** Same problem posted multiple times = persistent need
+- **Location specificity:** City-specific = local opportunity
+
+### Implementation Checklist
+- [ ] Create `craigslist_scraper_service.py`
+- [ ] Add keyword configs to database/settings
+- [ ] Implement scoring algorithm
+- [ ] Schedule recurring scrape jobs
+- [ ] Map scraped posts to Opportunity model
+- [ ] Add admin dashboard for scrape monitoring
 
 ---
 
