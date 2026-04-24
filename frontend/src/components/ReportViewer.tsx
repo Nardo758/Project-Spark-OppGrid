@@ -10,7 +10,7 @@ type GeneratedReport = {
   id: number
   opportunity_id: number
   report_type: string
-  content: string
+  content?: string | null
   created_at: string
   economic_snapshot?: EconomicSnapshot | null
 }
@@ -501,7 +501,7 @@ export default function ReportViewer({
               </div>
               <div
                 className="prose prose-stone max-w-none bg-stone-50 rounded-xl p-8 border border-stone-200"
-                dangerouslySetInnerHTML={{ __html: displayReport.content }}
+                dangerouslySetInnerHTML={{ __html: displayReport.content ?? '' }}
               />
               {displayReport.economic_snapshot && (
                 <EconomicIntelPanel snapshot={displayReport.economic_snapshot} />
