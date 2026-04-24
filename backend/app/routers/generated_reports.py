@@ -757,11 +757,20 @@ def export_report_pdf(
     generated_at = report.created_at.strftime("%B %d, %Y") if report.created_at else None
     title = report.title or "OppGrid Report"
 
+    economic_snapshot = None
+    if report.economic_snapshot:
+        try:
+            import json as _json
+            economic_snapshot = _json.loads(report.economic_snapshot)
+        except Exception:
+            economic_snapshot = None
+
     pdf_bytes = generate_pdf(
         html_content=report.content,
         title=title,
         report_type=type_label,
         generated_at=generated_at,
+        economic_snapshot=economic_snapshot,
     )
 
     safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)[:60]
@@ -804,11 +813,20 @@ def export_report_docx(
     generated_at = report.created_at.strftime("%B %d, %Y") if report.created_at else None
     title = report.title or "OppGrid Report"
 
+    economic_snapshot = None
+    if report.economic_snapshot:
+        try:
+            import json as _json
+            economic_snapshot = _json.loads(report.economic_snapshot)
+        except Exception:
+            economic_snapshot = None
+
     docx_bytes = generate_docx(
         html_content=report.content,
         title=title,
         report_type=type_label,
         generated_at=generated_at,
+        economic_snapshot=economic_snapshot,
     )
 
     safe_title = "".join(c if c.isalnum() or c in " -_" else "" for c in title)[:60]

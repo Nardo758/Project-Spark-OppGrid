@@ -14,6 +14,7 @@ Design System (matches oppgrid.com):
 
 import html
 import io
+import json
 import re
 from datetime import datetime
 from typing import Optional
@@ -48,6 +49,371 @@ SLATE_400_RGB = RGBColor(0x94, 0xA3, 0xB8)
 SLATE_200 = "#E2E8F0"
 SLATE_100 = "#F1F5F9"
 SLATE_50 = "#F8FAFC"
+
+
+# ── Economic snapshot helpers ─────────────────────────────────────────
+
+_MACRO_LABELS: dict[str, str] = {
+    "fed_funds_rate": "Fed Funds Rate",
+    "inflation_rate": "CPI Index",
+    "unemployment": "Unemployment Rate",
+    "consumer_sentiment": "Consumer Sentiment",
+    "mortgage_rate": "30-Yr Mortgage Rate",
+    "gdp_growth": "GDP Growth",
+}
+
+
+def _fmt_indicator(value: float, units: str) -> str:
+    if "%" in units or "percent" in units.lower():
+        return f"{value:.2f}%"
+    if "index" in units.lower() or "ratio" in units.lower():
+        return f"{value:.1f}"
+    return f"{value:.2f}"
+
+
+def _fmt_revenue(value: float) -> str:
+    if value >= 1e9:
+        return f"${value / 1e9:.2f}B"
+    if value >= 1e6:
+        return f"${value / 1e6:.1f}M"
+    if value >= 1e3:
+        return f"${value / 1e3:.0f}K"
+    return f"${value:.0f}"
+
+
+def _fmt_employment(value: float) -> str:
+    if value >= 1e6:
+        return f"{value / 1e6:.2f}M"
+    if value >= 1e3:
+        return f"{value / 1e3:.1f}K"
+    return f"{int(value):,}"
+
+
+def _economic_snapshot_html(snapshot: dict) -> str:
+    """Render economic snapshot data as an HTML appendix section for PDF export."""
+    parts: list[str] = [
+        '<div class="section" style="page-break-before: always;">',
+        "<h1>Economic Intelligence</h1>",
+        f'<p style="font-size:9pt; color:{SLATE_500}; margin-bottom:12px;">'
+        "Live macro indicators, labor data, and public-comp benchmarks that grounded this report.</p>",
+    ]
+
+    macro: dict = snapshot.get("macro") or {}
+    if macro:
+        parts.append(f"<h2>Macroeconomic Environment</h2>")
+        parts.append(
+            f'<p style="font-size:8pt; color:{SLATE_400}; margin-bottom:6px;">'
+            "Source: FRED / Federal Reserve</p>"
+        )
+        parts.append("<table>")
+        parts.append("<tr><th>Indicator</th><th>Value</th><th>As Of</th></tr>")
+        for key, indicator in macro.items():
+            if not indicator:
+                continue
+            label = _MACRO_LABELS.get(key, key.replace("_", " ").title())
+            value = indicator.get("value")
+            units = indicator.get("units", "")
+            date_str = indicator.get("date", "")
+            if value is None:
+                continue
+            formatted = _fmt_indicator(float(value), units)
+            date_display = ""
+            if date_str:
+                try:
+                    d = datetime.fromisoformat(date_str[:10])
+                    date_display = d.strftime("%b %Y")
+                except Exception:
+                    date_display = date_str[:7]
+            parts.append(
+                f"<tr><td>{html.escape(label)}</td>"
+                f"<td><strong>{html.escape(formatted)}</strong></td>"
+                f"<td>{html.escape(date_display)}</td></tr>"
+            )
+        parts.append("</table>")
+
+    labor: dict | None = snapshot.get("labor")
+    if labor:
+        industry = html.escape(labor.get("industry_name", ""))
+        source = html.escape(labor.get("source", "BLS"))
+        naics = html.escape(str(labor.get("naics_code", "")))
+        period = html.escape(str(labor.get("data_period", "")))
+        emp = float(labor.get("total_employment", 0))
+        yoy = float(labor.get("employment_change_yoy", 0))
+        wage = float(labor.get("avg_weekly_wage", 0))
+        estab = float(labor.get("establishment_count", 0))
+        sign = "+" if yoy >= 0 else ""
+        parts.append(f"<h2>Labor Market — {industry}</h2>")
+        parts.append(
+            f'<p style="font-size:8pt; color:{SLATE_400}; margin-bottom:6px;">{source}</p>'
+        )
+        parts.append("<table>")
+        parts.append("<tr><th>Metric</th><th>Value</th></tr>")
+        parts.append(f"<tr><td>Total Employment</td><td>{_fmt_employment(emp)} workers nationally</td></tr>")
+        parts.append(f"<tr><td>YoY Employment Change</td><td>{sign}{yoy:.1f}%</td></tr>")
+        parts.append(f"<tr><td>Avg Weekly Wage</td><td>${wage:,.0f} / week</td></tr>")
+        if estab > 0:
+            parts.append(f"<tr><td>Establishments</td><td>{_fmt_employment(estab)} businesses</td></tr>")
+        parts.append("</table>")
+        parts.append(
+            f'<p style="font-size:8.5pt; color:{SLATE_400}; margin-top:4px;">'
+            f"NAICS {naics} &middot; {period}</p>"
+        )
+
+    benchmarks: dict | None = snapshot.get("benchmarks")
+    if benchmarks and benchmarks.get("public_comps"):
+        avg_margin = float(benchmarks.get("avg_operating_margin", 0))
+        avg_growth = benchmarks.get("avg_revenue_growth_3yr")
+        source = html.escape(benchmarks.get("source", "SEC 10-K filings via sec-api.io"))
+        comps: list[dict] = benchmarks["public_comps"]
+        parts.append("<h2>Public-Comp Benchmarks</h2>")
+        parts.append(
+            f'<p style="font-size:8pt; color:{SLATE_400}; margin-bottom:6px;">{source}</p>'
+        )
+        parts.append("<table>")
+        parts.append("<tr><th>Metric</th><th>Value</th></tr>")
+        parts.append(f"<tr><td>Avg Operating Margin</td><td><strong>{avg_margin * 100:.1f}%</strong></td></tr>")
+        if avg_growth is not None:
+            g_sign = "+" if float(avg_growth) >= 0 else ""
+            parts.append(f"<tr><td>3-Yr Revenue CAGR</td><td>{g_sign}{float(avg_growth) * 100:.1f}%</td></tr>")
+        parts.append("</table>")
+        parts.append("<h3>Comparable Companies</h3>")
+        parts.append("<table>")
+        parts.append("<tr><th>Ticker</th><th>Company</th><th>FY</th><th>Revenue</th><th>Op. Income</th><th>Margin</th></tr>")
+        for comp in comps:
+            ticker = html.escape(str(comp.get("ticker", "")))
+            company = html.escape(str(comp.get("company_name", "")))
+            fy = comp.get("fiscal_year", "")
+            rev = float(comp.get("revenue", 0))
+            op_inc = float(comp.get("operating_income", 0))
+            margin = comp.get("operating_margin")
+            margin_str = f"{float(margin) * 100:.1f}%" if margin is not None else "&mdash;"
+            parts.append(
+                f"<tr>"
+                f"<td><strong>{ticker}</strong></td>"
+                f"<td>{company}</td>"
+                f"<td>{fy}</td>"
+                f"<td>{_fmt_revenue(rev)}</td>"
+                f"<td>{_fmt_revenue(op_inc)}</td>"
+                f"<td>{margin_str}</td>"
+                f"</tr>"
+            )
+        parts.append("</table>")
+
+    parts.append("</div>")
+    return "\n".join(parts)
+
+
+def _add_economic_snapshot_docx(doc: Document, snapshot: dict) -> None:
+    """Append an Economic Intelligence appendix to an open DOCX document."""
+
+    def _label_row(table, label: str, value: str, zebra: bool = False) -> None:
+        row = table.add_row()
+        for cell, text in zip(row.cells, [label, value]):
+            cell.text = text
+            if zebra:
+                _set_cell_shading(cell, SLATE_50)
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.font.size = Pt(9.5)
+                    run.font.color.rgb = SLATE_700_RGB
+                    run.font.name = "Arial"
+
+    page_break = doc.add_paragraph()
+    from docx.oxml.ns import qn as _qn
+    from docx.oxml import OxmlElement
+    run = page_break.add_run()
+    br = OxmlElement("w:br")
+    br.set(_qn("w:type"), "page")
+    run._r.append(br)
+
+    _add_heading(doc, "Economic Intelligence", level=1)
+    intro = doc.add_paragraph()
+    run = intro.add_run(
+        "Live macro indicators, labor data, and public-comp benchmarks that grounded this report."
+    )
+    run.font.size = Pt(9)
+    run.font.color.rgb = SLATE_500_RGB
+    run.font.name = "Arial"
+    intro.paragraph_format.space_after = Pt(10)
+
+    macro: dict = snapshot.get("macro") or {}
+    if macro:
+        _add_heading(doc, "Macroeconomic Environment", level=2)
+        src_para = doc.add_paragraph()
+        src_run = src_para.add_run("Source: FRED / Federal Reserve")
+        src_run.font.size = Pt(8)
+        src_run.font.color.rgb = SLATE_400_RGB
+        src_run.font.name = "Arial"
+        src_para.paragraph_format.space_after = Pt(4)
+
+        table = doc.add_table(rows=1, cols=3)
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        hdr = table.rows[0]
+        for cell, text in zip(hdr.cells, ["Indicator", "Value", "As Of"]):
+            cell.text = text
+            _set_cell_shading(cell, NAVY)
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.bold = True
+                    run.font.size = Pt(9.5)
+                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                    run.font.name = "Arial"
+
+        for i, (key, indicator) in enumerate(macro.items()):
+            if not indicator:
+                continue
+            value = indicator.get("value")
+            if value is None:
+                continue
+            label = _MACRO_LABELS.get(key, key.replace("_", " ").title())
+            units = indicator.get("units", "")
+            formatted = _fmt_indicator(float(value), units)
+            date_str = indicator.get("date", "")
+            date_display = ""
+            if date_str:
+                try:
+                    d = datetime.fromisoformat(date_str[:10])
+                    date_display = d.strftime("%b %Y")
+                except Exception:
+                    date_display = date_str[:7]
+            row = table.add_row()
+            values = [label, formatted, date_display]
+            for j, (cell, text) in enumerate(zip(row.cells, values)):
+                cell.text = text
+                if i % 2 == 1:
+                    _set_cell_shading(cell, SLATE_50)
+                for p in cell.paragraphs:
+                    for run in p.runs:
+                        run.font.size = Pt(9.5)
+                        run.font.color.rgb = SLATE_700_RGB
+                        run.font.name = "Arial"
+                        if j == 1:
+                            run.bold = True
+        doc.add_paragraph()
+
+    labor: dict | None = snapshot.get("labor")
+    if labor:
+        industry = labor.get("industry_name", "")
+        source = labor.get("source", "BLS")
+        naics = str(labor.get("naics_code", ""))
+        period = str(labor.get("data_period", ""))
+        emp = float(labor.get("total_employment", 0))
+        yoy = float(labor.get("employment_change_yoy", 0))
+        wage = float(labor.get("avg_weekly_wage", 0))
+        estab = float(labor.get("establishment_count", 0))
+        sign = "+" if yoy >= 0 else ""
+
+        _add_heading(doc, f"Labor Market — {industry}", level=2)
+        src_para = doc.add_paragraph()
+        src_run = src_para.add_run(source)
+        src_run.font.size = Pt(8)
+        src_run.font.color.rgb = SLATE_400_RGB
+        src_run.font.name = "Arial"
+        src_para.paragraph_format.space_after = Pt(4)
+
+        table = doc.add_table(rows=1, cols=2)
+        table.style = "Table Grid"
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        hdr = table.rows[0]
+        for cell, text in zip(hdr.cells, ["Metric", "Value"]):
+            cell.text = text
+            _set_cell_shading(cell, NAVY)
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.bold = True
+                    run.font.size = Pt(9.5)
+                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                    run.font.name = "Arial"
+
+        rows = [
+            ("Total Employment", f"{_fmt_employment(emp)} workers nationally"),
+            ("YoY Employment Change", f"{sign}{yoy:.1f}%"),
+            ("Avg Weekly Wage", f"${wage:,.0f} / week"),
+        ]
+        if estab > 0:
+            rows.append(("Establishments", f"{_fmt_employment(estab)} businesses"))
+        for i, (lbl, val) in enumerate(rows):
+            _label_row(table, lbl, val, zebra=(i % 2 == 1))
+
+        naics_para = doc.add_paragraph()
+        naics_run = naics_para.add_run(f"NAICS {naics} · {period}")
+        naics_run.font.size = Pt(8)
+        naics_run.font.color.rgb = SLATE_400_RGB
+        naics_run.font.name = "Arial"
+        naics_para.paragraph_format.space_after = Pt(8)
+
+    benchmarks: dict | None = snapshot.get("benchmarks")
+    if benchmarks and benchmarks.get("public_comps"):
+        avg_margin = float(benchmarks.get("avg_operating_margin", 0))
+        avg_growth = benchmarks.get("avg_revenue_growth_3yr")
+        source = benchmarks.get("source", "SEC 10-K filings via sec-api.io")
+        comps: list[dict] = benchmarks["public_comps"]
+
+        _add_heading(doc, "Public-Comp Benchmarks", level=2)
+        src_para = doc.add_paragraph()
+        src_run = src_para.add_run(source)
+        src_run.font.size = Pt(8)
+        src_run.font.color.rgb = SLATE_400_RGB
+        src_run.font.name = "Arial"
+        src_para.paragraph_format.space_after = Pt(4)
+
+        summary_table = doc.add_table(rows=1, cols=2)
+        summary_table.style = "Table Grid"
+        summary_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        hdr = summary_table.rows[0]
+        for cell, text in zip(hdr.cells, ["Metric", "Value"]):
+            cell.text = text
+            _set_cell_shading(cell, NAVY)
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.bold = True
+                    run.font.size = Pt(9.5)
+                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                    run.font.name = "Arial"
+        _label_row(summary_table, "Avg Operating Margin", f"{avg_margin * 100:.1f}%", zebra=False)
+        if avg_growth is not None:
+            g_sign = "+" if float(avg_growth) >= 0 else ""
+            _label_row(summary_table, "3-Yr Revenue CAGR", f"{g_sign}{float(avg_growth) * 100:.1f}%", zebra=True)
+        doc.add_paragraph()
+
+        _add_heading(doc, "Comparable Companies", level=3)
+        comp_table = doc.add_table(rows=1, cols=6)
+        comp_table.style = "Table Grid"
+        comp_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        hdr = comp_table.rows[0]
+        for cell, text in zip(hdr.cells, ["Ticker", "Company", "FY", "Revenue", "Op. Income", "Margin"]):
+            cell.text = text
+            _set_cell_shading(cell, NAVY)
+            for p in cell.paragraphs:
+                for run in p.runs:
+                    run.bold = True
+                    run.font.size = Pt(9)
+                    run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                    run.font.name = "Arial"
+
+        for i, comp in enumerate(comps):
+            ticker = str(comp.get("ticker", ""))
+            company = str(comp.get("company_name", ""))
+            fy = str(comp.get("fiscal_year", ""))
+            rev = float(comp.get("revenue", 0))
+            op_inc = float(comp.get("operating_income", 0))
+            margin = comp.get("operating_margin")
+            margin_str = f"{float(margin) * 100:.1f}%" if margin is not None else "—"
+            row = comp_table.add_row()
+            values = [ticker, company, fy, _fmt_revenue(rev), _fmt_revenue(op_inc), margin_str]
+            for j, (cell, text) in enumerate(zip(row.cells, values)):
+                cell.text = text
+                if i % 2 == 1:
+                    _set_cell_shading(cell, SLATE_50)
+                for p in cell.paragraphs:
+                    for run in p.runs:
+                        run.font.size = Pt(9)
+                        run.font.color.rgb = SLATE_700_RGB
+                        run.font.name = "Arial"
+                        if j == 0:
+                            run.bold = True
+        doc.add_paragraph()
 
 
 # ── PDF template ──────────────────────────────────────────────────────
@@ -315,12 +681,15 @@ def generate_pdf(
     title: str = "OppGrid Report",
     report_type: str = "Report",
     generated_at: Optional[str] = None,
+    economic_snapshot: Optional[dict] = None,
 ) -> bytes:
     """Convert HTML report content to an institutionally branded PDF."""
     if not generated_at:
         generated_at = datetime.utcnow().strftime("%B %d, %Y")
 
     html_content = _ensure_html(html_content)
+    if economic_snapshot:
+        html_content = html_content + "\n" + _economic_snapshot_html(economic_snapshot)
     full_html = _branded_html_wrapper(html_content, title, report_type, generated_at)
 
     buffer = io.BytesIO()
@@ -401,6 +770,7 @@ def generate_docx(
     title: str = "OppGrid Report",
     report_type: str = "Report",
     generated_at: Optional[str] = None,
+    economic_snapshot: Optional[dict] = None,
 ) -> bytes:
     """Convert HTML report content to an institutionally branded DOCX file."""
     if not generated_at:
@@ -487,6 +857,10 @@ def generate_docx(
     soup = BeautifulSoup(html_content, "html.parser")
     for element in soup.children:
         _process_element(doc, element)
+
+    # ── Economic Intelligence appendix ──
+    if economic_snapshot:
+        _add_economic_snapshot_docx(doc, economic_snapshot)
 
     buffer = io.BytesIO()
     doc.save(buffer)
