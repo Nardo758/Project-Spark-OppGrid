@@ -43,4 +43,5 @@ pytest-cov>=4.1.0
 
 # Logging & Monitoring
 structlog>=23.1.0
-python-json-logger>=2.0.0nest_asyncio>=1.5.6
+python-json-logger>=2.0.0
+nest_asyncio>=1.5.6
