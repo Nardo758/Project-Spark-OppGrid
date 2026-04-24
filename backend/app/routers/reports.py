@@ -588,12 +588,15 @@ async def generate_report(
         raise HTTPException(status_code=500, detail="Failed to generate report")
     
     import json as _json
+    import logging as _logging
     _snap = None
     if generated_report.economic_snapshot:
         try:
             _snap = _json.loads(generated_report.economic_snapshot)
         except Exception:
-            pass
+            _logging.getLogger(__name__).warning(
+                "Failed to parse economic_snapshot for report %s", generated_report.id
+            )
 
     return GeneratedReportResponse(
         id=generated_report.id,
@@ -621,13 +624,15 @@ async def get_my_reports(
     ).order_by(GeneratedReport.created_at.desc()).offset(offset).limit(limit).all()
     
     import json as _json
+    import logging as _logging
+    _snap_logger = _logging.getLogger(__name__)
 
     def _parse_snap(r):
         if r.economic_snapshot:
             try:
                 return _json.loads(r.economic_snapshot)
             except Exception:
-                pass
+                _snap_logger.warning("Failed to parse economic_snapshot for report %s", r.id)
         return None
 
     return [GeneratedReportResponse(

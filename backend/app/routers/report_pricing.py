@@ -1734,13 +1734,16 @@ async def generate_free_report(
     )
 
     import json as _json
+    import logging as _logging
 
     _snap_out = None
     if report.economic_snapshot:
         try:
             _snap_out = _json.loads(report.economic_snapshot)
         except Exception:
-            pass
+            _logging.getLogger(__name__).warning(
+                "Failed to parse economic_snapshot for free report %s", report.id
+            )
 
     return {
         "success": True,

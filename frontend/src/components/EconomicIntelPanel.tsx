@@ -81,7 +81,7 @@ function fmtEmployment(value: number): string {
 
 const MACRO_LABELS: Record<string, { label: string; description: string }> = {
   fed_funds_rate: { label: 'Fed Funds Rate', description: 'Federal Reserve benchmark rate' },
-  inflation_rate: { label: 'Inflation (CPI YoY)', description: 'Consumer Price Index year-over-year' },
+  inflation_rate: { label: 'CPI Index (1982-84=100)', description: 'Consumer Price Index level — raw series CPIAUCSL as injected into report' },
   unemployment: { label: 'Unemployment Rate', description: 'U.S. national unemployment' },
   consumer_sentiment: { label: 'Consumer Sentiment', description: 'University of Michigan Index' },
   mortgage_rate: { label: '30-Yr Mortgage Rate', description: 'Average fixed mortgage rate' },
