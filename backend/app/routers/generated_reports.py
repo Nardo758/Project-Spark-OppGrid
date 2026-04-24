@@ -762,8 +762,8 @@ def export_report_pdf(
         try:
             import json as _json
             economic_snapshot = _json.loads(report.economic_snapshot)
-        except Exception:
-            economic_snapshot = None
+        except Exception as exc:
+            logger.warning("Failed to parse economic_snapshot for report %s (PDF export): %s", report_id, exc)
 
     pdf_bytes = generate_pdf(
         html_content=report.content,
@@ -818,8 +818,8 @@ def export_report_docx(
         try:
             import json as _json
             economic_snapshot = _json.loads(report.economic_snapshot)
-        except Exception:
-            economic_snapshot = None
+        except Exception as exc:
+            logger.warning("Failed to parse economic_snapshot for report %s (DOCX export): %s", report_id, exc)
 
     docx_bytes = generate_docx(
         html_content=report.content,
