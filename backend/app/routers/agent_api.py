@@ -1,13 +1,18 @@
 """
-Agent API Endpoints — AI Agent access to opportunities data.
+Agent API Endpoints — AI Agent access to opportunities data with Phase 3 Intelligence Layer.
 
-Three endpoints for searching, fetching details, and batch analyzing opportunities.
-All endpoints require X-Agent-Key header for authentication and are rate-limited to 1000 qpm.
+Endpoints with AI Intelligence:
+  GET  /api/v1/agents/opportunities/search - Search opportunities with intelligent ranking
+  GET  /api/v1/agents/opportunities/{id} - Get opportunity detail with predictive analysis
+  POST /api/v1/agents/opportunities/batch-analyze - Batch analyze opportunities with risk/momentum
+  GET  /api/v1/agents/trends/{vertical} - Analyze trend momentum and acceleration
+  GET  /api/v1/agents/markets/{vertical}/{city}/insights - Market health and saturation analysis
 
-Endpoints:
-  GET  /api/v1/agents/opportunities/search - Search opportunities with filters
-  GET  /api/v1/agents/opportunities/{id} - Get opportunity detail
-  POST /api/v1/agents/opportunities/batch-analyze - Batch analyze opportunities
+All endpoints include:
+- Confidence intervals (how sure are we?)
+- Data freshness (how old is the data?)
+- Predictive insights (what's likely to succeed RIGHT NOW?)
+- Risk profiles (what could go wrong?)
 """
 import time
 import logging
@@ -34,6 +39,7 @@ from app.schemas.agent_opportunities import (
     BatchAnalysisItem,
     ApiMetadata,
 )
+from app.services.intelligence_engine import IntelligenceEngine
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -131,7 +137,7 @@ def _get_trend_direction(opportunity: Opportunity) -> str:
 @router.get(
     "/api/v1/agents/opportunities/search",
     response_model=OpportunitiesSearchResponse,
-    summary="Search opportunities with filters",
+    summary="Search opportunities with intelligent ranking",
     tags=["Agent API"],
 )
 def search_opportunities(
@@ -139,25 +145,31 @@ def search_opportunities(
     city: Optional[str] = Query(None, description="City filter"),
     min_market_size: Optional[int] = Query(None, ge=0, description="Minimum market size in millions"),
     max_competition: Optional[str] = Query(None, description="Maximum competition level (low|medium|high)"),
-    sort_by: Optional[str] = Query("created_at", description="Sort field: created_at|score|validation_count"),
+    sort_by: Optional[str] = Query("success_probability", description="Sort field: created_at|score|success_probability"),
     limit: int = Query(50, ge=1, le=500, description="Result limit"),
     offset: int = Query(0, ge=0, description="Result offset"),
     api_key: APIKey = Depends(get_agent_api_key_with_rate_limit),
     db: Session = Depends(get_db),
 ) -> OpportunitiesSearchResponse:
     """
-    Search opportunities with optional filters.
+    Search opportunities with intelligent ranking by predicted success probability.
+    
+    Results are ranked by "How likely is this to succeed RIGHT NOW?" using Phase 3 AI Intelligence.
     
     Query Parameters:
     - vertical: Filter by category (e.g., "SaaS", "E-Commerce")
     - city: Filter by city name
     - min_market_size: Minimum market size in millions USD
     - max_competition: Maximum competition level (low|medium|high)
-    - sort_by: Sort field (created_at, score, validation_count)
+    - sort_by: Sort field (created_at, score, success_probability) - default is success_probability
     - limit: Results per page (1-500, default 50)
     - offset: Pagination offset (default 0)
     
-    Returns: List of opportunities matching filters with confidence scores.
+    Returns: Opportunities ranked by predicted success with:
+    - success_probability: Likelihood to succeed RIGHT NOW (0-100)
+    - confidence_interval: How confident are we? (0-100)
+    - data_freshness_hours: Age of underlying data (hours)
+    - trend_momentum: Is this trend accelerating, decelerating, or stable?
     """
     start_time = time.time()
     
@@ -187,25 +199,34 @@ def search_opportunities(
                 query = query.filter(
                     Opportunity.ai_competition_level.in_(["low", "medium", None])
                 )
-            # "high" would include all
-        
-        # Sort
-        if sort_by == "score":
-            query = query.order_by(Opportunity.ai_opportunity_score.desc())
-        elif sort_by == "validation_count":
-            query = query.order_by(Opportunity.validation_count.desc())
-        else:  # created_at (default)
-            query = query.order_by(Opportunity.created_at.desc())
         
         # Get total count before pagination
         total_count = query.count()
         
-        # Paginate
-        opportunities = query.limit(limit).offset(offset).all()
+        # Get all matching opportunities (we'll sort them intelligently)
+        opportunities = query.all()
         
-        # Build response
-        data = [
-            OpportunitySummary(
+        # Use intelligence engine for ranking
+        intelligence = IntelligenceEngine(db)
+        ranked = intelligence.rank_opportunities(opportunities)
+        
+        # Sort by specified field
+        if sort_by == "created_at":
+            ranked.sort(key=lambda x: x[0].created_at, reverse=True)
+        elif sort_by == "score":
+            ranked.sort(key=lambda x: x[0].ai_opportunity_score or 0, reverse=True)
+        else:  # success_probability (default)
+            ranked.sort(key=lambda x: x[1].score, reverse=True)
+        
+        # Paginate after sorting
+        paginated = ranked[offset:offset + limit]
+        
+        # Build response with intelligence insights
+        data = []
+        for opp, intelligence_score in paginated:
+            momentum = intelligence.trend_analyzer.analyze_momentum(opp)
+            
+            data.append(OpportunitySummary(
                 id=opp.id,
                 title=opp.title,
                 category=opp.category,
@@ -215,10 +236,12 @@ def search_opportunities(
                 competition_level=opp.ai_competition_level or "unknown",
                 demand_signals=_get_demand_signals(opp),
                 confidence_score=_calculate_confidence_score(opp),
+                success_probability=intelligence_score.score,
+                confidence_interval=intelligence_score.confidence,
+                data_freshness_hours=intelligence_score.data_freshness_hours,
+                trend_momentum=momentum.direction,
                 created_at=opp.created_at,
-            )
-            for opp in opportunities
-        ]
+            ))
         
         execution_time = int((time.time() - start_time) * 1000)
         
@@ -228,7 +251,7 @@ def search_opportunities(
         )
     
     except Exception as e:
-        logger.error(f"Search opportunities error: {e}")
+        logger.error(f"Search opportunities error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to search opportunities",
@@ -238,7 +261,7 @@ def search_opportunities(
 @router.get(
     "/api/v1/agents/opportunities/{opportunity_id}",
     response_model=OpportunityDetailResponse,
-    summary="Get opportunity detail",
+    summary="Get opportunity detail with predictive intelligence",
     tags=["Agent API"],
 )
 def get_opportunity_detail(
@@ -247,12 +270,20 @@ def get_opportunity_detail(
     db: Session = Depends(get_db),
 ) -> OpportunityDetailResponse:
     """
-    Get full opportunity detail with metrics, signals, risk score, and trends.
+    Get full opportunity detail with intelligence insights.
+    
+    Includes:
+    - Historical trajectory and growth patterns
+    - Predictive success probability
+    - Momentum metrics (is trend accelerating?)
+    - Market health (saturation, demand signals)
+    - Risk profile (execution, seasonal, trend fatigue)
+    - Confidence intervals and data freshness
     
     Path Parameters:
     - opportunity_id: The opportunity ID
     
-    Returns: Detailed opportunity data with historical trends.
+    Returns: Detailed opportunity data with predictive intelligence.
     """
     start_time = time.time()
     
@@ -268,6 +299,15 @@ def get_opportunity_detail(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Opportunity {opportunity_id} not found",
             )
+        
+        # Use intelligence engine for comprehensive analysis
+        intelligence = IntelligenceEngine(db)
+        intelligence_data = intelligence.analyze_opportunity(opportunity)
+        
+        success_score = intelligence_data.get("success_score", {})
+        momentum = intelligence_data.get("momentum", {})
+        market_health = intelligence_data.get("market_health", {})
+        risk_profile = intelligence_data.get("risk_profile", {})
         
         # Build historical data (simulate 30/60/90 day trends)
         historical_data = {
@@ -297,6 +337,13 @@ def get_opportunity_detail(
             risk_score=_calculate_risk_score(opportunity),
             trend_direction=_get_trend_direction(opportunity),
             historical_data=historical_data,
+            success_probability=success_score.get("score", 50.0),
+            confidence_interval=success_score.get("confidence", 70.0),
+            data_freshness_hours=success_score.get("data_freshness_hours", 24),
+            momentum_metrics=momentum,
+            market_health=market_health,
+            risk_profile=risk_profile,
+            reasoning=success_score.get("reasoning", ""),
             created_at=opportunity.created_at,
             updated_at=opportunity.updated_at,
         )
@@ -311,7 +358,7 @@ def get_opportunity_detail(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Get opportunity detail error: {e}")
+        logger.error(f"Get opportunity detail error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch opportunity detail",
@@ -444,4 +491,173 @@ def batch_analyze_opportunities(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to batch analyze opportunities",
+        )
+
+
+@router.get(
+    "/api/v1/agents/trends/{vertical}",
+    summary="Analyze trend momentum and acceleration",
+    tags=["Agent API"],
+)
+def analyze_trends(
+    vertical: str,
+    city: Optional[str] = Query(None, description="Optional city filter"),
+    api_key: APIKey = Depends(get_agent_api_key_with_rate_limit),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Analyze trend momentum for a vertical.
+    
+    Returns:
+    - Momentum metrics (7-day, 30-day, 90-day growth rates)
+    - Acceleration factor (how fast is this trend moving?)
+    - Direction (accelerating, decelerating, stable)
+    - Average growth rate across all opportunities in trend
+    
+    Path Parameters:
+    - vertical: The vertical/category to analyze (e.g., "coffee", "dropshipping")
+    
+    Query Parameters:
+    - city: Optional city filter to narrow analysis
+    
+    Returns: Trend analysis with momentum metrics and confidence intervals.
+    """
+    start_time = time.time()
+    
+    try:
+        # Query opportunities in this vertical
+        query = db.query(Opportunity).filter(
+            Opportunity.category.ilike(f"%{vertical}%"),
+            Opportunity.status == "active",
+            Opportunity.moderation_status == "approved"
+        )
+        
+        if city:
+            query = query.filter(Opportunity.city.ilike(f"%{city}%"))
+        
+        opportunities = query.all()
+        
+        if not opportunities:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No opportunities found for vertical '{vertical}'",
+            )
+        
+        # Use intelligence engine
+        intelligence = IntelligenceEngine(db)
+        trend_analysis = intelligence.analyze_trends(opportunities)
+        
+        # Add metadata
+        trend_analysis["vertical"] = vertical
+        trend_analysis["city_filter"] = city
+        trend_analysis["opportunity_count"] = len(opportunities)
+        trend_analysis["execution_time_ms"] = int((time.time() - start_time) * 1000)
+        trend_analysis["api_version"] = "v1"
+        trend_analysis["timestamp"] = datetime.now(timezone.utc)
+        
+        return trend_analysis
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Analyze trends error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to analyze trends",
+        )
+
+
+@router.get(
+    "/api/v1/agents/markets/{vertical}/{city}/insights",
+    summary="Get market health and saturation insights",
+    tags=["Agent API"],
+)
+def get_market_insights(
+    vertical: str,
+    city: str,
+    api_key: APIKey = Depends(get_agent_api_key_with_rate_limit),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """
+    Analyze market health and saturation for a vertical in a city.
+    
+    Returns:
+    - Market health score (0-100, 100 = hot market)
+    - Saturation level (emerging, growing, mature, saturated)
+    - Demand vs supply (bullish, neutral, bearish)
+    - Business count in market
+    - Confidence interval
+    
+    Signals:
+    - "Market is entering saturation zone (80+ businesses)" - WARNING
+    - "Demand is growing faster than supply (bullish)" - OPPORTUNITY
+    - "Competition rising but demand plateauing (bearish)" - CAUTION
+    
+    Path Parameters:
+    - vertical: The vertical/category (e.g., "coffee", "dropshipping")
+    - city: The city to analyze (e.g., "Austin")
+    
+    Returns: Market health snapshot with saturation and demand signals.
+    """
+    start_time = time.time()
+    
+    try:
+        # Query opportunities in this market
+        query = db.query(Opportunity).filter(
+            Opportunity.category.ilike(f"%{vertical}%"),
+            Opportunity.city.ilike(f"%{city}%"),
+            Opportunity.status == "active",
+            Opportunity.moderation_status == "approved"
+        )
+        
+        opportunities = query.all()
+        
+        if not opportunities:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No opportunities found for {vertical} in {city}",
+            )
+        
+        # Use intelligence engine
+        intelligence = IntelligenceEngine(db)
+        market_analysis = intelligence.analyze_market(opportunities)
+        
+        # Generate market warnings/signals
+        warnings = []
+        opportunities_obj = market_analysis.get("market_health_data", [])
+        
+        if opportunities_obj:
+            first = opportunities_obj[0]
+            business_count = first.get("business_count", 0)
+            demand_supply = first.get("demand_vs_supply", "neutral")
+            saturation = first.get("saturation_level", "growing")
+            
+            if business_count >= 150:
+                warnings.append(f"Market is SATURATED ({business_count}+ businesses competing)")
+            elif business_count >= 80:
+                warnings.append(f"Market is entering saturation zone ({business_count} businesses)")
+            
+            if demand_supply == "bullish":
+                warnings.append("Demand is growing faster than supply (strong opportunity)")
+            elif demand_supply == "bearish":
+                warnings.append("Competition rising but demand plateauing (caution)")
+        
+        # Add metadata
+        market_analysis["vertical"] = vertical
+        market_analysis["city"] = city
+        market_analysis["market_warnings"] = warnings
+        market_analysis["opportunity_count"] = len(opportunities)
+        market_analysis["execution_time_ms"] = int((time.time() - start_time) * 1000)
+        market_analysis["api_version"] = "v1"
+        market_analysis["timestamp"] = datetime.now(timezone.utc)
+        
+        return market_analysis
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get market insights error: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch market insights",
         )

@@ -19,6 +19,13 @@ class OpportunitySummary(BaseModel):
     competition_level: Optional[str] = None
     demand_signals: Optional[List[str]] = Field(default_factory=list)
     confidence_score: float = Field(ge=0, le=100)
+    
+    # Phase 3: Intelligence Layer
+    success_probability: float = Field(ge=0, le=100, description="Predicted success probability RIGHT NOW")
+    confidence_interval: float = Field(ge=0, le=100, description="How confident are we in this prediction?")
+    data_freshness_hours: int = Field(ge=0, description="How old is the underlying data (hours)?")
+    trend_momentum: str = Field(pattern="^(accelerating|decelerating|stable)$", description="Is this trend speeding up or slowing down?")
+    
     created_at: datetime
 
     class Config:
@@ -54,6 +61,15 @@ class OpportunityDetail(BaseModel):
     
     # Historical data (30/60/90 day trends)
     historical_data: Dict[str, Any] = Field(default_factory=dict)
+    
+    # Phase 3: Intelligence Layer
+    success_probability: float = Field(ge=0, le=100, description="Predicted success probability RIGHT NOW")
+    confidence_interval: float = Field(ge=0, le=100, description="How confident are we in this prediction?")
+    data_freshness_hours: int = Field(ge=0, description="How old is the underlying data (hours)?")
+    momentum_metrics: Dict[str, Any] = Field(default_factory=dict, description="Trend momentum (acceleration factor, direction, growth rates)")
+    market_health: Dict[str, Any] = Field(default_factory=dict, description="Market health snapshot (saturation, demand vs supply)")
+    risk_profile: Dict[str, Any] = Field(default_factory=dict, description="Comprehensive risk assessment (saturation, fatigue, seasonal, execution)")
+    reasoning: str = Field(default="", description="Plain English explanation of the success score")
     
     created_at: datetime
     updated_at: Optional[datetime] = None
