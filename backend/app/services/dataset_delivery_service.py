@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import uuid
 from sqlalchemy.orm import Session
 
-from backend.app.models.dataset import Dataset, DatasetPurchase, DatasetType
+from app.models.dataset import Dataset, DatasetPurchase, DatasetType
 
 logger = logging.getLogger(__name__)
 

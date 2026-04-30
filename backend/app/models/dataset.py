@@ -3,7 +3,7 @@ from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, JSON, 
 from sqlalchemy.sql import func
 from datetime import datetime
 import enum
-from .database import Base
+from app.db.database import Base
 
 
 class DatasetType(str, enum.Enum):

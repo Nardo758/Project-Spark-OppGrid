@@ -77,6 +77,7 @@ from .data_hub import (
 from .api_key import APIKey
 from .api_usage import APIUsage
 from .agent_webhook_subscription import AgentWebhookSubscription
+from .dataset import Dataset, DatasetPurchase, DatasetType
 
 __all__ = [
     "User",

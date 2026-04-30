@@ -83,6 +83,7 @@ from app.routers import (
     saved_searches,
     enhanced_workspaces,
     agent,
+    datasets_api,
     market,
     opportunity_collections,
     opportunity_lifecycle,
@@ -196,6 +197,7 @@ app.include_router(foot_traffic.router, prefix=f"{settings.API_V1_PREFIX}", tags
 app.include_router(enhanced_workspaces.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Enhanced Workspaces"])
 app.include_router(agent.router, tags=["Agent API"])
 app.include_router(agent_api.router, tags=["Agent Opportunities API"])
+app.include_router(datasets_api.router, tags=["Dataset Marketplace"])
 app.include_router(market.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Market Intelligence"])
 
 # Mount the Public API v1 sub-application.

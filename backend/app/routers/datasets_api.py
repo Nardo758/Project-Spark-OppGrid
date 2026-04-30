@@ -10,10 +10,9 @@ from pydantic import BaseModel
 import uuid
 import stripe
 
-from backend.app.models.database import get_db
-from backend.app.models.dataset import Dataset, DatasetPurchase, DatasetType
-from backend.app.services.dataset_delivery_service import get_delivery_service
-from backend.app.auth import verify_agent_api_key
+from app.db.database import get_db
+from app.models.dataset import Dataset, DatasetPurchase, DatasetType
+from app.services.dataset_delivery_service import get_delivery_service
 
 logger = logging.getLogger(__name__)
 
