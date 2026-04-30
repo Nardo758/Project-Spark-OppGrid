@@ -10,6 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 import logging
 import json
+import re
+from werkzeug.security import generate_password_hash
 
 from app.db.database import get_db
 from app.models.user import User
@@ -184,10 +186,13 @@ def handle_payment_intent_succeeded(payment_intent: dict, db: Session):
     """
     Handle successful payment intent.
     Updates transaction status and triggers fulfillment based on payment type.
+    
+    ALSO: Handles subscription tier upgrades from direct payment intents.
     """
     payment_intent_id = payment_intent.get("id")
     metadata = payment_intent.get("metadata", {})
     payment_type = metadata.get("type", "")
+    customer_id = payment_intent.get("customer")
     
     logger.info(f"Payment intent succeeded: {payment_intent_id}, type: {payment_type}")
     
@@ -225,7 +230,10 @@ def handle_payment_intent_succeeded(payment_intent: dict, db: Session):
             db.commit()
             logger.info(f"Created new transaction {tx.id} from webhook")
     
-    if payment_type == "pay_per_unlock":
+    # Handle subscription tier upgrade from direct payment
+    if payment_type == "subscription_upgrade" and customer_id:
+        _handle_subscription_upgrade_payment(payment_intent, customer_id, db)
+    elif payment_type == "pay_per_unlock":
         _fulfill_pay_per_unlock(payment_intent, metadata, db)
     elif payment_type == "micro_payment":
         _fulfill_micro_payment(payment_intent, metadata, db)
@@ -390,14 +398,36 @@ def handle_checkout_completed(session: dict, db: Session):
         _handle_studio_report_purchase(session, db)
         return
     
-    if not user_id:
+    # For subscriptions, try to auto-create account if it doesn't exist
+    if not user_id and not payment_type:
+        # This is likely a subscription checkout without explicit user_id
+        customer_id = session.get("customer")
+        customer_email = session.get("customer_email") or session.get("customer_details", {}).get("email")
+        
+        if customer_id and customer_email:
+            logger.info(f"Auto-creating account for subscription checkout, customer: {customer_id}")
+            user = _auto_create_account_from_stripe(customer_id, {"email": customer_email, "name": "Subscriber"}, db)
+            if not user:
+                logger.error(f"Failed to auto-create account for subscription, customer: {customer_id}")
+                return
+            user_id = user.id
+        else:
+            logger.warning("No user_id or customer info in subscription checkout session")
+            return
+    elif not user_id:
         logger.warning("No user_id in checkout session metadata")
         return
     
     user = db.query(User).filter(User.id == int(user_id)).first()
     if not user:
-        logger.warning(f"User {user_id} not found")
-        return
+        # Try to find user by email and auto-link
+        customer_email = session.get("customer_email") or session.get("customer_details", {}).get("email")
+        if customer_email:
+            user = db.query(User).filter(User.email == customer_email).first()
+        
+        if not user:
+            logger.warning(f"User {user_id} not found and no email available")
+            return
     
     if payment_type == "slot_purchase":
         _handle_slot_purchase(session, user, db)
@@ -741,12 +771,14 @@ def _handle_subscription_checkout(session: dict, user: User, db: Session):
     subscription.stripe_subscription_id = subscription_id
     subscription.stripe_customer_id = customer_id
     
+    # Store the tier to be applied once subscription is confirmed active by Stripe
     if tier:
         try:
-            subscription.pending_tier = tier
-        except Exception:
-            pass
-        subscription.metadata_json = json.dumps({"pending_tier": tier})
+            # Validate tier exists
+            SubscriptionTier(tier)
+            subscription.metadata_json = json.dumps({"pending_tier": tier})
+        except (ValueError, KeyError):
+            logger.warning(f"Invalid tier '{tier}' provided, will be set by price_id mapping instead")
     
     db.commit()
     logger.info(f"Linked Stripe subscription {subscription_id} to user {user.id}, awaiting subscription.updated for activation")
@@ -757,6 +789,8 @@ def handle_subscription_updated(stripe_subscription: dict, db: Session):
     
     This is the authoritative source for subscription status. Only activate
     subscriptions when Stripe confirms status is 'active' or 'trialing'.
+    
+    ALSO: Auto-creates user account if it doesn't exist (account creation on first payment).
     """
     subscription_id = stripe_subscription.get("id")
     customer_id = stripe_subscription.get("customer")
@@ -779,8 +813,43 @@ def handle_subscription_updated(stripe_subscription: dict, db: Session):
             subscription.stripe_subscription_id = subscription_id
             logger.info(f"Linked subscription {subscription_id} to user {subscription.user_id} via customer ID")
     
+    # If subscription still not found, try to auto-create account
     if not subscription:
-        logger.warning(f"Subscription {subscription_id} not found in database (customer: {customer_id})")
+        logger.info(f"Subscription {subscription_id} not found, attempting auto-account creation from Stripe")
+        
+        # Fetch customer data from Stripe to get email
+        try:
+            stripe = get_stripe_client()
+            customer = stripe.Customer.retrieve(customer_id)
+            customer_email = customer.get("email")
+            customer_name = customer.get("name", "Subscriber")
+            
+            if not customer_email:
+                logger.warning(f"No email found for Stripe customer {customer_id}, cannot auto-create account")
+                return
+            
+            # Auto-create user account from Stripe customer data
+            user = _auto_create_account_from_stripe(customer_id, {"email": customer_email, "name": customer_name}, db)
+            if not user:
+                logger.error(f"Failed to auto-create account for subscription {subscription_id}")
+                return
+            
+            # Create subscription record linked to the new user
+            subscription = Subscription(
+                user_id=user.id,
+                stripe_customer_id=customer_id,
+                stripe_subscription_id=subscription_id,
+            )
+            db.add(subscription)
+            db.flush()
+            logger.info(f"Auto-created subscription record for user {user.id}, subscription {subscription_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to auto-create account from Stripe: {str(e)}")
+            return
+    
+    if not subscription:
+        logger.warning(f"Subscription {subscription_id} could not be created or found (customer: {customer_id})")
         return
     
     status_map = {
@@ -810,22 +879,33 @@ def handle_subscription_updated(stripe_subscription: dict, db: Session):
     if items:
         price_id = items[0].get("price", {}).get("id")
     
+    # Determine tier from price or pending metadata
+    tier_changed = False
     if price_id:
         tier = _map_price_to_tier(price_id)
-        if tier:
+        if tier and subscription.tier != tier:
             subscription.tier = tier
+            tier_changed = True
+            logger.info(f"Subscription {subscription_id}: tier updated to {tier.value}")
     elif subscription.metadata_json and new_status == SubscriptionStatus.ACTIVE:
         try:
             meta = json.loads(subscription.metadata_json)
             pending_tier = meta.get("pending_tier")
             if pending_tier:
-                subscription.tier = SubscriptionTier(pending_tier.upper())
+                tier = SubscriptionTier(pending_tier.upper())
+                if subscription.tier != tier:
+                    subscription.tier = tier
+                    tier_changed = True
                 subscription.metadata_json = None
+                logger.info(f"Subscription {subscription_id}: tier activated to {tier.value} from pending")
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Failed to apply pending tier: {e}")
     
     db.commit()
-    logger.info(f"Updated subscription {subscription_id}: {old_status} -> {new_status}")
+    logger.info(
+        f"Updated subscription {subscription_id}: {old_status} -> {new_status}"
+        f"{f', tier: {subscription.tier.value}' if tier_changed else ''}"
+    )
 
 
 def handle_subscription_deleted(stripe_subscription: dict, db: Session):
@@ -904,6 +984,128 @@ def _map_price_to_tier(price_id: str) -> SubscriptionTier | None:
         logger.warning(f"Unknown price ID: {price_id}, available mappings: {list(k for k in price_mappings.keys() if k)}")
     
     return tier
+
+
+def _auto_create_account_from_stripe(customer_id: str, stripe_customer_data: dict, db: Session) -> User | None:
+    """
+    Auto-create a user account from Stripe customer data.
+    
+    Used when payment succeeds but user doesn't have an account yet.
+    Extracts email and name from Stripe customer object.
+    
+    Args:
+        customer_id: Stripe customer ID
+        stripe_customer_data: Customer object from Stripe API or webhook
+        db: Database session
+        
+    Returns:
+        Created User object or None if account couldn't be created
+    """
+    
+    email = stripe_customer_data.get("email") or stripe_customer_data.get("customer_email")
+    name = stripe_customer_data.get("name") or stripe_customer_data.get("customer_name") or "Stripe User"
+    
+    # Validate email format
+    if not email or not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
+        logger.warning(f"Invalid or missing email for customer {customer_id}: {email}")
+        return None
+    
+    # Check if user already exists
+    existing_user = db.query(User).filter(User.email == email).first()
+    if existing_user:
+        logger.info(f"User {existing_user.id} already exists for email {email}")
+        return existing_user
+    
+    try:
+        # Create new user account with a placeholder password
+        # User will need to set real password or use OAuth on first login
+        user = User(
+            email=email,
+            name=name,
+            hashed_password=generate_password_hash(""),  # No password initially
+            is_active=True,
+            is_verified=False,  # Mark as not email-verified yet
+        )
+        db.add(user)
+        db.flush()  # Assign ID without committing
+        user_id = user.id
+        
+        # Create free subscription tier by default
+        # Will be upgraded when subscription is confirmed active
+        subscription = Subscription(
+            user_id=user_id,
+            tier=SubscriptionTier.FREE,
+            stripe_customer_id=customer_id,
+        )
+        db.add(subscription)
+        db.commit()
+        
+        logger.info(f"Auto-created account user_id={user_id}, email={email} from Stripe customer {customer_id}")
+        return user
+        
+    except IntegrityError:
+        # Race condition: another process created this user simultaneously
+        db.rollback()
+        logger.info(f"User creation race condition, retrying query for {email}")
+        return db.query(User).filter(User.email == email).first()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to auto-create account from Stripe: {str(e)}")
+        return None
+
+
+def _handle_subscription_upgrade_payment(payment_intent: dict, customer_id: str, db: Session):
+    """
+    Handle subscription tier upgrade from a direct payment intent.
+    
+    This occurs when a user pays for a tier upgrade outside the normal
+    subscription flow (e.g., immediate upgrade without waiting for renewal).
+    """
+    metadata = payment_intent.get("metadata", {})
+    new_tier = metadata.get("tier")
+    payment_intent_id = payment_intent.get("id")
+    
+    if not new_tier or not customer_id:
+        logger.warning(f"Missing tier or customer_id for subscription upgrade")
+        return
+    
+    logger.info(f"Processing subscription upgrade: customer {customer_id} -> tier {new_tier}")
+    
+    # Find subscription by customer ID
+    subscription = db.query(Subscription).filter(
+        Subscription.stripe_customer_id == customer_id
+    ).first()
+    
+    if not subscription:
+        logger.warning(f"Subscription not found for customer {customer_id}")
+        # Try to auto-create account from Stripe
+        try:
+            stripe = get_stripe_client()
+            customer = stripe.Customer.retrieve(customer_id)
+            user = _auto_create_account_from_stripe(customer_id, customer, db)
+            if user:
+                subscription = usage_service.get_or_create_subscription(user, db)
+                subscription.stripe_customer_id = customer_id
+        except Exception as e:
+            logger.error(f"Failed to create subscription from customer {customer_id}: {str(e)}")
+            return
+    
+    if not subscription:
+        logger.error(f"Could not find or create subscription for customer {customer_id}")
+        return
+    
+    # Upgrade the tier
+    try:
+        old_tier = subscription.tier
+        subscription.tier = SubscriptionTier(new_tier.upper())
+        subscription.metadata_json = json.dumps({
+            "upgraded_at": datetime.utcnow().isoformat(),
+            "upgrade_payment_intent": payment_intent_id,
+        })
+        db.commit()
+        logger.info(f"Subscription {subscription.id}: tier upgraded from {old_tier.value} to {subscription.tier.value}")
+    except ValueError as e:
+        logger.error(f"Invalid tier '{new_tier}': {str(e)}")
 
 
 def _fulfill_pay_per_unlock(payment_intent: dict, metadata: dict, db: Session):
