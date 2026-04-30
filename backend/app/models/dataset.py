@@ -1,5 +1,5 @@
 """Dataset models."""
-from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, JSON, Enum, Index
+from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, JSON, Index
 from sqlalchemy.sql import func
 from datetime import datetime
 import enum
@@ -24,7 +24,7 @@ class Dataset(Base):
     description = Column(String(1024), nullable=True)
     
     # Dataset classification
-    dataset_type = Column(Enum(DatasetType), nullable=False, index=True)
+    dataset_type = Column(String(50), nullable=False, index=True)
     vertical = Column(String(100), nullable=True, index=True)  # coffee, gyms, coworking, etc.
     city = Column(String(100), nullable=True, index=True)      # Austin, NYC, etc.
     
