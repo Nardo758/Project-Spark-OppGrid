@@ -252,6 +252,29 @@ async def startup_event():
     except Exception as e:
         logger.warning("Failed to start background jobs: %s", e)
 
+    # Initialize Google Scraper Scheduler (daily at 2 AM UTC)
+    try:
+        from app.services.google_scraper_scheduler import initialize_scheduler
+        scheduler = initialize_scheduler()
+        if scheduler:
+            logger.info("✓ Google Scraper Scheduler initialized - runs daily at 2 AM UTC")
+        else:
+            logger.warning("✗ Failed to initialize Google Scraper Scheduler")
+    except Exception as e:
+        logger.warning("Failed to initialize Google Scraper Scheduler (non-fatal): %s", e)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    try:
+        from app.services.google_scraper_scheduler import get_scheduler
+        scheduler = get_scheduler()
+        scheduler.shutdown()
+        logger.info("✓ Google Scraper Scheduler shutdown")
+    except Exception as e:
+        logger.warning("Failed to shutdown Google Scraper Scheduler: %s", e)
+
 
 @app.get("/health")
 def health_check():

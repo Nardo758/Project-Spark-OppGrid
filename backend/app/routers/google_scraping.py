@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
+import logging
 
 from app.db.database import get_db
 from app.services.google_scraping_service import GoogleScrapingService
+from app.services.google_scraper_scheduler import get_scheduler
 from app.core.dependencies import get_current_admin_user
 from app.models.user import User
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/google-scraping", tags=["google-scraping"])
@@ -404,3 +408,94 @@ async def run_job(
     if not result.get("success"):
         raise HTTPException(status_code=500, detail=result.get("error", "Job execution failed"))
     return result
+
+
+@router.post("/trigger-scrape")
+async def trigger_manual_scrape(
+    admin: User = Depends(get_current_admin_user),
+    background_tasks: BackgroundTasks = None
+):
+    """
+    Manually trigger the daily Google Scraper for all top 20 markets
+    Returns: job status + number of businesses scraped per city
+    Requires admin auth
+    """
+    try:
+        scheduler = get_scheduler()
+        logger.info(f"Admin {admin.id} triggered manual scrape")
+        
+        # Run in background to avoid timeout
+        if background_tasks:
+            background_tasks.add_task(scheduler.trigger_manual_scrape)
+        else:
+            result = scheduler.trigger_manual_scrape()
+            return result
+        
+        return {
+            "success": True,
+            "message": "Scrape triggered in background",
+            "admin_id": admin.id,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Manual scrape trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scheduler-status")
+async def get_scheduler_status(
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Get the current status of the Google Scraper scheduler
+    Returns: scheduler running status, next run time, last scrape results, consecutive failures
+    """
+    try:
+        scheduler = get_scheduler()
+        status = scheduler.get_status()
+        return {
+            "success": True,
+            "scheduler_status": status
+        }
+    except Exception as e:
+        logger.error(f"Failed to get scheduler status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/scrape-results")
+async def get_scrape_results(
+    admin: User = Depends(get_current_admin_user)
+):
+    """
+    Get the last scrape results summary
+    Returns: businesses scraped per city, signals written, failed markets, duration
+    """
+    try:
+        scheduler = get_scheduler()
+        results = scheduler.scrape_results
+        
+        if not results:
+            return {
+                "success": True,
+                "message": "No scrape results yet",
+                "results": None
+            }
+        
+        # Format results for easy consumption
+        formatted = {
+            "success": True,
+            "timestamp": results.get("started_at", "").isoformat() if hasattr(results.get("started_at"), "isoformat") else str(results.get("started_at")),
+            "total_businesses_found": results.get("total_businesses_found", 0),
+            "total_signals_written": results.get("total_signals_written", 0),
+            "duration_seconds": results.get("duration_seconds", 0),
+            "failed_markets_count": len(results.get("failed_markets", [])),
+            "failed_markets": results.get("failed_markets", []),
+            "markets": results.get("markets", {}),
+        }
+        return formatted
+    except Exception as e:
+        logger.error(f"Failed to get scrape results: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+from datetime import datetime
