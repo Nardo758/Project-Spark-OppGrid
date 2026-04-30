@@ -176,6 +176,15 @@ def list_datasets(
         )
 
 
+@router.get("/my-purchases", response_model=PurchaseListResponse)
+def list_purchases_early(
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+) -> PurchaseListResponse:
+    """Get list of user's purchased datasets. (Declared early to avoid /{dataset_id} wildcard.)"""
+    return list_purchases(authorization=authorization, db=db)
+
+
 @router.get("/{dataset_id}", response_model=dict)
 def get_dataset(
     dataset_id: str = Path(..., description="Dataset ID"),
@@ -187,13 +196,13 @@ def get_dataset(
             Dataset.id == dataset_id,
             Dataset.is_active == True
         ).first()
-        
+
         if not dataset:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Dataset not found",
             )
-        
+
         return dataset.to_dict()
     except HTTPException:
         raise

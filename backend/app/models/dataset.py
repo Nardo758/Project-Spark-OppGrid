@@ -59,7 +59,7 @@ class Dataset(Base):
             'id': self.id,
             'name': self.name,
             'description': self.description,
-            'dataset_type': self.dataset_type.value,
+            'dataset_type': self.dataset_type if isinstance(self.dataset_type, str) else self.dataset_type.value,
             'vertical': self.vertical,
             'city': self.city,
             'price_cents': self.price_cents,
