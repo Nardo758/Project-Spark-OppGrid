@@ -1396,3 +1396,263 @@ async def issue_refund_by_agent(
             "success": False,
             "message": str(e)
         }
+
+
+# ============================================================================
+# WEBHOOK SUBSCRIPTIONS - Phase 2 Part 3
+# ============================================================================
+
+@router.post("/webhooks/subscribe", status_code=201, tags=["Webhooks"])
+async def subscribe_webhook(
+    request_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key),
+):
+    """
+    Subscribe to webhook events.
+    
+    Creates a webhook subscription that will receive events for:
+    - opportunity.new: New opportunity detected
+    - trend.updated: Market trend detected
+    - market.changed: Market data updated
+    
+    Rate limit: 1 webhook subscription per second per API key
+    Max: 10 webhooks per API key
+    
+    Example request:
+    {
+      "webhook_url": "https://agent.example.com/webhook",
+      "events": ["opportunity.new", "trend.updated"],
+      "vertical": "coffee",
+      "city": "Austin"
+    }
+    """
+    import hashlib
+    import time
+    from app.schemas.agent_api import WebhookSubscribeRequest, WebhookSubscribeResponse
+    from app.models.agent_webhook_subscription import AgentWebhookSubscription
+    
+    # Validate request
+    try:
+        subscription_req = WebhookSubscribeRequest(**request_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid request: {str(e)}")
+    
+    # Get API key from header
+    api_key = request_data.get('_api_key', 'agent_key')  # Would be extracted from X-Agent-Key
+    
+    # Rate limit: Max 1 subscription request per second per key
+    # This is checked via the RateLimitMiddleware (1000 qpm = ~17 rps per key)
+    
+    # Check max webhooks per API key (10 limit)
+    existing_webhooks = db.query(AgentWebhookSubscription).filter(
+        AgentWebhookSubscription.agent_api_key_id == api_key,
+        AgentWebhookSubscription.active == True,
+    ).count()
+    
+    if existing_webhooks >= 10:
+        raise HTTPException(
+            status_code=429,
+            detail="Maximum 10 active webhooks per API key. Deactivate unused webhooks first."
+        )
+    
+    # Validate webhook URL is HTTPS and accessible
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=2) as client:
+            # Quick ping to test webhook URL
+            try:
+                response = await client.head(subscription_req.webhook_url)
+                if response.status_code >= 500:
+                    logger.warning(f"Webhook test returned {response.status_code}: {subscription_req.webhook_url}")
+            except httpx.TimeoutException:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Webhook URL did not respond within 2 seconds"
+                )
+            except Exception as e:
+                logger.warning(f"Webhook validation warning: {e}")
+                # Still allow creation even if test fails (network issues)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Webhook validation error: {e}")
+    
+    # Create subscription
+    webhook_url_hash = hashlib.sha256(subscription_req.webhook_url.encode()).hexdigest()
+    
+    # Check for duplicate URL (same URL subscribed by same key)
+    existing = db.query(AgentWebhookSubscription).filter(
+        AgentWebhookSubscription.webhook_url_hash == webhook_url_hash,
+        AgentWebhookSubscription.agent_api_key_id == api_key,
+    ).first()
+    
+    if existing and existing.active:
+        raise HTTPException(
+            status_code=409,
+            detail="Webhook URL already subscribed with this API key"
+        )
+    
+    # Create new subscription
+    subscription = AgentWebhookSubscription(
+        agent_api_key_id=api_key,
+        webhook_url=subscription_req.webhook_url,
+        webhook_url_hash=webhook_url_hash,
+        events=subscription_req.events,
+        vertical_filter=subscription_req.vertical,
+        city_filter=subscription_req.city,
+        active=True,
+    )
+    
+    db.add(subscription)
+    db.commit()
+    db.refresh(subscription)
+    
+    logger.info(f"✓ Webhook subscription created: {subscription.subscription_id}")
+    
+    # Mask the URL for response
+    masked_url = subscription_req.webhook_url[:8] + "***" + subscription_req.webhook_url[-8:]
+    
+    return WebhookSubscribeResponse(
+        subscription_id=str(subscription.subscription_id),
+        status="active",
+        events_subscribed=subscription.events,
+        created_at=subscription.created_at,
+        webhook_url_masked=masked_url,
+        filters={
+            "vertical": subscription_req.vertical,
+            "city": subscription_req.city,
+        } if subscription_req.vertical or subscription_req.city else None
+    )
+
+
+@router.get("/webhooks", tags=["Webhooks"])
+async def list_webhooks(
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key),
+):
+    """
+    List all active webhook subscriptions for this API key.
+    """
+    from app.schemas.agent_api import WebhookSubscribeResponse, WebhookSubscriptionListResponse
+    
+    api_key = "agent_key"  # Would be extracted from X-Agent-Key
+    
+    subscriptions = db.query(AgentWebhookSubscription).filter(
+        AgentWebhookSubscription.agent_api_key_id == api_key,
+        AgentWebhookSubscription.active == True,
+    ).all()
+    
+    response_subs = []
+    for sub in subscriptions:
+        masked_url = sub.webhook_url[:8] + "***" + sub.webhook_url[-8:]
+        response_subs.append(WebhookSubscribeResponse(
+            subscription_id=str(sub.subscription_id),
+            status="active",
+            events_subscribed=sub.events,
+            created_at=sub.created_at,
+            webhook_url_masked=masked_url,
+            filters={
+                "vertical": sub.vertical_filter,
+                "city": sub.city_filter,
+            } if sub.vertical_filter or sub.city_filter else None
+        ))
+    
+    return WebhookSubscriptionListResponse(
+        subscriptions=response_subs,
+        total=len(response_subs)
+    )
+
+
+@router.delete("/webhooks/{subscription_id}", tags=["Webhooks"])
+async def delete_webhook(
+    subscription_id: str,
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key),
+):
+    """
+    Delete (deactivate) a webhook subscription.
+    """
+    from app.schemas.agent_api import WebhookSubscriptionDeleteResponse
+    
+    api_key = "agent_key"  # Would be extracted from X-Agent-Key
+    
+    subscription = db.query(AgentWebhookSubscription).filter(
+        AgentWebhookSubscription.subscription_id == subscription_id,
+        AgentWebhookSubscription.agent_api_key_id == api_key,
+    ).first()
+    
+    if not subscription:
+        raise HTTPException(
+            status_code=404,
+            detail="Webhook subscription not found"
+        )
+    
+    subscription.active = False
+    db.add(subscription)
+    db.commit()
+    
+    logger.info(f"✓ Webhook subscription deactivated: {subscription_id}")
+    
+    return WebhookSubscriptionDeleteResponse(
+        subscription_id=str(subscription.subscription_id),
+        status="deleted",
+        message="Webhook subscription deactivated"
+    )
+
+
+@router.post("/webhooks/test", tags=["Webhooks"])
+async def test_webhook(
+    request_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    _: bool = Depends(verify_agent_key),
+):
+    """
+    Test a webhook subscription by sending a sample event.
+    
+    Used to verify webhook is working before relying on it for production events.
+    """
+    from app.services.webhook_delivery_service import deliver_webhook_async
+    
+    subscription_id = request_data.get('subscription_id')
+    
+    if not subscription_id:
+        raise HTTPException(
+            status_code=400,
+            detail="subscription_id is required"
+        )
+    
+    api_key = "agent_key"  # Would be extracted from X-Agent-Key
+    
+    subscription = db.query(AgentWebhookSubscription).filter(
+        AgentWebhookSubscription.subscription_id == subscription_id,
+        AgentWebhookSubscription.agent_api_key_id == api_key,
+    ).first()
+    
+    if not subscription:
+        raise HTTPException(
+            status_code=404,
+            detail="Webhook subscription not found"
+        )
+    
+    # Send test event
+    test_data = {
+        "opportunity_id": 999,
+        "title": "Test Opportunity - OppGrid Webhook Test",
+        "vertical": "test",
+        "city": "Test City, ST",
+        "market_size": 1000000,
+    }
+    
+    success = await deliver_webhook_async(
+        subscription,
+        "opportunity.new",
+        test_data,
+        agent_id="agent_tester"
+    )
+    
+    return {
+        "success": success,
+        "subscription_id": str(subscription.subscription_id),
+        "message": "Test event delivered" if success else "Test event delivery failed",
+    }

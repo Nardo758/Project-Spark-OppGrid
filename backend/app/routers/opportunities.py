@@ -220,6 +220,24 @@ def create_opportunity(
     db.commit()
     db.refresh(new_opportunity)
 
+    # Emit webhook event for opportunity.new
+    try:
+        from app.services.webhook_delivery_service import emit_webhook_event_sync
+        emit_webhook_event_sync(
+            event_type="opportunity.new",
+            data={
+                "opportunity_id": new_opportunity.id,
+                "title": new_opportunity.title or "",
+                "vertical": new_opportunity.category or "",
+                "city": new_opportunity.geographic_scope or "",
+                "market_size": getattr(new_opportunity, 'market_size', None),
+            },
+            vertical_filter=new_opportunity.category,
+            city_filter=new_opportunity.geographic_scope,
+        )
+    except Exception as e:
+        logger.error(f"Failed to emit webhook event for opportunity creation: {e}")
+
     return new_opportunity
 
 

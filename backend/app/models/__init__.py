@@ -76,6 +76,7 @@ from .data_hub import (
 )
 from .api_key import APIKey
 from .api_usage import APIUsage
+from .agent_webhook_subscription import AgentWebhookSubscription
 
 __all__ = [
     "User",
@@ -223,4 +224,5 @@ __all__ = [
     "HubFinancialSnapshot",
     "APIKey",
     "APIUsage",
+    "AgentWebhookSubscription",
 ]

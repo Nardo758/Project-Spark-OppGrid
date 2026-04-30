@@ -293,3 +293,11 @@ def start_background_jobs() -> None:
         loop.create_task(_loop("stripe_subscription_reconcile", settings.STRIPE_RECONCILE_JOB_INTERVAL_SECONDS, _stripe_subscription_reconcile_job))
         logger.info("Started job: stripe_subscription_reconcile")
 
+    # Webhook delivery job - runs every 60 seconds
+    try:
+        from app.services.webhook_delivery_service import webhook_delivery_job
+        loop.create_task(_loop("webhook_delivery", 60, webhook_delivery_job))
+        logger.info("Started job: webhook_delivery")
+    except Exception as e:
+        logger.warning(f"Failed to start webhook_delivery job: {e}")
+

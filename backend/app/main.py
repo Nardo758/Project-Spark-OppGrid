@@ -15,6 +15,7 @@ from app.routers import (
     admin,
     admin_models,
     agreements,
+    agent_api,
     billing,
     ai_analysis,
     ai_chat,
@@ -194,6 +195,7 @@ app.include_router(saved_layers.router, prefix=f"{settings.API_V1_PREFIX}/saved-
 app.include_router(foot_traffic.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Foot Traffic"])
 app.include_router(enhanced_workspaces.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Enhanced Workspaces"])
 app.include_router(agent.router, tags=["Agent API"])
+app.include_router(agent_api.router, tags=["Agent Opportunities API"])
 app.include_router(market.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Market Intelligence"])
 
 # Mount the Public API v1 sub-application.
