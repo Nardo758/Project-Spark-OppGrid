@@ -251,18 +251,18 @@ class ApifyService:
                 apify_secret = os.getenv("APIFY_WEBHOOK_SECRET", "")
                 kwargs["webhooks"] = [
                     {
-                        "eventTypes": ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED"],
-                        "requestUrl": effective_webhook,
-                        "headersTemplate": _json.dumps(
+                        "event_types": ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED"],
+                        "request_url": effective_webhook,
+                        "headers_template": _json.dumps(
                             {"X-Apify-Webhook-Secret": apify_secret}
                         ),
-                        "payloadTemplate": _json.dumps({
+                        "payload_template": _json.dumps({
                             "runId": "{{resource.id}}",
                             "actId": "{{resource.actId}}",
                             "datasetId": "{{resource.defaultDatasetId}}",
                             "status": "{{resource.status}}",
                         }),
-                        "shouldInterpolateStrings": True,
+                        "should_interpolate_strings": True,
                     }
                 ]
                 logger.info("Apify webhook registered: %s", effective_webhook)
