@@ -54,6 +54,8 @@ import PublicReportViewer from './pages/PublicReportViewer'
 import MapWorkspace from './pages/MapWorkspace'
 import MyIdeas from './pages/MyIdeas'
 import LifecycleDashboard from './pages/LifecycleDashboard'
+import Marketplace from './pages/Marketplace'
+import DatasetCheckout from './pages/DatasetCheckout'
 
 function AdminRedirect() {
   window.location.href = '/admin.html';
@@ -264,6 +266,15 @@ function App() {
           element={
             <RequireAuth>
               <LifecycleDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route path="marketplace" element={<Marketplace />} />
+        <Route
+          path="datasets/:datasetId/checkout"
+          element={
+            <RequireAuth>
+              <DatasetCheckout />
             </RequireAuth>
           }
         />

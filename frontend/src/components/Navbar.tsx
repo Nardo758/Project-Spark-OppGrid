@@ -9,6 +9,7 @@ import {
 
 const guestNavItems = [
   { name: 'Discover', path: '/discover' },
+  { name: 'Marketplace', path: '/marketplace' },
   { name: 'Consultant Studio', path: '/build/reports' },
   { name: 'Leads', path: '/leads' },
   { 
@@ -27,6 +28,7 @@ const guestNavItems = [
 const paidNavItems = [
   { name: 'Dashboard', path: '/dashboard' },
   { name: 'Discover', path: '/discover' },
+  { name: 'Marketplace', path: '/marketplace' },
   { name: 'Consultant Studio', path: '/build/reports' },
   { 
     name: 'My Projects',
