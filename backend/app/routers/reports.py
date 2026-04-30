@@ -19,6 +19,8 @@ from app.models import (
 from app.core.dependencies import get_current_user
 from app.services.llm_ai_engine import llm_ai_engine_service
 from app.services.ai_report_generator import AIReportGenerator
+from app.services.report_quota_service import ReportQuotaService
+from app.services.stripe_service import get_stripe_client
 from app.data.report_templates_seed import REPORT_TEMPLATES
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
@@ -234,6 +236,7 @@ class GenerateReportRequest(BaseModel):
     opportunity_id: Optional[int] = None
     workspace_id: Optional[int] = None
     custom_context: Optional[str] = None
+    stripe_payment_id: Optional[str] = None  # Payment intent ID if paying per report
 
 
 class CategoryWithTemplates(BaseModel):
@@ -382,6 +385,104 @@ async def generate_report(
             status_code=403,
             detail=f"This report requires {template.min_tier.upper()} tier or purchase. Current tier: {user_tier.upper()}. Purchase this template to use it."
         )
+    
+    # ======== PAYMENT GATING ========
+    # Determine report tier based on template complexity
+    # Tier mapping: Popular/Basic = layer_1, Advanced = layer_2, Expert = layer_3
+    TEMPLATE_TO_REPORT_TIER = {
+        "ad_creatives": "layer_1",
+        "brand_package": "layer_1",
+        "landing_page": "layer_1",
+        "content_calendar": "layer_1",
+        "email_funnel": "layer_2",
+        "email_sequence": "layer_1",
+        "lead_magnet": "layer_1",
+        "sales_funnel": "layer_2",
+        "seo_content": "layer_1",
+        "tweet_landing": "layer_1",
+        "user_personas": "layer_1",
+        "feature_specs": "layer_1",
+        "mvp_roadmap": "layer_2",
+        "prd": "layer_2",
+        "gtm_calendar": "layer_2",
+        "gtm_strategy": "layer_2",
+        "kpi_dashboard": "layer_2",
+        "pricing_strategy": "layer_2",
+        "competitive_analysis": "layer_2",
+        "customer_interview": "layer_1",
+        "feasibility_study": "layer_3",
+        "business_plan": "layer_3",
+        "financial_model": "layer_3",
+        "market_analysis": "layer_3",
+        "pestle_analysis": "layer_3",
+        "strategic_assessment": "layer_3",
+        "pitch_deck": "layer_3",
+        "location_analysis": "layer_2",
+    }
+    
+    report_tier = TEMPLATE_TO_REPORT_TIER.get(template.slug, "layer_1")
+    
+    # Check payment access
+    quota_service = ReportQuotaService(db)
+    can_generate, access_msg, price_cents = quota_service.check_access(current_user, report_tier)
+    
+    if not can_generate:
+        raise HTTPException(
+            status_code=402,
+            detail=f"Cannot generate report: {access_msg}"
+        )
+    
+    # If payment is required (price_cents > 0), verify payment
+    payment_verified = False
+    stripe_charge_id = None
+    
+    if price_cents > 0:
+        # User needs to pay - require stripe_payment_id
+        if not request.stripe_payment_id:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Payment required: ${price_cents/100:.2f}. Provide stripe_payment_id to proceed."
+            )
+        
+        # Verify payment with Stripe
+        try:
+            stripe = get_stripe_client()
+            payment_intent = stripe.PaymentIntent.retrieve(request.stripe_payment_id)
+            
+            # Check if payment succeeded
+            if payment_intent.status != "succeeded":
+                raise HTTPException(
+                    status_code=402,
+                    detail=f"Payment not completed. Status: {payment_intent.status}"
+                )
+            
+            # Verify amount matches
+            if payment_intent.amount_received < price_cents:
+                raise HTTPException(
+                    status_code=402,
+                    detail=f"Payment amount mismatch. Expected ${price_cents/100:.2f}, received ${payment_intent.amount_received/100:.2f}"
+                )
+            
+            # Get charge ID
+            if payment_intent.charges.data:
+                stripe_charge_id = payment_intent.charges.data[0].id
+            
+            payment_verified = True
+            logger.info(f"[PaymentGating] Payment verified for user {current_user.id}: {request.stripe_payment_id}")
+            
+        except Exception as stripe_err:
+            logger.error(f"[PaymentGating] Stripe verification failed: {stripe_err}")
+            raise HTTPException(
+                status_code=402,
+                detail=f"Payment verification failed: {str(stripe_err)}"
+            )
+    else:
+        # Free generation with quota allocation
+        payment_verified = True
+        logger.info(f"[PaymentGating] Free generation allowed for user {current_user.id}: {access_msg}")
+    
+    # Mark whether we used quota (for later decrement)
+    using_quota = (price_cents == 0 and quota_service.can_generate_free(current_user, report_tier))
     
     context_parts = []
     city = None
@@ -580,6 +681,25 @@ async def generate_report(
         
         db.commit()
         db.refresh(generated_report)
+        
+        # ======== PAYMENT LOGGING & QUOTA DECREMENT ========
+        # Log the purchase/quota usage
+        payment_type = "stripe" if stripe_charge_id else ("quota" if using_quota else "free")
+        quota_service.log_purchase(
+            report_tier=report_tier,
+            payment_type=payment_type,
+            amount_cents=price_cents if stripe_charge_id else 0,
+            stripe_charge_id=stripe_charge_id,
+            report_id=generated_report.id,
+            opportunity_id=request.opportunity_id,
+            user=current_user,
+        )
+        logger.info(f"[PaymentLogging] Report {generated_report.id} logged: type={payment_type} tier={report_tier} amount={price_cents}¢")
+        
+        # Decrement quota if using free allocation
+        if using_quota:
+            quota_service.decrement_quota(current_user, report_tier)
+            logger.info(f"[PaymentLogging] Quota decremented for user {current_user.id}: {report_tier}")
         
     except Exception as e:
         logger.error(f"Report generation failed: {e}")
