@@ -25,7 +25,7 @@ from app.services.report_generation import (
     IdentifyLocationReportGenerator,
     CloneSuccessReportGenerator,
 )
-from app.core.auth import get_current_user
+from app.core.dependencies import get_current_user
 
 logger = logging.getLogger(__name__)
 

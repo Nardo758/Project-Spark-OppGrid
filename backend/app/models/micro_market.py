@@ -31,7 +31,7 @@ class MicroMarket(Base):
     
     # Geometry (PostGIS would be ideal, but storing as JSON for simplicity)
     # Format: GeoJSON Polygon feature
-    polygon_geojson = Column(JSON, nullable=False, description="GeoJSON Polygon geometry")
+    polygon_geojson = Column(JSON, nullable=False)
     
     # Center point for quick reference
     center_latitude = Column(Float, nullable=False)

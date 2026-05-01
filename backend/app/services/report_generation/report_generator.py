@@ -22,7 +22,6 @@ from reportlab.platypus import (
     Spacer,
     PageBreak,
     Image,
-    Container,
     KeepTogether,
 )
 from reportlab.platypus.tableofcontents import TableOfContents

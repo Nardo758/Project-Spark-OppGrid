@@ -4,6 +4,7 @@ Generated Report Model - Caching and storage of generated PDF reports
 
 from sqlalchemy import Column, Integer, String, Text, LargeBinary, ForeignKey, DateTime, Enum
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
 from datetime import datetime, timedelta
@@ -12,8 +13,19 @@ import enum
 
 class ReportType(str, enum.Enum):
     """Types of reports that can be generated"""
+    LAYER_1_OVERVIEW = "layer_1_overview"
+    LAYER_2_DEEP_DIVE = "layer_2_deep_dive"
+    LAYER_3_EXECUTION = "layer_3_execution"
     identify_location = "identify_location"
     clone_success = "clone_success"
+
+
+class ReportStatus(str, enum.Enum):
+    """Status of a generated report"""
+    PENDING = "pending"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class GeneratedReport(Base):
@@ -27,10 +39,15 @@ class GeneratedReport(Base):
     
     # User and request tracking
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    opportunity_id = Column(Integer, ForeignKey("opportunities.id", ondelete="SET NULL"), nullable=True, index=True)
     request_id = Column(String(100), nullable=False, unique=True, index=True)
+    
+    # Relationships
+    opportunity = relationship("Opportunity", back_populates="generated_reports")
     
     # Report metadata
     report_type = Column(String(50), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
     
     # Source data for regeneration
     source_analysis_id = Column(String(100), nullable=True, index=True)

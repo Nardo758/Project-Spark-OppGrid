@@ -87,6 +87,7 @@ from app.routers import (
     market,
     opportunity_collections,
     opportunity_lifecycle,
+    mapping_reports,
 )
 
 install_trace_id_factory()
@@ -170,6 +171,7 @@ app.include_router(lifecycle.router, prefix=settings.API_V1_PREFIX, tags=["Lifec
 app.include_router(reports.router, tags=["Report Templates"])
 app.include_router(generated_reports.router, prefix=f"{settings.API_V1_PREFIX}/reports", tags=["Generated Reports"])
 app.include_router(consultant.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Consultant Studio"])
+app.include_router(mapping_reports.router, tags=["Mapping Reports"])
 app.include_router(quick_actions.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Quick Actions"])
 app.include_router(webhooks.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Data Webhooks"])
 app.include_router(map_data.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Map Data"])
