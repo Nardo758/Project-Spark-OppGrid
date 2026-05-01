@@ -1,16 +1,25 @@
 """
 Consultant Studio API Router
 Three-path validation system: Validate Idea, Search Ideas, Identify Location
+Enhanced with Tier A/B location identification system
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
+import asyncio
 
 from app.db.database import get_db
 from app.services.consultant_studio import ConsultantStudioService
+from app.services.success_profile.identify_location_service import IdentifyLocationService
 from app.models.consultant_activity import ConsultantActivity
+from app.models.user import User
+from app.schemas.identify_location import (
+    IdentifyLocationRequest, IdentifyLocationResult,
+    CandidateDetailResponse, PromoteCandidateRequest, PromoteCandidateResponse,
+    TargetMarket, UserTier
+)
 
 router = APIRouter(prefix="/consultant", tags=["Consultant Studio"])
 
@@ -92,6 +101,9 @@ class SearchIdeasResponse(BaseModel):
     signal_surge_pct: Optional[int] = None
     avg_viability_score: Optional[int] = None
     top_signals_this_week: Optional[List[Dict[str, Any]]] = None
+    # Gating fields for preview vs full data
+    is_preview_mode: bool = False
+    preview_cta: Optional[Dict[str, Any]] = None
 
 
 class IdentifyLocationRequest(BaseModel):
@@ -300,9 +312,32 @@ async def search_ideas(
     
     Searches validated opportunities with AI-powered trend detection.
     Returns opportunities, detected trends, and AI synthesis.
+    
+    GATING LOGIC:
+    - FREE/GUEST users: See trends + top 2-3 opportunity previews (title, category, score only) + intelligence card + CTA
+    - AUTHENTICATED PAID users: See all trends + full opportunity data (descriptions, all opportunities, competition analysis)
     """
     import asyncio
+    from app.models import User
+    
     service = ConsultantStudioService(db)
+    
+    # Check user subscription status
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    # Determine if user has paid access
+    has_paid_access = False
+    if user and user.subscription:
+        paid_tiers = [
+            'BUILDER', 'SCALER', 'ENTERPRISE',
+            'STARTER', 'GROWTH', 'PRO', 'TEAM', 'BUSINESS',  # Legacy tiers
+            'API_STARTER', 'API_PROFESSIONAL', 'API_ENTERPRISE'  # API tiers
+        ]
+        if user.subscription.tier and user.subscription.tier.upper() in paid_tiers:
+            # Also verify subscription is active
+            active_statuses = ['ACTIVE', 'TRIALING']
+            if user.subscription.status.upper() in active_statuses:
+                has_paid_access = True
     
     filters = {
         "query": request.query,
@@ -320,6 +355,7 @@ async def search_ideas(
                 user_id=user_id,
                 filters=filters,
                 session_id=request.session_id,
+                is_paid_user=has_paid_access,
             ),
             timeout=65.0  # Increased from 15s to 65s for AI synthesis
         )
@@ -696,3 +732,214 @@ async def get_consultant_analytics(
             for row in potential_leads
         ]
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# NEW: Identify Location Service (Enhanced Tier A/B System)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/identify-location/search", response_model=IdentifyLocationResult)
+async def identify_location_search(
+    request: IdentifyLocationRequest,
+    db: Session = Depends(get_db),
+    user_id: int = 1,
+):
+    """
+    POST /api/consultant-studio/identify-location/search
+    
+    Main endpoint for location identification with Tier A (named markets) + Tier B (gap discovery).
+    
+    Request includes:
+    - category: Business category (e.g., "coffee_shop_premium")
+    - target_market: Market specification (metro, city, or point+radius)
+    - market_boundary: Optional filters (ZIP codes, neighborhoods)
+    - archetype_preference: Filter to specific archetypes
+    - include_gap_discovery: Enable Tier B gap discovery
+    
+    Response includes:
+    - Candidates grouped by archetype (pioneer, mainstream, specialist, anchor, experimental)
+    - GeoJSON map data
+    - Tier-based limits enforced
+    - 7-day caching enabled
+    
+    Performance: <12s for typical metro + gap discovery enabled
+    
+    Tier Limits:
+    - FREE: 1/month, named only (top 3 per archetype)
+    - BUILDER: 5/month, with gaps (top 5 per archetype)
+    - SCALER: 25/month, with gaps (unlimited)
+    - ENTERPRISE: Unlimited with gaps
+    """
+    import time
+    start_time = time.time()
+    
+    try:
+        # Determine user tier (would normally fetch from user subscription)
+        user_tier = UserTier.FREE  # Default to FREE
+        user_obj = db.query(User).filter(User.id == user_id).first()
+        if user_obj and user_obj.subscription:
+            tier_mapping = {
+                'BUILDER': UserTier.BUILDER,
+                'SCALER': UserTier.SCALER,
+                'ENTERPRISE': UserTier.ENTERPRISE,
+            }
+            user_tier = tier_mapping.get(user_obj.subscription.tier, UserTier.FREE)
+        
+        service = IdentifyLocationService(db)
+        
+        result = await asyncio.wait_for(
+            asyncio.to_thread(
+                service.identify_location,
+                category=request.category,
+                target_market=request.target_market,
+                business_description=request.business_description,
+                market_boundary=request.market_boundary,
+                archetype_preference=request.archetype_preference,
+                include_gap_discovery=request.include_gap_discovery,
+                user_tier=user_tier,
+                user_id=user_id,
+            ),
+            timeout=12.0
+        )
+        
+        return result
+    
+    except asyncio.TimeoutError:
+        return IdentifyLocationResult(
+            request_id="timeout",
+            category=request.category,
+            target_market=request.target_market,
+            candidates_by_archetype=[],
+            total_candidates=0,
+            tier=user_tier,
+            candidates_shown=0,
+            candidates_limited=False,
+            map_data={},
+            processing_time_ms=12000,
+            named_markets_included=False,
+            gap_markets_included=False,
+        )
+    
+    except Exception as e:
+        logger.error(f"Error in identify_location_search: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/identify-location/{request_id}", response_model=IdentifyLocationResult)
+async def get_identify_location_result(
+    request_id: str = Path(..., description="Request ID from initial search"),
+    db: Session = Depends(get_db),
+    user_id: int = 1,
+):
+    """
+    GET /api/consultant-studio/identify-location/{request_id}
+    
+    Retrieve cached identify location result.
+    Results are cached for 7 days.
+    """
+    try:
+        service = IdentifyLocationService(db)
+        
+        # Try to retrieve from cache
+        cached = db.query(IdentifyLocationCache).filter(
+            IdentifyLocationCache.request_id == request_id
+        ).first()
+        
+        if not cached:
+            raise HTTPException(status_code=404, detail="Request not found")
+        
+        result_dict = cached.result
+        result = IdentifyLocationResult(**result_dict)
+        result.from_cache = True
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving identify location result: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/identify-location/{request_id}/candidate/{candidate_id}")
+async def get_candidate_detail(
+    request_id: str = Path(..., description="Request ID"),
+    candidate_id: str = Path(..., description="Candidate ID"),
+    db: Session = Depends(get_db),
+    user_id: int = 1,
+):
+    """
+    GET /api/consultant-studio/identify-location/{request_id}/candidate/{candidate_id}
+    
+    Get detailed view of a single candidate location.
+    Includes demographics, competition analysis, foot traffic trends, risk assessment.
+    """
+    try:
+        service = IdentifyLocationService(db)
+        candidate_dict = service.get_candidate_detail(request_id, candidate_id)
+        
+        if not candidate_dict:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        return {
+            "candidate": candidate_dict,
+            "demographics": None,  # TODO: Enrich with demographics API
+            "local_competition": None,  # TODO: Enrich with business data
+            "foot_traffic_trend": None,  # TODO: Enrich with foot traffic API
+            "risk_summary": "Additional enrichment data would be loaded from APIs",
+            "created_at": datetime.utcnow()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting candidate detail: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/identify-location/{request_id}/promote/{candidate_id}", response_model=PromoteCandidateResponse)
+async def promote_candidate(
+    request_id: str = Path(..., description="Request ID"),
+    candidate_id: str = Path(..., description="Candidate ID"),
+    promote_request: PromoteCandidateRequest = None,
+    db: Session = Depends(get_db),
+    user_id: int = 1,
+):
+    """
+    POST /api/consultant-studio/identify-location/{request_id}/promote/{candidate_id}
+    
+    Convert a candidate location to a SuccessProfile.
+    Creates a new record that user can track and build strategies around.
+    
+    Optional request body:
+    {
+        "notes": "Optional notes about why this location was chosen"
+    }
+    """
+    try:
+        if promote_request is None:
+            promote_request = PromoteCandidateRequest()
+        
+        service = IdentifyLocationService(db)
+        result = service.promote_candidate(
+            request_id=request_id,
+            candidate_id=candidate_id,
+            user_id=user_id,
+            user_notes=promote_request.notes if promote_request else None
+        )
+        
+        return PromoteCandidateResponse(**result)
+    
+    except Exception as e:
+        logger.error(f"Error promoting candidate: {e}")
+        return PromoteCandidateResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+# Import needed for imports at top of file
+from app.models.micro_market import IdentifyLocationCache
+from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)

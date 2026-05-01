@@ -953,10 +953,27 @@ Return as JSON:
         user_id: int,
         filters: Dict[str, Any],
         session_id: Optional[str] = None,
+        is_paid_user: bool = False,
     ) -> Dict[str, Any]:
         """
         Path 2: Search Ideas - Database exploration with trend detection
         Uses DeepSeek for trend detection + Claude for synthesis
+        
+        GATING LOGIC:
+        - FREE/GUEST users (is_paid_user=False):
+          * See trend analytics (opportunity count, signal surge %, avg viability score)
+          * See top 2-3 opportunity previews (title, category, score only - NO descriptions)
+          * See intelligence card (intel_verdict, metrics, signals, tags, CTA)
+          * See CTA button: "View full opportunities & locations → Sign up to unlock"
+          * Do NOT see: full descriptions, details, location matching data
+        
+        - AUTHENTICATED PAID users (is_paid_user=True):
+          * See all of above PLUS:
+          * Full opportunity descriptions
+          * All opportunities (not just top 2-3)
+          * Competition analysis data
+          * Location matching recommendations
+          * Execution signals
         """
         import time
         start_time = time.time()
@@ -973,9 +990,40 @@ Return as JSON:
 
             processing_time = int((time.time() - start_time) * 1000)
             
-            result = {
-                "success": True,
-                "opportunities": [
+            # ── GATING LOGIC: Preview vs Full Data ─────────────────────────────
+            is_preview_mode = not is_paid_user
+            preview_cta = None
+            
+            if is_preview_mode:
+                # PREVIEW MODE: Free/Guest users see limited data
+                limited_opportunities = [
+                    {
+                        "id": o.id,
+                        "title": o.title,
+                        # Preview: NO description for free users
+                        "category": o.category,
+                        "score": o.feasibility_score,
+                        # Preview: NO created_at for free users
+                    }
+                    for o in opportunities[:3]  # Top 2-3 previews only
+                ]
+                
+                preview_cta = {
+                    "icon": "🔓",
+                    "text": "View full opportunities & locations",
+                    "action": "Sign up to unlock",
+                    "cta_button": {
+                        "label": "Sign up to unlock",
+                        "url": "/auth/signup",
+                        "color": "primary",
+                    },
+                    "subtext": "Paid users see: full descriptions, all opportunities, competition analysis & location matching"
+                }
+                
+                opportunities_output = limited_opportunities
+            else:
+                # FULL MODE: Paid users see all data
+                opportunities_output = [
                     {
                         "id": o.id,
                         "title": o.title,
@@ -984,8 +1032,12 @@ Return as JSON:
                         "score": o.feasibility_score,
                         "created_at": o.created_at.isoformat() if o.created_at else None,
                     }
-                    for o in opportunities[:20]
-                ],
+                    for o in opportunities[:20]  # All opportunities
+                ]
+            
+            result = {
+                "success": True,
+                "opportunities": opportunities_output,
                 "trends": [
                     {
                         "id": t.id,
@@ -1000,8 +1052,11 @@ Return as JSON:
                 "synthesis": synthesis,
                 "total_count": len(opportunities),
                 "processing_time_ms": processing_time,
-                # Intelligence card fields
+                # Intelligence card fields (visible to all users)
                 **intel_card,
+                # Gating fields
+                "is_preview_mode": is_preview_mode,
+                "preview_cta": preview_cta,
             }
             
             await self._log_activity(
@@ -1010,7 +1065,7 @@ Return as JSON:
                 path=ConsultantPath.search_ideas.value,
                 action="search_complete",
                 payload=filters,
-                result_summary=f"Found {len(opportunities)} opportunities, {len(trends)} trends",
+                result_summary=f"Found {len(opportunities)} opportunities, {len(trends)} trends (preview_mode={is_preview_mode})",
                 ai_model_used="hybrid",
                 processing_time_ms=processing_time,
             )

@@ -1000,4 +1000,77 @@ Business Context:
 
 Write in confident, clear language. Every word should earn its place on the slide."""
     },
+    {
+        "slug": "identify_location_map",
+        "name": "Identify Location Map Report",
+        "description": "Curated location candidates ranked by archetype with demographic profiles, competition analysis, and risk assessment",
+        "category": "location",
+        "min_tier": "pro",
+        "price_cents": 2900,
+        "display_order": 60,
+        "ai_prompt": """Generate a location map report for the following business analysis. Include:
+
+1. Executive Summary – top 3-5 recommended locations with viability scores
+2. Analysis Methodology – explain how candidates were ranked
+3. Location Candidates by Archetype
+   - High-Growth Markets (emerging, high population growth)
+   - Established Markets (mature, stable, strong fundamentals)
+   - Niche Markets (underserved, specialized opportunity)
+4. Comparison Table – side-by-side location metrics
+5. Demographic Deep Dive – population, income, age distribution for top 3
+6. Competition Analysis – competitor density, strengths, weaknesses per location
+7. Risk Analysis – regulatory, economic, market risks per location
+8. Investment Thesis – why these locations represent best opportunity
+9. Next Steps – action plan for market validation and site selection
+
+Business Context:
+{context}
+
+Use data-driven analysis to rank locations. Include specific demographics and competition metrics."""
+    },
+    {
+        "slug": "clone_success_comparison",
+        "name": "Clone Success Comparison Report",
+        "description": "Side-by-side location comparison with replication analysis, demographic matching, and execution roadmap",
+        "category": "location",
+        "min_tier": "pro",
+        "price_cents": 3900,
+        "display_order": 61,
+        "ai_prompt": """Generate a clone success comparison report for replicating a successful business. Include:
+
+1. Executive Summary – feasibility assessment and recommendation
+2. Source Business Profile
+   - Company overview, business model, key success factors
+   - Unit economics, revenue drivers, profit margins
+   - Market position and competitive advantages
+3. Market Matching Analysis
+   - Demographics comparison (source vs. target markets)
+   - Economic indicators and spending patterns
+   - Competition and market saturation
+4. Location Comparison Analysis
+   - Side-by-side feature comparison (population, income, foot traffic, etc.)
+   - Demographic alignment scoring
+   - Competition landscape assessment
+5. Replication Feasibility
+   - Success factor alignment (which factors transfer, which don't)
+   - Required adaptations for target market
+   - Risk areas and mitigation strategies
+6. Replication Checklist
+   - Key operational elements to copy
+   - Critical differences to account for
+   - Timeline and resource requirements
+7. Financial Projections
+   - Estimated startup costs based on source business
+   - Revenue projections for target market
+   - Break-even analysis and ROI timeline
+8. Execution Roadmap
+   - 90-day launch plan with key milestones
+   - Resource requirements and hiring plan
+   - Success metrics and monitoring KPIs
+
+Business Context:
+{context}
+
+Be specific about what works in the source market vs. what may need adjustment for the target market."""
+    },
 ]

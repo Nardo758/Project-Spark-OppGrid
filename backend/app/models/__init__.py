@@ -78,6 +78,7 @@ from .api_key import APIKey
 from .api_usage import APIUsage
 from .agent_webhook_subscription import AgentWebhookSubscription
 from .dataset import Dataset, DatasetPurchase, DatasetType
+from .micro_market import MicroMarket, SuccessProfile, IdentifyLocationCache
 
 __all__ = [
     "User",
@@ -226,4 +227,10 @@ __all__ = [
     "APIKey",
     "APIUsage",
     "AgentWebhookSubscription",
+    "Dataset",
+    "DatasetPurchase",
+    "DatasetType",
+    "MicroMarket",
+    "SuccessProfile",
+    "IdentifyLocationCache",
 ]

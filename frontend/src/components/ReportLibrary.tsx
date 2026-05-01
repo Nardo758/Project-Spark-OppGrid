@@ -118,6 +118,51 @@ const INPUT_MODES = [
 
 const REPORT_CATEGORIES: ReportCategory[] = [
   {
+    id: 'mapping', label: 'Location & Mapping', icon: MapPin, color: '#10B981',
+    reports: [
+      {
+        slug: 'identify_location_map',
+        title: 'Identify Location Map Report',
+        description: 'Curated location candidates ranked by archetype with demographic profiles, competition analysis, and risk assessment.',
+        price: '$29',
+        priceCents: 2900,
+        consultantPrice: '$1,500 - $5,000',
+        icon: MapPin,
+        accentColor: '#10B981',
+        sections: [
+          'Executive Summary',
+          'Candidates by Archetype',
+          'Comparison Table',
+          'Investment Thesis',
+          'Risk Analysis',
+          'Next Steps'
+        ],
+        deliveryTime: '2 min',
+        isStudio: true
+      },
+      {
+        slug: 'clone_success_comparison',
+        title: 'Clone Success Comparison Report',
+        description: 'Side-by-side location comparison with replication analysis, demographic matching, and execution roadmap.',
+        price: '$39',
+        priceCents: 3900,
+        consultantPrice: '$2,000 - $8,000',
+        icon: MapPin,
+        accentColor: '#185FA5',
+        sections: [
+          'Executive Summary',
+          'Source Business Profile',
+          'Matching Locations',
+          'Comparison Analysis',
+          'Replication Checklist',
+          'Financial Projections'
+        ],
+        deliveryTime: '3 min',
+        isStudio: true
+      }
+    ]
+  },
+  {
     id: 'strategy', label: 'Strategy & Analysis', icon: Target, color: '#185FA5',
     reports: [
       { slug: 'market_analysis', title: 'Market Analysis', description: 'TAM/SAM/SOM with competitive landscape and growth trends.', price: '$99', priceCents: 9900, consultantPrice: '$2,000 - $8,000', icon: PieChart, accentColor: '#185FA5', sections: ['Market Size', 'Growth Trends', 'Customer Segments', 'Competitive Landscape', 'Entry Strategy', 'Revenue Projections'], deliveryTime: '2-3 hrs', isStudio: true },
@@ -1638,6 +1683,33 @@ export default function ReportLibrary({
                   </div>
                 </div>
               ))}
+              
+              {/* Inline download button for Location Analysis */}
+              <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Download className="w-4 h-4 text-green-600" />
+                  <p className="text-sm font-semibold text-green-900">
+                    Download your location analysis as a professional map report
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const report = allReports.find(r => r.slug === 'identify_location_map')
+                    if (report) handleReportAction(report)
+                  }}
+                  disabled={purchaseLoading || !!generatingReport}
+                  className="w-full py-2 px-3 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {generatingReport === 'identify_location_map' ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Generate Map Report for $29
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 
@@ -1667,24 +1739,80 @@ export default function ReportLibrary({
                   </div>
                 </div>
               ))}
+              
+              {/* Inline download button for Clone Success Comparison */}
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Download className="w-4 h-4 text-blue-600" />
+                  <p className="text-sm font-semibold text-blue-900">
+                    Compare your options with a professional location analysis
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const report = allReports.find(r => r.slug === 'clone_success_comparison')
+                    if (report) handleReportAction(report)
+                  }}
+                  disabled={purchaseLoading || !!generatingReport}
+                  className="w-full py-2 px-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {generatingReport === 'clone_success_comparison' ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Generate Comparison Report for $39
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 
           {inputMode === 'clone' && consultantResult.intel_verdict && consultantResult.matching_locations?.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <p className="text-[11px] text-gray-400 mb-2">Best matching locations ({consultantResult.matching_locations.length} found)</p>
-              {consultantResult.matching_locations.slice(0, 3).map((loc: any, idx: number) => (
-                <div key={idx} className="p-3 mb-2 bg-gray-50 rounded-lg flex justify-between items-center">
-                  <div>
-                    <div className="font-medium text-gray-900 text-sm">{loc.name}</div>
-                    <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
+            <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+              <div>
+                <p className="text-[11px] text-gray-400 mb-2">Best matching locations ({consultantResult.matching_locations.length} found)</p>
+                {consultantResult.matching_locations.slice(0, 3).map((loc: any, idx: number) => (
+                  <div key={idx} className="p-3 mb-2 bg-gray-50 rounded-lg flex justify-between items-center">
+                    <div>
+                      <div className="font-medium text-gray-900 text-sm">{loc.name}</div>
+                      <div className="text-xs text-gray-500">{loc.city}, {loc.state}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold text-[#0F6E56]">{loc.similarity_score}%</div>
+                      <div className="text-[10px] text-gray-400">Match</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-[#0F6E56]">{loc.similarity_score}%</div>
-                    <div className="text-[10px] text-gray-400">Match</div>
-                  </div>
+                ))}
+              </div>
+              
+              {/* Inline download button for Clone Success Comparison with intel_verdict */}
+              <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Download className="w-4 h-4 text-blue-600" />
+                  <p className="text-sm font-semibold text-blue-900">
+                    Compare your options with a professional location analysis
+                  </p>
                 </div>
-              ))}
+                <button
+                  onClick={() => {
+                    const report = allReports.find(r => r.slug === 'clone_success_comparison')
+                    if (report) handleReportAction(report)
+                  }}
+                  disabled={purchaseLoading || !!generatingReport}
+                  className="w-full py-2 px-3 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {generatingReport === 'clone_success_comparison' ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Generate Comparison Report for $39
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
 

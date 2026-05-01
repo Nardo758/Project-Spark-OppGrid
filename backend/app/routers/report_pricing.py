@@ -763,6 +763,8 @@ STUDIO_REPORT_PRICES = {
     "tweet_landing": {"name": "Tweet Landing Page", "price_cents": 4900},
     "feasibility_study": {"name": "Feasibility Study", "price_cents": 2500},
     "location_analysis": {"name": "Location Analysis Report", "price_cents": 11900},
+    "identify_location_map": {"name": "Identify Location Map Report", "price_cents": 2900},
+    "clone_success_comparison": {"name": "Clone Success Comparison Report", "price_cents": 3900},
 }
 
 

@@ -418,6 +418,8 @@ async def generate_report(
         "strategic_assessment": "layer_3",
         "pitch_deck": "layer_3",
         "location_analysis": "layer_2",
+        "identify_location_map": "layer_1",
+        "clone_success_comparison": "layer_1",
     }
     
     report_tier = TEMPLATE_TO_REPORT_TIER.get(template.slug, "layer_1")
