@@ -106,7 +106,7 @@ class SearchIdeasResponse(BaseModel):
     preview_cta: Optional[Dict[str, Any]] = None
 
 
-class IdentifyLocationRequest(BaseModel):
+class ConsultantLocationRequest(BaseModel):
     city: str = Field(..., min_length=2, max_length=255)
     business_description: str = Field(..., min_length=3, max_length=500)
     additional_params: Optional[Dict[str, Any]] = None
@@ -137,12 +137,19 @@ class IdentifyLocationResponse(BaseModel):
     intel_micro_markets: Optional[List[Dict[str, Any]]] = None
     intel_tags: Optional[List[str]] = None
     intel_cta: Optional[Dict[str, Any]] = None
+    # Intelligence card — supply analysis
+    intel_supply: Optional[Dict[str, Any]] = None
     # Canonical top-level fields
     narrative_summary: Optional[str] = None
     proceed_recommendation: Optional[str] = None
     avg_rating: Optional[float] = None
     foot_traffic_growth: Optional[float] = None
     density_per_residents: Optional[str] = None
+    supply_label: Optional[str] = None
+    supply_metric: Optional[str] = None
+    supply_vs_national: Optional[str] = None
+    supply_unit: Optional[str] = None
+    benchmark_key: Optional[str] = None
     demographic_snapshot: Optional[Dict[str, Any]] = None
     micro_markets: Optional[List[Dict[str, Any]]] = None
 
@@ -374,7 +381,7 @@ async def search_ideas(
 
 @router.post("/identify-location", response_model=IdentifyLocationResponse)
 async def identify_location(
-    request: IdentifyLocationRequest,
+    request: ConsultantLocationRequest,
     db: Session = Depends(get_db),
     user_id: int = 1,
 ):

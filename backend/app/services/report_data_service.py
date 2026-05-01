@@ -211,44 +211,374 @@ class ReportDataService:
     # Industry benchmarks used as fallback when OppGrid primary data is sparse.
     # Values: (revenue_per_year, capital_required, market_size_label)
     INDUSTRY_BENCHMARKS: Dict[str, Dict] = {
-        "restaurant":       {"revenue": 850000,  "capital": 375000, "market": "$899B (US restaurant industry)"},
-        "cafe":             {"revenue": 450000,  "capital": 200000, "market": "$47.5B (US coffee shop market)"},
-        "coffee shop":      {"revenue": 450000,  "capital": 200000, "market": "$47.5B (US coffee shop market)"},
-        "bakery":           {"revenue": 380000,  "capital": 150000, "market": "$11B (US retail bakery market)"},
-        "gym":              {"revenue": 600000,  "capital": 400000, "market": "$35B (US fitness industry)"},
-        "fitness center":   {"revenue": 600000,  "capital": 400000, "market": "$35B (US fitness industry)"},
-        "salon":            {"revenue": 320000,  "capital": 120000, "market": "$52B (US hair salon industry)"},
-        "barbershop":       {"revenue": 250000,  "capital": 80000,  "market": "$5.5B (US barber shop market)"},
-        "clinic":           {"revenue": 1200000, "capital": 500000, "market": "$4.5T (US healthcare market)"},
-        "dental":           {"revenue": 1100000, "capital": 450000, "market": "$163B (US dental market)"},
-        "medical":          {"revenue": 1200000, "capital": 500000, "market": "$4.5T (US healthcare market)"},
-        "pharmacy":         {"revenue": 2200000, "capital": 600000, "market": "$550B (US pharmacy market)"},
-        "daycare":          {"revenue": 480000,  "capital": 200000, "market": "$60B (US childcare market)"},
-        "tutoring":         {"revenue": 280000,  "capital": 50000,  "market": "$11B (US tutoring market)"},
-        "yoga studio":      {"revenue": 350000,  "capital": 120000, "market": "$9B (US yoga market)"},
-        "spa":              {"revenue": 420000,  "capital": 200000, "market": "$19B (US spa industry)"},
-        "hotel":            {"revenue": 3000000, "capital": 2000000,"market": "$230B (US hotel industry)"},
-        "brewery":          {"revenue": 1100000, "capital": 700000, "market": "$28B (US craft beer market)"},
-        "laundromat":       {"revenue": 280000,  "capital": 300000, "market": "$5B (US laundry market)"},
-        "car wash":         {"revenue": 680000,  "capital": 350000, "market": "$14.5B (US car wash market)"},
-        "pet grooming":     {"revenue": 380000,  "capital": 100000, "market": "$10B (US pet grooming market)"},
-        "auto repair":      {"revenue": 650000,  "capital": 200000, "market": "$64B (US auto repair market)"},
-        "real estate":      {"revenue": 900000,  "capital": 50000,  "market": "$200B+ (US real estate brokerage)"},
-        "coworking":        {"revenue": 1200000, "capital": 1000000,"market": "$13B (US coworking market)"},
-        "mental health":    {"revenue": 800000,  "capital": 200000, "market": "$280B (US mental health market)"},
-        "therapy":          {"revenue": 750000,  "capital": 180000, "market": "$280B (US mental health market)"},
-        "counseling":       {"revenue": 700000,  "capital": 150000, "market": "$280B (US mental health market)"},
-        "consulting":       {"revenue": 1500000, "capital": 30000,  "market": "$700B (US consulting market)"},
-        "ecommerce":        {"revenue": 800000,  "capital": 100000, "market": "$1.1T (US ecommerce market)"},
-        "saas":             {"revenue": 2000000, "capital": 500000, "market": "$200B (US SaaS market)"},
-        "retail":           {"revenue": 700000,  "capital": 300000, "market": "$6.5T (US retail market)"},
-        "grocery":          {"revenue": 3500000, "capital": 800000, "market": "$800B (US grocery market)"},
-        "gas station":      {"revenue": 3000000, "capital": 600000, "market": "$600B (US gas station market)"},
-        "bar and grill":    {"revenue": 950000,  "capital": 400000, "market": "$899B (US restaurant industry)"},
-        "fitness":          {"revenue": 600000,  "capital": 400000, "market": "$35B (US fitness industry)"},
+        # ── REAL ESTATE / STORAGE ───────────────────────────────────────────────
+        "self_storage": {
+            "revenue": 650000, "capital": 2500000, "market": "$39.5B (US self-storage industry)",
+            # Primary metric: sq ft of rentable storage per capita
+            # Source: Self Storage Association (SSA) — national avg 6.1–8 sq ft/person
+            "primary_metric": "sqft_per_capita",
+            "national_average": 7.0,           # sq ft per person, US average
+            "undersupplied_threshold": 7.0,    # below = opportunity
+            "oversupplied_threshold": 8.5,     # above = saturated
+            "unit": "sq ft per capita",
+            "avg_facility_sqft": 50000,        # avg US self-storage facility (SSA data)
+            "typical_density_per_capita": 20000,  # fallback: residents per facility
+            "aliases": [
+                "storage facility", "mini storage", "climate controlled storage",
+                "storage unit", "self-storage", "public storage", "u-haul storage",
+                "extra space storage", "cube smart",
+            ],
+        },
+
+        # ── FOOD & BEVERAGE ─────────────────────────────────────────────────────
+        "restaurant": {
+            "revenue": 850000, "capital": 375000, "market": "$899B (US restaurant industry)",
+            # Primary metric: residents per restaurant
+            # Source: NRA — ~1 restaurant per 250–300 residents nationally
+            "primary_metric": "competitors_per_capita",
+            "national_average": 275,           # residents per restaurant
+            "undersupplied_threshold": 400,    # 1 per 400+ residents = opportunity
+            "oversupplied_threshold": 150,     # 1 per <150 residents = saturated
+            "unit": "residents per restaurant",
+            "typical_density_per_capita": 275,
+            "aliases": [
+                "eatery", "diner", "bistro", "food service", "pizzeria", "taqueria",
+                "steakhouse", "sushi", "thai", "chinese food", "italian", "seafood",
+                "burger", "sandwich shop", "food truck",
+            ],
+        },
+        "cafe": {
+            "revenue": 450000, "capital": 200000, "market": "$47.5B (US coffee shop market)",
+            # Source: NCA — ~1 coffee shop per 3,500–5,000 residents in most metros
+            "primary_metric": "competitors_per_capita",
+            "national_average": 4000,
+            "undersupplied_threshold": 6000,
+            "oversupplied_threshold": 2000,
+            "unit": "residents per cafe",
+            "typical_density_per_capita": 4000,
+            "aliases": ["coffee shop", "coffee", "espresso bar", "starbucks", "dunkin"],
+        },
+        "bakery": {
+            "revenue": 380000, "capital": 150000, "market": "$11B (US retail bakery market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 12000,
+            "undersupplied_threshold": 18000,
+            "oversupplied_threshold": 6000,
+            "unit": "residents per bakery",
+            "typical_density_per_capita": 12000,
+            "aliases": ["patisserie", "pastry shop", "bread shop", "donut shop"],
+        },
+        "brewery": {
+            "revenue": 1100000, "capital": 700000, "market": "$28B (US craft beer market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 15000,
+            "undersupplied_threshold": 25000,
+            "oversupplied_threshold": 8000,
+            "unit": "residents per brewery",
+            "typical_density_per_capita": 15000,
+            "aliases": ["craft brewery", "taproom", "microbrewery", "brewpub", "winery", "distillery"],
+        },
+        "bar": {
+            "revenue": 950000, "capital": 400000, "market": "$899B (US restaurant industry)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 1200,
+            "undersupplied_threshold": 2000,
+            "oversupplied_threshold": 600,
+            "unit": "residents per bar",
+            "typical_density_per_capita": 1200,
+            "aliases": ["bar and grill", "pub", "nightclub", "lounge", "sports bar", "cocktail bar"],
+        },
+        "grocery": {
+            "revenue": 3500000, "capital": 800000, "market": "$800B (US grocery market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 8000,
+            "undersupplied_threshold": 12000,
+            "oversupplied_threshold": 4000,
+            "unit": "residents per grocery store",
+            "typical_density_per_capita": 8000,
+            "aliases": ["supermarket", "food market", "bodega", "convenience store", "whole foods", "trader joe"],
+        },
+
+        # ── HEALTH & WELLNESS ────────────────────────────────────────────────────
+        "gym": {
+            "revenue": 600000, "capital": 400000, "market": "$35B (US fitness industry)",
+            # Source: IHRSA — 1 gym per 8,000–12,000 residents is typical
+            "primary_metric": "competitors_per_capita",
+            "national_average": 10000,
+            "undersupplied_threshold": 15000,
+            "oversupplied_threshold": 5000,
+            "unit": "residents per gym",
+            "typical_density_per_capita": 10000,
+            "aliases": [
+                "fitness center", "fitness", "crossfit", "planet fitness", "anytime fitness",
+                "gym", "health club", "athletic club",
+            ],
+        },
+        "yoga_studio": {
+            "revenue": 350000, "capital": 120000, "market": "$9B (US yoga market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 14000,
+            "undersupplied_threshold": 20000,
+            "oversupplied_threshold": 8000,
+            "unit": "residents per yoga studio",
+            "typical_density_per_capita": 14000,
+            "aliases": ["yoga", "pilates", "barre", "hot yoga", "meditation center"],
+        },
+        "spa": {
+            "revenue": 420000, "capital": 200000, "market": "$19B (US spa industry)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 8000,
+            "undersupplied_threshold": 12000,
+            "oversupplied_threshold": 4000,
+            "unit": "residents per spa",
+            "typical_density_per_capita": 8000,
+            "aliases": ["day spa", "med spa", "medical spa", "medspa", "massage therapy", "beauty spa"],
+        },
+        "salon": {
+            "revenue": 320000, "capital": 120000, "market": "$52B (US hair salon industry)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 1800,
+            "undersupplied_threshold": 3000,
+            "oversupplied_threshold": 800,
+            "unit": "residents per salon",
+            "typical_density_per_capita": 1800,
+            "aliases": ["hair salon", "beauty salon", "hair studio", "blowout bar"],
+        },
+        "barbershop": {
+            "revenue": 250000, "capital": 80000, "market": "$5.5B (US barber shop market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 3500,
+            "undersupplied_threshold": 5000,
+            "oversupplied_threshold": 1500,
+            "unit": "residents per barbershop",
+            "typical_density_per_capita": 3500,
+            "aliases": ["barber", "barbers", "mens haircut", "great clips"],
+        },
+
+        # ── HEALTHCARE ───────────────────────────────────────────────────────────
+        "dental": {
+            "revenue": 1100000, "capital": 450000, "market": "$163B (US dental market)",
+            # Source: ADA — national avg ~61 dentists per 100k residents
+            "primary_metric": "providers_per_100k",
+            "national_average": 61.0,          # dentists per 100k
+            "undersupplied_threshold": 40.0,   # below = underserved
+            "oversupplied_threshold": 90.0,    # above = saturated
+            "unit": "dentists per 100k residents",
+            "typical_density_per_capita": 1600,
+            "aliases": ["dentist", "orthodontist", "dental clinic", "dental office", "oral health"],
+        },
+        "medical": {
+            "revenue": 1200000, "capital": 500000, "market": "$4.5T (US healthcare market)",
+            # Source: HRSA — national avg ~98 primary care physicians per 100k
+            "primary_metric": "providers_per_100k",
+            "national_average": 98.0,
+            "undersupplied_threshold": 60.0,
+            "oversupplied_threshold": 150.0,
+            "unit": "physicians per 100k residents",
+            "typical_density_per_capita": 1000,
+            "aliases": ["clinic", "urgent care", "primary care", "doctor", "physician", "family medicine", "walk-in clinic"],
+        },
+        "mental_health": {
+            "revenue": 800000, "capital": 200000, "market": "$280B (US mental health market)",
+            # Source: SAMHSA — < 30 per 100k = underserved (federal designation threshold)
+            "primary_metric": "providers_per_100k",
+            "national_average": 30.0,
+            "undersupplied_threshold": 30.0,
+            "oversupplied_threshold": 60.0,
+            "unit": "therapists per 100k residents",
+            "typical_density_per_capita": 3300,
+            "aliases": [
+                "mental health", "therapy", "therapist", "counseling", "counselor",
+                "psychologist", "psychiatrist", "behavioral health", "wellness center",
+            ],
+        },
+        "pharmacy": {
+            "revenue": 2200000, "capital": 600000, "market": "$550B (US pharmacy market)",
+            # Source: NCPDP — 1 pharmacy per ~4,500–6,000 residents is typical
+            "primary_metric": "competitors_per_capita",
+            "national_average": 5000,
+            "undersupplied_threshold": 8000,
+            "oversupplied_threshold": 2500,
+            "unit": "residents per pharmacy",
+            "typical_density_per_capita": 5000,
+            "aliases": ["drug store", "cvs", "walgreens", "rite aid", "compounding pharmacy"],
+        },
+
+        # ── CHILDREN & EDUCATION ─────────────────────────────────────────────────
+        "daycare": {
+            "revenue": 480000, "capital": 200000, "market": "$60B (US childcare market)",
+            # Source: Child Care Aware — 1 licensed center per 2,500–4,000 residents
+            "primary_metric": "competitors_per_capita",
+            "national_average": 3000,
+            "undersupplied_threshold": 5000,
+            "oversupplied_threshold": 1500,
+            "unit": "residents per childcare center",
+            "typical_density_per_capita": 3000,
+            "aliases": ["childcare", "preschool", "pre-k", "nursery", "child care", "early learning"],
+        },
+        "tutoring": {
+            "revenue": 280000, "capital": 50000, "market": "$11B (US tutoring market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 12000,
+            "undersupplied_threshold": 18000,
+            "oversupplied_threshold": 6000,
+            "unit": "residents per tutoring center",
+            "typical_density_per_capita": 12000,
+            "aliases": ["kumon", "learning center", "education center", "test prep"],
+        },
+
+        # ── AUTO ─────────────────────────────────────────────────────────────────
+        "car_wash": {
+            "revenue": 680000, "capital": 350000, "market": "$14.5B (US car wash market)",
+            # Source: ICA — national avg ~1 car wash per 7,000–10,000 residents
+            "primary_metric": "competitors_per_capita",
+            "national_average": 8000,
+            "undersupplied_threshold": 12000,
+            "oversupplied_threshold": 4000,
+            "unit": "residents per car wash",
+            "typical_density_per_capita": 8000,
+            "aliases": ["car wash", "auto detailing", "express wash", "tunnel wash", "detail shop"],
+        },
+        "auto_repair": {
+            "revenue": 650000, "capital": 200000, "market": "$64B (US auto repair market)",
+            # Source: IBIS — 1 shop per ~2,000–3,000 residents nationally
+            "primary_metric": "competitors_per_capita",
+            "national_average": 2500,
+            "undersupplied_threshold": 4000,
+            "oversupplied_threshold": 1200,
+            "unit": "residents per auto repair shop",
+            "typical_density_per_capita": 2500,
+            "aliases": [
+                "auto repair", "mechanic", "muffler", "tire shop", "oil change",
+                "jiffy lube", "pep boys", "midas", "firestone", "brake shop",
+            ],
+        },
+        "gas_station": {
+            "revenue": 3000000, "capital": 600000, "market": "$600B (US gas station market)",
+            # Source: NACS — ~1 gas station per 2,500 residents nationally
+            "primary_metric": "competitors_per_capita",
+            "national_average": 2500,
+            "undersupplied_threshold": 4000,
+            "oversupplied_threshold": 1200,
+            "unit": "residents per gas station",
+            "typical_density_per_capita": 2500,
+            "aliases": ["gas station", "fuel station", "filling station", "petrol", "shell", "bp", "exxon"],
+        },
+
+        # ── SERVICES ─────────────────────────────────────────────────────────────
+        "laundromat": {
+            "revenue": 280000, "capital": 300000, "market": "$5B (US laundry market)",
+            # Source: CLA — 1 laundromat per 2,000–3,500 residents (higher demand in renter-heavy areas)
+            "primary_metric": "competitors_per_capita",
+            "national_average": 3000,
+            "undersupplied_threshold": 4500,
+            "oversupplied_threshold": 1500,
+            "unit": "residents per laundromat",
+            "typical_density_per_capita": 3000,
+            "aliases": ["laundry", "coin laundry", "wash and fold", "dry cleaning"],
+        },
+        "pet_grooming": {
+            "revenue": 380000, "capital": 100000, "market": "$10B (US pet grooming market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 7000,
+            "undersupplied_threshold": 10000,
+            "oversupplied_threshold": 3500,
+            "unit": "residents per grooming shop",
+            "typical_density_per_capita": 7000,
+            "aliases": ["pet grooming", "dog grooming", "pet salon", "pet spa", "doggy daycare"],
+        },
+        "coworking": {
+            "revenue": 1200000, "capital": 1000000, "market": "$13B (US coworking market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 20000,
+            "undersupplied_threshold": 35000,
+            "oversupplied_threshold": 10000,
+            "unit": "residents per coworking space",
+            "typical_density_per_capita": 20000,
+            "aliases": ["coworking", "shared office", "office suites", "regus", "wework", "shared workspace"],
+        },
+
+        # ── HOSPITALITY ──────────────────────────────────────────────────────────
+        "hotel": {
+            "revenue": 3000000, "capital": 2000000, "market": "$230B (US hotel industry)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 25000,
+            "undersupplied_threshold": 40000,
+            "oversupplied_threshold": 10000,
+            "unit": "residents per hotel",
+            "typical_density_per_capita": 25000,
+            "aliases": ["hotel", "motel", "inn", "lodge", "resort", "hostel", "airbnb", "extended stay"],
+        },
+
+        # ── PROFESSIONAL ─────────────────────────────────────────────────────────
+        "consulting": {
+            "revenue": 1500000, "capital": 30000, "market": "$700B (US consulting market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 5000,
+            "undersupplied_threshold": 10000,
+            "oversupplied_threshold": 2000,
+            "unit": "residents per consulting firm",
+            "typical_density_per_capita": 5000,
+            "aliases": ["consulting", "management consulting", "business consulting", "advisory"],
+        },
+        "real_estate": {
+            "revenue": 900000, "capital": 50000, "market": "$200B+ (US real estate brokerage)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 2000,
+            "undersupplied_threshold": 4000,
+            "oversupplied_threshold": 800,
+            "unit": "residents per brokerage",
+            "typical_density_per_capita": 2000,
+            "aliases": ["real estate", "realty", "realtor", "brokerage", "real estate agent", "property management"],
+        },
+
+        # ── TECH / DIGITAL ───────────────────────────────────────────────────────
+        "ecommerce": {
+            "revenue": 800000, "capital": 100000, "market": "$1.1T (US ecommerce market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 5000,
+            "undersupplied_threshold": 10000,
+            "oversupplied_threshold": 2000,
+            "unit": "residents per online retailer",
+            "typical_density_per_capita": 5000,
+            "aliases": ["ecommerce", "online store", "dropshipping", "amazon seller", "etsy"],
+        },
+        "saas": {
+            "revenue": 2000000, "capital": 500000, "market": "$200B (US SaaS market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 10000,
+            "undersupplied_threshold": 20000,
+            "oversupplied_threshold": 3000,
+            "unit": "residents per SaaS company",
+            "typical_density_per_capita": 10000,
+            "aliases": ["saas", "software", "app", "startup", "tech company", "platform"],
+        },
+
+        # ── RETAIL ───────────────────────────────────────────────────────────────
+        "retail": {
+            "revenue": 700000, "capital": 300000, "market": "$6.5T (US retail market)",
+            "primary_metric": "competitors_per_capita",
+            "national_average": 1500,
+            "undersupplied_threshold": 2500,
+            "oversupplied_threshold": 700,
+            "unit": "residents per retail store",
+            "typical_density_per_capita": 1500,
+            "aliases": [
+                "retail", "shop", "store", "boutique", "clothing store", "apparel",
+                "furniture store", "electronics store", "hardware store",
+            ],
+        },
     }
-    
-    DEFAULT_BENCHMARK = {"revenue": 700000, "capital": 250000, "market": "$50B+ (industry estimate)"}
+
+    DEFAULT_BENCHMARK = {
+        "revenue": 700000, "capital": 250000, "market": "$50B+ (industry estimate)",
+        "primary_metric": "competitors_per_capita",
+        "national_average": 5000,
+        "undersupplied_threshold": 8000,
+        "oversupplied_threshold": 2000,
+        "unit": "residents per business",
+        "typical_density_per_capita": 5000,
+    }
 
     def __init__(self, db: Session):
         self.db = db

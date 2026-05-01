@@ -401,11 +401,11 @@ Return as JSON:
         business_type: str,
         competitors: list,
         geo_analysis: Dict[str, Any],
+        business_description: Optional[str] = None,
     ) -> dict:
         """Build intelligence card for identify_location mode."""
         try:
             from sqlalchemy import text as _text
-            from app.services.report_data_service import ReportDataService as _RDS; INDUSTRY_BENCHMARKS = _RDS.INDUSTRY_BENCHMARKS
 
             # 1. Competitor count + avg rating from geo_analysis
             competitor_count = len(competitors)
@@ -432,21 +432,21 @@ Return as JSON:
                 self.db.rollback()
                 population, median_income, age_25_44_pct = 500000, 55000, 30
 
-            # 3. Density calculation
-            benchmark = INDUSTRY_BENCHMARKS.get(business_type, {})
-            typical_density = benchmark.get("typical_density_per_capita", 5000)
-            if competitor_count > 0 and population > 0:
-                density_per = int(population / competitor_count)
-                density_ratio = f"1 per {density_per:,} residents"
-                if density_per < typical_density * 0.5:
-                    density_label, density_color = "High", "danger"
-                elif density_per < typical_density:
-                    density_label, density_color = "Medium", "warning"
-                else:
-                    density_label, density_color = "Low", "success"
-            else:
-                density_per, density_ratio = 0, "Unknown"
-                density_label, density_color = "Unknown", None
+            # 3. Industry-specific supply analysis
+            # Use raw business_description when available — much more specific than inferred_category
+            benchmark_key = self._infer_benchmark_key(business_description or business_type)
+            supply = self._analyze_supply(
+                benchmark_key=benchmark_key,
+                competitor_count=competitor_count,
+                population=population,
+                municipal_sqft=None,  # municipal_data_service will populate this when available
+            )
+            density_label  = supply["label"]
+            density_color  = supply["color"]
+            density_ratio  = supply["display"]
+            density_vs_nat = supply["vs_national"]
+            supply_unit    = supply["unit"]
+            supply_source  = supply["data_source"]
 
             # 4. Foot traffic proxy from market_growth_trajectories
             try:
@@ -469,14 +469,17 @@ BUSINESS TYPE: {business_type}
 
 DATA:
 - Competitors: {competitor_count} within 5 miles
-- Market Density: {density_label} ({density_ratio})
+- Supply Analysis: {density_label} — {density_ratio} ({density_vs_nat})
+- Supply Metric: {supply_unit} | Source: {supply_source}
 - Average Competitor Rating: {avg_rating}★
 - Foot Traffic Growth: +{foot_traffic_growth}% YoY
 - Median Income: ${median_income:,}
 - Target Demographic (25-44): {age_25_44_pct}%
 
 TASK 1 - NARRATIVE SUMMARY:
-Write a 2-3 sentence location intelligence paragraph referencing these metrics.
+Write a 2-3 sentence location intelligence paragraph referencing the supply analysis metric.
+For real estate categories (self storage, warehouse), reference the sq ft per capita figure.
+For healthcare, reference providers per 100k. For all others, reference residents per business.
 Use <strong> tags to emphasize recommended neighborhoods or strategies.
 
 TASK 2 - MICRO MARKETS:
@@ -485,6 +488,8 @@ For each: Name (neighborhood name), Score (70-95), Description (short strategic 
 
 TASK 3 - PROCEED RECOMMENDATION:
 Return one of: "Strong opportunity", "Proceed with targeting", "Proceed with caution", "Avoid"
+Base this on the supply label: Undersupplied = Strong opportunity, Balanced = Proceed with targeting,
+Oversupplied = Proceed with caution or Avoid.
 
 Return as JSON:
 {{
@@ -533,7 +538,14 @@ Return as JSON:
                 },
                 "intel_metrics": [
                     {"label": "Competitors", "value": str(competitor_count), "subtext": "within 5 mi"},
-                    {"label": "Density", "value": density_label, "subtext": density_ratio, "color": density_color},
+                    {
+                        "label": "Market Supply",
+                        "value": density_label,
+                        "subtext": density_ratio,
+                        "color": density_color,
+                        "detail": density_vs_nat,
+                        "unit": supply_unit,
+                    },
                     {"label": "Avg. rating", "value": f"{avg_rating}★", "subtext": "area benchmark"},
                     {
                         "label": "Foot traffic",
@@ -544,7 +556,19 @@ Return as JSON:
                 ],
                 "intel_demographics": demographic_snapshot,
                 "intel_micro_markets": micro_markets,
-                "intel_tags": ["Census Bureau", "Google Places", "Market Growth Data", "AI analysis"],
+                "intel_tags": ["Census Bureau", "Google Places", "Market Growth Data", "AI analysis", supply_source],
+                "intel_supply": {
+                    "benchmark_key": benchmark_key,
+                    "metric_value": supply["metric_value"],
+                    "unit": supply_unit,
+                    "label": density_label,
+                    "color": density_color,
+                    "vs_national": density_vs_nat,
+                    "data_source": supply_source,
+                    "national_average": supply.get("national_average"),
+                    "undersupplied_threshold": supply.get("under_thresh"),
+                    "oversupplied_threshold": supply.get("over_thresh"),
+                },
                 "intel_cta": {
                     "text": "Full location analysis with Census data, heat maps & lease intel",
                     "report_type": "Business Plan",
@@ -555,7 +579,12 @@ Return as JSON:
                 "proceed_recommendation": proceed_rec,
                 "avg_rating": avg_rating,
                 "foot_traffic_growth": foot_traffic_growth,
-                "density_per_residents": density_ratio,
+                "density_per_residents": supply["density_ratio"],
+                "supply_label": density_label,
+                "supply_metric": density_ratio,
+                "supply_vs_national": density_vs_nat,
+                "supply_unit": supply_unit,
+                "benchmark_key": benchmark_key,
                 "demographic_snapshot": demographic_snapshot,
                 "micro_markets": micro_markets,
             }
@@ -1123,7 +1152,7 @@ Return as JSON:
 
             market_report, intel_card = await asyncio.gather(
                 _async_market_report(),
-                self._build_location_intel_card(city, inferred_category, competitors, geo_analysis),
+                self._build_location_intel_card(city, inferred_category, competitors, geo_analysis, business_description=business_description),
             )
             logger.info(f"[TIMING] Market report + intel card (parallel): {int((time.time() - geo_start) * 1000)}ms")
             
@@ -2613,6 +2642,236 @@ Return as JSON:
             state=state,
             context="consultant_studio._get_city_center_coords"
         )
+
+    def _infer_benchmark_key(self, business_description: str) -> str:
+        """
+        Map a business description to a specific INDUSTRY_BENCHMARKS key.
+        Returns the key string, or 'default' if no match found.
+        Checks aliases so free-text like 'self storage facility' → 'self_storage'.
+        """
+        from app.services.report_data_service import ReportDataService as _RDS
+
+        desc_lower = business_description.lower()
+
+        # Direct key match first
+        for key in _RDS.INDUSTRY_BENCHMARKS:
+            if key in desc_lower or key.replace("_", " ") in desc_lower:
+                return key
+
+        # Alias match
+        for key, data in _RDS.INDUSTRY_BENCHMARKS.items():
+            for alias in data.get("aliases", []):
+                if alias in desc_lower:
+                    return key
+
+        # Broad fallback keywords → benchmark key
+        fallback_map = {
+            "storage": "self_storage",
+            "restaurant": "restaurant", "food": "restaurant", "diner": "restaurant",
+            "cafe": "cafe", "coffee": "cafe", "espresso": "cafe",
+            "bakery": "bakery", "bread": "bakery", "pastry": "bakery",
+            "bar ": "bar", "pub": "bar", "brewery": "brewery", "brew": "brewery",
+            "grocery": "grocery", "supermarket": "grocery",
+            "gym": "gym", "fitness": "gym", "crossfit": "gym",
+            "yoga": "yoga_studio", "pilates": "yoga_studio",
+            "spa ": "spa", "massage": "spa", "medspa": "spa",
+            "salon": "salon", "hair": "salon",
+            "barber": "barbershop",
+            "dental": "dental", "dentist": "dental", "orthodont": "dental",
+            "doctor": "medical", "clinic": "medical", "urgent care": "medical",
+            "therapy": "mental_health", "therapist": "mental_health",
+            "mental health": "mental_health", "counseling": "mental_health",
+            "pharmacy": "pharmacy", "drug store": "pharmacy",
+            "daycare": "daycare", "childcare": "daycare", "preschool": "daycare",
+            "tutor": "tutoring",
+            "car wash": "car_wash", "auto detail": "car_wash",
+            "auto repair": "auto_repair", "mechanic": "auto_repair",
+            "gas station": "gas_station", "fuel": "gas_station",
+            "laundromat": "laundromat", "laundry": "laundromat",
+            "pet": "pet_grooming", "dog groo": "pet_grooming",
+            "coworking": "coworking", "shared office": "coworking",
+            "hotel": "hotel", "motel": "hotel",
+            "consulting": "consulting",
+            "real estate": "real_estate", "realtor": "real_estate",
+            "ecommerce": "ecommerce", "online store": "ecommerce",
+            "saas": "saas", "software": "saas",
+            "retail": "retail", "shop": "retail", "boutique": "retail",
+        }
+        for keyword, benchmark_key in fallback_map.items():
+            if keyword in desc_lower:
+                return benchmark_key
+
+        return "default"
+
+    def _analyze_supply(
+        self,
+        benchmark_key: str,
+        competitor_count: int,
+        population: int,
+        municipal_sqft: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Compute the industry-specific supply metric and verdict.
+
+        Returns dict with:
+          metric_value    – computed value (float)
+          unit            – display unit string
+          label           – "Undersupplied" / "Balanced" / "Oversupplied" / "Unknown"
+          color           – "success" / "warning" / "danger" / None
+          display         – human-readable value string  (e.g. "6.2 sq ft/capita")
+          vs_national     – comparison string            (e.g. "↑ 12% above avg")
+          data_source     – string describing where the metric came from
+          density_ratio   – legacy field for backward compat (residents per competitor)
+        """
+        from app.services.report_data_service import ReportDataService as _RDS
+
+        benchmark = _RDS.INDUSTRY_BENCHMARKS.get(benchmark_key, _RDS.DEFAULT_BENCHMARK)
+        primary_metric = benchmark.get("primary_metric", "competitors_per_capita")
+        national_avg   = benchmark.get("national_average", 5000)
+        under_thresh   = benchmark.get("undersupplied_threshold", 8000)
+        over_thresh    = benchmark.get("oversupplied_threshold", 2000)
+        unit           = benchmark.get("unit", "residents per business")
+
+        # ── sqft_per_capita  (self-storage, warehousing) ─────────────────────
+        if primary_metric == "sqft_per_capita":
+            avg_facility_sqft = benchmark.get("avg_facility_sqft", 50000)
+            if municipal_sqft is not None and municipal_sqft > 0:
+                # Real municipal data — most accurate
+                sqft_per_cap = round(municipal_sqft / population, 2) if population else 0
+                data_source = "Municipal property records"
+            elif competitor_count > 0 and population > 0:
+                # Estimate: competitor_count × avg facility size
+                sqft_per_cap = round((competitor_count * avg_facility_sqft) / population, 2)
+                data_source = f"Estimated ({competitor_count} facilities × {avg_facility_sqft:,} sq ft avg)"
+            else:
+                sqft_per_cap = 0
+                data_source = "Insufficient data"
+
+            if sqft_per_cap == 0:
+                label, color = "Unknown", None
+            elif sqft_per_cap < under_thresh:
+                label, color = "Undersupplied", "success"
+            elif sqft_per_cap > over_thresh:
+                label, color = "Oversupplied", "danger"
+            else:
+                label, color = "Balanced", "warning"
+
+            pct_vs_national = (
+                round(((sqft_per_cap - national_avg) / national_avg) * 100, 1)
+                if national_avg and sqft_per_cap else 0
+            )
+            vs_national = (
+                f"↑ {abs(pct_vs_national)}% above national avg" if pct_vs_national > 0
+                else f"↓ {abs(pct_vs_national)}% below national avg"
+            ) if sqft_per_cap else "—"
+
+            density_ratio = (
+                f"1 per {int(population / competitor_count):,} residents"
+                if competitor_count and population else "Unknown"
+            )
+
+            return {
+                "metric_value": sqft_per_cap,
+                "unit": unit,
+                "label": label,
+                "color": color,
+                "display": f"{sqft_per_cap} sq ft per capita" if sqft_per_cap else "Unknown",
+                "vs_national": vs_national,
+                "data_source": data_source,
+                "density_ratio": density_ratio,
+                "national_average": national_avg,
+                "under_thresh": under_thresh,
+                "over_thresh": over_thresh,
+            }
+
+        # ── providers_per_100k  (healthcare professionals) ───────────────────
+        if primary_metric == "providers_per_100k":
+            if competitor_count > 0 and population > 0:
+                per_100k = round((competitor_count / population) * 100000, 1)
+                data_source = "SerpAPI / Google Places"
+            else:
+                per_100k = 0
+                data_source = "Insufficient data"
+
+            if per_100k == 0:
+                label, color = "Unknown", None
+            elif per_100k < under_thresh:
+                label, color = "Undersupplied", "success"
+            elif per_100k > over_thresh:
+                label, color = "Oversupplied", "danger"
+            else:
+                label, color = "Balanced", "warning"
+
+            pct_vs_national = (
+                round(((per_100k - national_avg) / national_avg) * 100, 1)
+                if national_avg and per_100k else 0
+            )
+            vs_national = (
+                f"↑ {abs(pct_vs_national)}% above national avg" if pct_vs_national > 0
+                else f"↓ {abs(pct_vs_national)}% below national avg"
+            ) if per_100k else "—"
+
+            density_ratio = (
+                f"1 per {int(population / competitor_count):,} residents"
+                if competitor_count and population else "Unknown"
+            )
+
+            return {
+                "metric_value": per_100k,
+                "unit": unit,
+                "label": label,
+                "color": color,
+                "display": f"{per_100k} per 100k residents" if per_100k else "Unknown",
+                "vs_national": vs_national,
+                "data_source": data_source,
+                "density_ratio": density_ratio,
+                "national_average": national_avg,
+                "under_thresh": under_thresh,
+                "over_thresh": over_thresh,
+            }
+
+        # ── competitors_per_capita  (default — residents per competitor) ──────
+        if competitor_count > 0 and population > 0:
+            residents_per = int(population / competitor_count)
+            data_source = "SerpAPI / Google Places"
+        else:
+            residents_per = 0
+            data_source = "Insufficient data"
+
+        density_ratio = f"1 per {residents_per:,} residents" if residents_per else "Unknown"
+
+        if residents_per == 0:
+            label, color = "Unknown", None
+        elif residents_per > under_thresh:
+            # Fewer businesses per resident = undersupplied = opportunity
+            label, color = "Undersupplied", "success"
+        elif residents_per < over_thresh:
+            label, color = "Oversupplied", "danger"
+        else:
+            label, color = "Balanced", "warning"
+
+        pct_vs_national = (
+            round(((residents_per - national_avg) / national_avg) * 100, 1)
+            if national_avg and residents_per else 0
+        )
+        vs_national = (
+            f"↑ {abs(pct_vs_national)}% fewer competitors than avg" if pct_vs_national > 0
+            else f"↓ {abs(pct_vs_national)}% more competitors than avg"
+        ) if residents_per else "—"
+
+        return {
+            "metric_value": residents_per,
+            "unit": unit,
+            "label": label,
+            "color": color,
+            "display": density_ratio,
+            "vs_national": vs_national,
+            "data_source": data_source,
+            "density_ratio": density_ratio,
+            "national_average": national_avg,
+            "under_thresh": under_thresh,
+            "over_thresh": over_thresh,
+        }
 
     def _infer_business_category(self, business_description: str) -> str:
         """Infer business category from natural language description"""
