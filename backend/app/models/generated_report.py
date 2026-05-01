@@ -43,6 +43,7 @@ class GeneratedReport(Base):
     request_id = Column(String(100), nullable=False, unique=True, index=True)
     
     # Relationships
+    user = relationship("User", back_populates="generated_reports")
     opportunity = relationship("Opportunity", back_populates="generated_reports")
     
     # Report metadata
