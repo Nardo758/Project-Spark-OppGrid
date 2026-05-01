@@ -265,6 +265,13 @@ def get_location_coords(
             return CITY_COORDS[city_key]
         logger.info(f"[LOCATION FALLBACK] City '{city}, {state_abbrev}' not in known cities, falling back to state center. Context: {context}")
     
+    if city and not state_abbrev:
+        city_lower = city.lower().strip()
+        for (c, s), coords in CITY_COORDS.items():
+            if c == city_lower:
+                logger.info(f"[LOCATION RESOLVED] City-only '{city}' matched to '{c}, {s}'. Context: {context}")
+                return coords
+
     if state_abbrev and state_abbrev in STATE_CENTER_COORDS:
         if city:
             logger.info(f"[LOCATION FALLBACK] Using state center for '{state_abbrev}' (city '{city}' unknown). Context: {context}")
