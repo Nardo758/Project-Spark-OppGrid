@@ -20,6 +20,7 @@ from app.services.municipal_data.schemas import (
     SupplyVerdict,
     MunicipalQueryResult,
     CensusPopulationData,
+    Parcel,
 )
 
 __all__ = [
@@ -31,4 +32,5 @@ __all__ = [
     "SupplyVerdict",
     "MunicipalQueryResult",
     "CensusPopulationData",
+    "Parcel",
 ]

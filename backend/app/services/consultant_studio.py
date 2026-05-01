@@ -435,12 +435,57 @@ Return as JSON:
             # 3. Industry-specific supply analysis
             # Use raw business_description when available — much more specific than inferred_category
             benchmark_key = self._infer_benchmark_key(business_description or business_type)
+
+            # For real-estate categories, try municipal property data first (real sq ft)
+            municipal_sqft: Optional[float] = None
+            municipal_confidence: Optional[float] = None
+            municipal_data_source_label: Optional[str] = None
+
+            _REAL_ESTATE_KEYS = {"self_storage"}
+            if benchmark_key in _REAL_ESTATE_KEYS and population > 0:
+                try:
+                    from app.services.municipal_data import MunicipalDataClient
+                    import os as _os
+                    _muni_client = MunicipalDataClient(
+                        serpapi_key=_os.environ.get("SERPAPI_KEY") or _os.environ.get("SERP_API_KEY")
+                    )
+                    _muni_result = await _muni_client.query_facilities(
+                        metro=parsed_city,
+                        state=parsed_state or "",
+                        industry=benchmark_key.replace("_", "-"),  # "self-storage"
+                        population=population,
+                    )
+                    if _muni_result and getattr(_muni_result, "success", False):
+                        _metrics = _muni_result.metrics
+                        municipal_sqft = float(_metrics.total_building_sqft or 0)
+                        municipal_confidence = getattr(_metrics, "confidence", None)
+                        _src = getattr(_metrics, "data_source", "municipal")
+                        municipal_data_source_label = (
+                            "Municipal property records (Socrata)" if _src == "socrata"
+                            else "Estimated via SerpAPI + size model"
+                        )
+                        logger.info(
+                            f"[MunicipalData] {parsed_city} self-storage: "
+                            f"{municipal_sqft:,.0f} sq ft total | "
+                            f"{_metrics.sqft_per_capita:.2f} sq ft/cap | "
+                            f"confidence={municipal_confidence} | source={_src}"
+                        )
+                except Exception as _muni_err:
+                    logger.warning(f"[MunicipalData] query failed for {parsed_city}: {_muni_err}")
+
             supply = self._analyze_supply(
                 benchmark_key=benchmark_key,
                 competitor_count=competitor_count,
                 population=population,
-                municipal_sqft=None,  # municipal_data_service will populate this when available
+                municipal_sqft=municipal_sqft,
             )
+
+            # Override data_source label with municipal source detail if available
+            if municipal_data_source_label:
+                supply = dict(supply)
+                supply["data_source"] = municipal_data_source_label
+                if municipal_confidence is not None:
+                    supply["confidence"] = round(municipal_confidence * 100)
             density_label  = supply["label"]
             density_color  = supply["color"]
             density_ratio  = supply["display"]
@@ -568,6 +613,7 @@ Return as JSON:
                     "national_average": supply.get("national_average"),
                     "undersupplied_threshold": supply.get("under_thresh"),
                     "oversupplied_threshold": supply.get("over_thresh"),
+                    "confidence_pct": supply.get("confidence"),
                 },
                 "intel_cta": {
                     "text": "Full location analysis with Census data, heat maps & lease intel",

@@ -179,3 +179,21 @@ class LandUseMappingEntry(BaseModel):
         default=None,
         description="Additional notes about this mapping"
     )
+
+
+class Parcel(BaseModel):
+    """
+    Represents a single property parcel — either from Socrata (authoritative)
+    or estimated from a SerpAPI fallback search result.
+    """
+    facility_name: str = Field(..., description="Name of the facility/business")
+    address: str = Field(default="", description="Street address or URL")
+    building_sqft: int = Field(default=0, description="Estimated or actual building sq ft")
+    land_sqft: Optional[float] = Field(default=None, description="Lot/parcel sq ft (if available)")
+    parcel_id: str = Field(default="", description="Parcel or record identifier")
+    source: str = Field(default="unknown", description="Data source (socrata, serpapi_fallback, etc.)")
+    data_quality: str = Field(default="estimated", description="'verified' or 'estimated'")
+    confidence: float = Field(default=0.60, ge=0.0, le=1.0, description="Confidence score for this record")
+
+    class Config:
+        use_enum_values = True
