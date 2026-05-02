@@ -3,6 +3,7 @@ Candidate Profile Builder
 
 Builds lightweight measured profiles for candidates.
 Adapts archetype classification rules for candidates (3 signals instead of 4).
+Now includes supply analysis integration.
 """
 
 import logging
@@ -12,6 +13,14 @@ from datetime import datetime
 from app.schemas.identify_location import (
     CandidateProfile, CandidateSource, MeasuredSignal, ArchetypeType
 )
+
+# Import MunicipalDataClient for supply analysis
+try:
+    from app.services.municipal_data import MunicipalDataClient
+    SUPPLY_ANALYSIS_AVAILABLE = True
+except ImportError:
+    SUPPLY_ANALYSIS_AVAILABLE = False
+    MunicipalDataClient = None
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +81,10 @@ class CandidateProfileBuilder:
         },
     }
 
-    def __init__(self, db=None):
+    def __init__(self, db=None, municipal_data_client=None):
         """Initialize builder"""
         self.db = db
+        self.municipal_data_client = municipal_data_client
 
     def build_profile(
         self,
@@ -90,6 +100,8 @@ class CandidateProfileBuilder:
         neighborhood: Optional[str] = None,
         measured_signals: Optional[List[MeasuredSignal]] = None,
         signal_sources: Optional[Dict[str, Any]] = None,
+        industry: Optional[str] = None,
+        metro: Optional[str] = None,
     ) -> CandidateProfile:
         """
         Build a complete candidate profile.
@@ -103,6 +115,8 @@ class CandidateProfileBuilder:
             city/state/zip/neighborhood: Location details
             measured_signals: Pre-computed signals (optional)
             signal_sources: Raw data for computing signals
+            industry: Business industry for supply analysis
+            metro: Metro name for supply analysis
         """
         try:
             # Use provided signals or compute from sources
@@ -117,6 +131,29 @@ class CandidateProfileBuilder:
             
             # Calculate overall score
             overall_score = self._calculate_overall_score(measured_signals)
+            
+            # Supply Analysis (NEW)
+            supply_verdict = None
+            supply_metrics = None
+            supply_score_adjustment = 1.0
+            
+            if industry and metro and SUPPLY_ANALYSIS_AVAILABLE and self.municipal_data_client:
+                try:
+                    supply_result = self._get_supply_analysis(
+                        industry, metro, state
+                    )
+                    if supply_result:
+                        supply_verdict = supply_result.get("verdict")
+                        supply_metrics = supply_result.get("metrics")
+                        supply_score_adjustment = supply_result.get("score_adjustment", 1.0)
+                        overall_score *= supply_score_adjustment
+                        
+                        logger.info(
+                            f"Supply analysis for {location_name}: {supply_verdict} "
+                            f"(adjustment: {supply_score_adjustment:.2f}x)"
+                        )
+                except Exception as e:
+                    logger.warning(f"Supply analysis failed for {location_name}: {e}")
             
             # Build profile
             profile = CandidateProfile(
@@ -136,6 +173,9 @@ class CandidateProfileBuilder:
                 zip_code=zip_code,
                 neighborhood=neighborhood,
                 overall_score=overall_score,
+                supply_verdict=supply_verdict,
+                supply_metrics=supply_metrics,
+                supply_score_adjustment=supply_score_adjustment,
                 created_at=datetime.utcnow()
             )
             
@@ -436,3 +476,75 @@ class CandidateProfileBuilder:
             return sum(s.signal_value for s in signals) / len(signals)
         
         return total_weighted / total_weight
+    
+    def _get_supply_analysis(
+        self,
+        industry: str,
+        metro: str,
+        state: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get supply analysis for the industry/metro and calculate score adjustment.
+        
+        Returns:
+            Dict with:
+            - verdict: 'oversaturated' | 'balanced' | 'undersaturated'
+            - metrics: raw supply metrics
+            - score_adjustment: multiplier for overall_score (0.75, 1.0, or 1.25)
+        """
+        if not self.municipal_data_client:
+            return None
+        
+        try:
+            # This should be async but we'll handle it synchronously for now
+            # In production, would need to be awaited in an async context
+            import asyncio
+            
+            # Try to get the event loop
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                # Create a new loop if needed
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
+            # Run the async query
+            result = loop.run_until_complete(
+                self.municipal_data_client.query_facilities(
+                    metro=metro,
+                    state=state,
+                    industry=industry,
+                )
+            )
+            
+            if not result.success:
+                logger.warning(f"Supply query failed: {result.error}")
+                return None
+            
+            metrics = result.metrics
+            verdict = metrics.verdict.value
+            
+            # Calculate score adjustment based on verdict
+            if verdict == "oversaturated":
+                adjustment = 0.75  # Penalize oversaturated markets
+            elif verdict == "undersaturated":
+                adjustment = 1.25  # Boost undersaturated markets
+            else:  # balanced
+                adjustment = 1.0   # No change
+            
+            return {
+                "verdict": verdict,
+                "metrics": {
+                    "total_facilities": metrics.total_facilities,
+                    "sqft_per_capita": metrics.sqft_per_capita,
+                    "facilities_per_100k": metrics.facilities_per_100k_population,
+                    "benchmark": metrics.benchmark_sqft_per_capita,
+                    "confidence": metrics.confidence,
+                    "data_source": metrics.data_source,
+                },
+                "score_adjustment": adjustment,
+            }
+        
+        except Exception as e:
+            logger.warning(f"Error in supply analysis: {e}", exc_info=True)
+            return None

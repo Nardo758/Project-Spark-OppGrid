@@ -33,6 +33,552 @@ class LandUseMapping:
     
     # Comprehensive mapping of industry → metro → land use codes
     INDUSTRY_MAPPINGS = {
+        "restaurant": {
+            "miami": {
+                "state": "FL",
+                "codes": ["31"],  # DOR code 31: Food Service
+                "description": "Restaurants, cafes, food service facilities",
+                "field_name": "dor_code",
+                "verified": True,
+                "notes": "DOR code 31 includes restaurants and food service.",
+                "data_source": "Miami-Dade DOR Classification System",
+            },
+            "chicago": {
+                "state": "IL",
+                "codes": ["560"],  # Chicago land use code 560
+                "description": "Restaurant and food service facilities",
+                "field_name": "land_use_code",
+                "verified": True,
+                "notes": "Land use code 560 = Food Service.",
+                "data_source": "City of Chicago Land Use Classification",
+            },
+            "nyc": {
+                "state": "NY",
+                "codes": ["G8", "G9"],  # PLUTO building classes
+                "description": "Restaurants and food service",
+                "field_name": "bldg_class",
+                "verified": True,
+                "notes": "NYC PLUTO: G8=Restaurant, G9=Bar/Nightclub",
+                "data_source": "NYC PLUTO Property Use Code Classification",
+            },
+            "denver": {
+                "state": "CO",
+                "codes": ["HR"],  # Hotel/Restaurant
+                "description": "Restaurants and food service",
+                "field_name": "zoning_code",
+                "verified": False,
+                "notes": "Denver uses HR (Hotel/Restaurant) zones.",
+                "data_source": "City and County of Denver Zoning Code",
+            },
+            "atlanta": {
+                "state": "GA",
+                "codes": ["V400"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Atlanta uses V400 for food service.",
+                "data_source": "City of Atlanta Assessor Data",
+            },
+            "seattle": {
+                "state": "WA",
+                "codes": ["C"],  # Commercial/Food Service
+                "description": "Restaurants and food service",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Seattle uses C (Commercial) zones.",
+                "data_source": "City of Seattle Comprehensive Plan Land Use",
+            },
+            "boston": {
+                "state": "MA",
+                "codes": ["3000", "3001"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Boston uses 3000/3001 for food service.",
+                "data_source": "City of Boston Property Database",
+            },
+            "dallas": {
+                "state": "TX",
+                "codes": ["0314"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Dallas CAD uses 0314 for food service.",
+                "data_source": "Dallas Central Appraisal District",
+            },
+            "houston": {
+                "state": "TX",
+                "codes": ["0314"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Harris County uses 0314 for food service.",
+                "data_source": "Harris County Appraisal District",
+            },
+            "los_angeles": {
+                "state": "CA",
+                "codes": ["1300", "1310"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "LA County uses 1300/1310 for food service.",
+                "data_source": "Los Angeles County Assessor",
+            },
+            "phoenix": {
+                "state": "AZ",
+                "codes": ["0314"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Maricopa County uses 0314 for food service.",
+                "data_source": "Maricopa County Assessor",
+            },
+            "san_francisco": {
+                "state": "CA",
+                "codes": ["RES", "REST"],  # Restaurant/Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "SF uses RES (Restaurant) and REST zones.",
+                "data_source": "San Francisco Assessor-Recorder",
+            },
+            "san_diego": {
+                "state": "CA",
+                "codes": ["1301", "1302"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "San Diego County uses 1301/1302 for food service.",
+                "data_source": "San Diego County Assessor",
+            },
+            "washington_dc": {
+                "state": "DC",
+                "codes": ["CA20"],  # Commercial/Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "DC uses CA20 for food service.",
+                "data_source": "DC Office of the Assessor",
+            },
+            "austin": {
+                "state": "TX",
+                "codes": ["0314"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Travis County CAD uses 0314 for food service.",
+                "data_source": "Travis County Appraisal District",
+            },
+            "charlotte": {
+                "state": "NC",
+                "codes": ["1001"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Mecklenburg County uses 1001 for food service.",
+                "data_source": "Mecklenburg County Tax Assessor",
+            },
+            "nashville": {
+                "state": "TN",
+                "codes": ["0400"],  # Commercial/Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Davidson County uses 0400 for commercial food service.",
+                "data_source": "Davidson County Assessor",
+            },
+            "portland": {
+                "state": "OR",
+                "codes": ["C", "CO"],  # Commercial/Office
+                "description": "Restaurants and food service facilities",
+                "field_name": "zoning_code",
+                "verified": False,
+                "notes": "Portland uses C (Commercial) zones.",
+                "data_source": "Multnomah County Assessor",
+            },
+            "tampa": {
+                "state": "FL",
+                "codes": ["0406"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Hillsborough County uses 0406 for food service.",
+                "data_source": "Hillsborough County Property Appraiser",
+            },
+            "philadelphia": {
+                "state": "PA",
+                "codes": ["0630"],  # Food Service
+                "description": "Restaurants and food service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Philadelphia uses 0630 for food service.",
+                "data_source": "Philadelphia Office of Property Assessment",
+            },
+        },
+        "fitness": {
+            "miami": {
+                "state": "FL",
+                "codes": ["30"],  # DOR code 30: Recreation/Fitness
+                "description": "Fitness studios, gymnasiums, health clubs",
+                "field_name": "dor_code",
+                "verified": True,
+                "notes": "DOR code 30 includes fitness facilities and recreation.",
+                "data_source": "Miami-Dade DOR Classification System",
+            },
+            "denver": {
+                "state": "CO",
+                "codes": ["H2"],  # Health/Fitness
+                "description": "Fitness studios, gymnasiums, health clubs",
+                "field_name": "zoning_code",
+                "verified": False,
+                "notes": "Denver uses H2 (Health/Fitness) zones.",
+                "data_source": "City and County of Denver Zoning Code",
+            },
+            "chicago": {
+                "state": "IL",
+                "codes": ["566"],  # Chicago land use code 566
+                "description": "Fitness and recreation facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Land use code 566 = Recreation/Fitness.",
+                "data_source": "City of Chicago Land Use Classification",
+            },
+            "nyc": {
+                "state": "NY",
+                "codes": ["G0", "G1"],  # PLUTO building classes
+                "description": "Fitness and recreation facilities",
+                "field_name": "bldg_class",
+                "verified": False,
+                "notes": "NYC PLUTO: G0/G1 = Recreation/Fitness",
+                "data_source": "NYC PLUTO Property Use Code Classification",
+            },
+            "atlanta": {
+                "state": "GA",
+                "codes": ["V300"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Atlanta uses V300 for recreation/fitness.",
+                "data_source": "City of Atlanta Assessor Data",
+            },
+            "seattle": {
+                "state": "WA",
+                "codes": ["R"],  # Recreation
+                "description": "Fitness studios and health clubs",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Seattle uses R (Recreation) zones.",
+                "data_source": "City of Seattle Comprehensive Plan Land Use",
+            },
+            "boston": {
+                "state": "MA",
+                "codes": ["3400", "3401"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Boston uses 3400/3401 for fitness.",
+                "data_source": "City of Boston Property Database",
+            },
+            "dallas": {
+                "state": "TX",
+                "codes": ["0319"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Dallas CAD uses 0319 for fitness.",
+                "data_source": "Dallas Central Appraisal District",
+            },
+            "houston": {
+                "state": "TX",
+                "codes": ["0319"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Harris County uses 0319 for fitness.",
+                "data_source": "Harris County Appraisal District",
+            },
+            "los_angeles": {
+                "state": "CA",
+                "codes": ["1500", "1510"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "LA County uses 1500/1510 for fitness.",
+                "data_source": "Los Angeles County Assessor",
+            },
+            "phoenix": {
+                "state": "AZ",
+                "codes": ["0319"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Maricopa County uses 0319 for fitness.",
+                "data_source": "Maricopa County Assessor",
+            },
+            "san_francisco": {
+                "state": "CA",
+                "codes": ["REC", "HLTH"],  # Recreation/Health
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "SF uses REC/HLTH codes for fitness.",
+                "data_source": "San Francisco Assessor-Recorder",
+            },
+            "san_diego": {
+                "state": "CA",
+                "codes": ["1501", "1502"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "San Diego County uses 1501/1502 for fitness.",
+                "data_source": "San Diego County Assessor",
+            },
+            "washington_dc": {
+                "state": "DC",
+                "codes": ["CA30"],  # Commercial/Recreation
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "DC uses CA30 for recreation/fitness.",
+                "data_source": "DC Office of the Assessor",
+            },
+            "austin": {
+                "state": "TX",
+                "codes": ["0319"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Travis County CAD uses 0319 for fitness.",
+                "data_source": "Travis County Appraisal District",
+            },
+            "charlotte": {
+                "state": "NC",
+                "codes": ["1100"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Mecklenburg County uses 1100 for fitness.",
+                "data_source": "Mecklenburg County Tax Assessor",
+            },
+            "nashville": {
+                "state": "TN",
+                "codes": ["0410"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Davidson County uses 0410 for fitness.",
+                "data_source": "Davidson County Assessor",
+            },
+            "portland": {
+                "state": "OR",
+                "codes": ["R", "REC"],  # Recreation
+                "description": "Fitness studios and health clubs",
+                "field_name": "zoning_code",
+                "verified": False,
+                "notes": "Portland uses R/REC zones for recreation.",
+                "data_source": "Multnomah County Assessor",
+            },
+            "tampa": {
+                "state": "FL",
+                "codes": ["0411"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Hillsborough County uses 0411 for fitness.",
+                "data_source": "Hillsborough County Property Appraiser",
+            },
+            "philadelphia": {
+                "state": "PA",
+                "codes": ["0650"],  # Recreation/Fitness
+                "description": "Fitness studios and health clubs",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Philadelphia uses 0650 for fitness.",
+                "data_source": "Philadelphia Office of Property Assessment",
+            },
+        },
+        "gas_station": {
+            "miami": {
+                "state": "FL",
+                "codes": ["32"],  # DOR code 32: Gas Stations
+                "description": "Gas stations and fuel facilities",
+                "field_name": "dor_code",
+                "verified": True,
+                "notes": "DOR code 32 = Gas Stations/Service Stations.",
+                "data_source": "Miami-Dade DOR Classification System",
+            },
+            "chicago": {
+                "state": "IL",
+                "codes": ["562"],  # Chicago land use code 562
+                "description": "Gas stations and vehicle service",
+                "field_name": "land_use_code",
+                "verified": True,
+                "notes": "Land use code 562 = Gas Stations.",
+                "data_source": "City of Chicago Land Use Classification",
+            },
+            "nyc": {
+                "state": "NY",
+                "codes": ["G2", "G3"],  # PLUTO building classes
+                "description": "Gas stations and service stations",
+                "field_name": "bldg_class",
+                "verified": False,
+                "notes": "NYC PLUTO: G2/G3 = Service Stations",
+                "data_source": "NYC PLUTO Property Use Code Classification",
+            },
+            "atlanta": {
+                "state": "GA",
+                "codes": ["V200"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Atlanta uses V200 for service stations.",
+                "data_source": "City of Atlanta Assessor Data",
+            },
+            "denver": {
+                "state": "CO",
+                "codes": ["U4"],  # Service/Gas Station
+                "description": "Gas stations and service facilities",
+                "field_name": "zoning_code",
+                "verified": False,
+                "notes": "Denver uses U4 for service/gas stations.",
+                "data_source": "City and County of Denver Zoning Code",
+            },
+            "seattle": {
+                "state": "WA",
+                "codes": ["CM"],  # Commercial/Mixed
+                "description": "Gas stations and service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Seattle uses CM zones.",
+                "data_source": "City of Seattle Comprehensive Plan Land Use",
+            },
+            "boston": {
+                "state": "MA",
+                "codes": ["3200", "3201"],  # Service/Gas Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Boston uses 3200/3201 for service stations.",
+                "data_source": "City of Boston Property Database",
+            },
+            "dallas": {
+                "state": "TX",
+                "codes": ["0312"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Dallas CAD uses 0312 for service stations.",
+                "data_source": "Dallas Central Appraisal District",
+            },
+            "houston": {
+                "state": "TX",
+                "codes": ["0312"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Harris County uses 0312 for service stations.",
+                "data_source": "Harris County Appraisal District",
+            },
+            "los_angeles": {
+                "state": "CA",
+                "codes": ["1100", "1110"],  # Service/Auto
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "LA County uses 1100/1110 for service facilities.",
+                "data_source": "Los Angeles County Assessor",
+            },
+            "phoenix": {
+                "state": "AZ",
+                "codes": ["0312"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Maricopa County uses 0312 for service stations.",
+                "data_source": "Maricopa County Assessor",
+            },
+            "san_francisco": {
+                "state": "CA",
+                "codes": ["SVC", "GAS"],  # Service/Gas
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "SF uses SVC/GAS codes for service stations.",
+                "data_source": "San Francisco Assessor-Recorder",
+            },
+            "san_diego": {
+                "state": "CA",
+                "codes": ["1101", "1102"],  # Service/Auto
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "San Diego County uses 1101/1102 for service.",
+                "data_source": "San Diego County Assessor",
+            },
+            "washington_dc": {
+                "state": "DC",
+                "codes": ["CA40"],  # Commercial/Service
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "DC uses CA40 for service stations.",
+                "data_source": "DC Office of the Assessor",
+            },
+            "austin": {
+                "state": "TX",
+                "codes": ["0312"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "land_use_code",
+                "verified": False,
+                "notes": "Travis County CAD uses 0312 for service stations.",
+                "data_source": "Travis County Appraisal District",
+            },
+            "charlotte": {
+                "state": "NC",
+                "codes": ["1200"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Mecklenburg County uses 1200 for service stations.",
+                "data_source": "Mecklenburg County Tax Assessor",
+            },
+            "nashville": {
+                "state": "TN",
+                "codes": ["0450"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Davidson County uses 0450 for service stations.",
+                "data_source": "Davidson County Assessor",
+            },
+            "portland": {
+                "state": "OR",
+                "codes": ["S", "SM"],  # Service/Mixed
+                "description": "Gas stations and service facilities",
+                "field_name": "zoning_code",
+                "verified": False,
+                "notes": "Portland uses S/SM zones for service.",
+                "data_source": "Multnomah County Assessor",
+            },
+            "tampa": {
+                "state": "FL",
+                "codes": ["0408"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Hillsborough County uses 0408 for service stations.",
+                "data_source": "Hillsborough County Property Appraiser",
+            },
+            "philadelphia": {
+                "state": "PA",
+                "codes": ["0640"],  # Service Stations
+                "description": "Gas stations and service facilities",
+                "field_name": "use_code",
+                "verified": False,
+                "notes": "Philadelphia uses 0640 for service stations.",
+                "data_source": "Philadelphia Office of Property Assessment",
+            },
+        },
         "self-storage": {
             "miami": {
                 "state": "FL",
@@ -398,7 +944,28 @@ SUPPLY_BENCHMARKS = {
         "balanced_min": 5.0,  # 5.0-7.0
         "balanced_max": 7.0,
         "undersaturated_threshold": 5.0,  # < 5.0
-    }
+    },
+    "restaurant": {
+        "seats_per_1k_benchmark": 40.0,  # Industry standard
+        "oversaturated_threshold": 50.0,  # > 50 seats/1k
+        "balanced_min": 30.0,  # 30-50 seats/1k
+        "balanced_max": 50.0,
+        "undersaturated_threshold": 30.0,  # < 30 seats/1k
+    },
+    "fitness": {
+        "sqft_per_capita_benchmark": 10.0,  # Industry standard
+        "oversaturated_threshold": 10.0,  # > 10.0
+        "balanced_min": 6.0,  # 6.0-10.0
+        "balanced_max": 10.0,
+        "undersaturated_threshold": 6.0,  # < 6.0
+    },
+    "gas_station": {
+        "vehicles_per_station_benchmark": 500.0,  # Industry standard
+        "oversaturated_threshold": 400.0,  # < 400 (too many stations)
+        "balanced_min": 400.0,  # 400-600 vehicles/station
+        "balanced_max": 600.0,
+        "undersaturated_threshold": 600.0,  # > 600 (too few stations)
+    },
 }
 
 

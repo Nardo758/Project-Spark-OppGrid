@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, or_
@@ -243,7 +243,7 @@ def create_opportunity(
 
 @router.get("/")
 async def get_opportunities(
-    skip: int = Query(0, ge=0),
+    skip: int = Query(0, ge=0, alias="offset"),
     limit: int = Query(20, ge=1, le=100),
     category: Optional[str] = None,
     status: str = "active",
@@ -260,9 +260,26 @@ async def get_opportunities(
     """
     Get list of opportunities with filtering and pagination.
     
+    **Query Parameters:**
+    - `limit` (default: 20, max: 100): Number of results per page
+    - `offset` (default: 0): Number of results to skip
+    - `category`: Filter by category name
+    - `sort_by`: Sort order - recent, trending, validated, market, feasibility
+    - Additional filters: geographic_scope, country, realm_type, max_age_days
+    
+    **Pagination:**
     Free users see only 3 preview opportunities. 
-    Paid subscribers get full access.
+    Paid subscribers get full access with proper pagination.
+    
+    **Response Format:**
+    Standard paginated response with meta information including:
+    - `limit`: Items per page
+    - `offset`: Items skipped
+    - `total_count`: Total available items
+    - `has_more`: Whether more items exist
     """
+    from app.schemas.response import create_paginated_response
+    
     is_paid = False
     user_tier = SubscriptionTier.FREE
     
@@ -334,27 +351,21 @@ async def get_opportunities(
         free_total = free_query.count()
         opportunities = free_query.offset(0).limit(FREE_PREVIEW_LIMIT).all()
         
-        return {
-            "opportunities": opportunities,
-            "total": min(free_total, FREE_PREVIEW_LIMIT),
-            "page": 1,
-            "page_size": FREE_PREVIEW_LIMIT,
-            "is_gated": True,
-            "gated_message": f"Subscribe to access all {total} opportunities",
-            "full_total": total
-        }
+        return create_paginated_response(
+            data=opportunities,
+            total_count=min(free_total, FREE_PREVIEW_LIMIT),
+            limit=FREE_PREVIEW_LIMIT,
+            offset=0
+        )
     
     opportunities = query.offset(skip).limit(limit).all()
 
-    return {
-        "opportunities": opportunities,
-        "total": total,
-        "page": skip // limit + 1,
-        "page_size": limit,
-        "is_gated": False,
-        "gated_message": None,
-        "full_total": total
-    }
+    return create_paginated_response(
+        data=opportunities,
+        total_count=total,
+        limit=limit,
+        offset=skip
+    )
 
 
 @router.get("/{opportunity_id}", response_model=OpportunityGatedResponse)
@@ -562,6 +573,36 @@ def search_opportunities(
     db: Session = Depends(get_db)
 ):
     """Search opportunities by title or description"""
+    search_term = f"%{q}%"
+    query = db.query(Opportunity).filter(
+        Opportunity.moderation_status == 'approved',
+        (Opportunity.title.ilike(search_term)) |
+        (Opportunity.description.ilike(search_term))
+    )
+
+    total = query.count()
+    opportunities = query.offset(skip).limit(limit).all()
+
+    return OpportunityList(
+        opportunities=opportunities,
+        total=total,
+        page=skip // limit + 1,
+        page_size=limit
+    )
+
+
+@router.post("/search/", response_model=OpportunityList)
+def search_opportunities_post(
+    body: dict = Body(...),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Search opportunities by title or description (POST variant)"""
+    q = body.get("q") or body.get("query")
+    if not q:
+        raise HTTPException(status_code=400, detail="Query parameter 'q' or 'query' is required")
+    
     search_term = f"%{q}%"
     query = db.query(Opportunity).filter(
         Opportunity.moderation_status == 'approved',

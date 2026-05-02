@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -180,4 +180,170 @@ def check_badges(
     return {
         "newly_awarded": newly_awarded,
         "total_badges": len(BadgeService.get_user_badges(current_user))
+    }
+
+
+@router.get("/saved-opportunities", response_model=List[dict])
+def get_saved_opportunities(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get user's saved opportunities"""
+    from app.models.watchlist import WatchlistItem
+    
+    items = db.query(WatchlistItem).filter(
+        WatchlistItem.user_id == current_user.id
+    ).all()
+    
+    return [
+        {
+            "id": item.id,
+            "opportunity_id": item.opportunity_id,
+            "created_at": item.created_at
+        }
+        for item in items
+    ]
+
+
+@router.post("/saved-opportunities", status_code=status.HTTP_201_CREATED)
+def save_opportunity(
+    data: dict = {},
+    opportunity_id: Optional[int] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Save an opportunity"""
+    from app.models.watchlist import WatchlistItem
+    
+    opp_id = data.get("opportunity_id") or opportunity_id
+    if not opp_id:
+        raise HTTPException(status_code=400, detail="opportunity_id is required")
+    
+    # Check if already saved
+    existing = db.query(WatchlistItem).filter(
+        WatchlistItem.user_id == current_user.id,
+        WatchlistItem.opportunity_id == opp_id
+    ).first()
+    
+    if existing:
+        return {
+            "id": existing.id,
+            "opportunity_id": existing.opportunity_id,
+            "created_at": existing.created_at,
+            "message": "Opportunity already saved"
+        }
+    
+    item = WatchlistItem(
+        user_id=current_user.id,
+        opportunity_id=opp_id
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    
+    return {
+        "id": item.id,
+        "opportunity_id": item.opportunity_id,
+        "created_at": item.created_at
+    }
+
+
+@router.get("/favorites", response_model=List[dict])
+def get_favorites(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get user's favorite opportunities (same as saved)"""
+    from app.models.watchlist import WatchlistItem
+    
+    items = db.query(WatchlistItem).filter(
+        WatchlistItem.user_id == current_user.id
+    ).all()
+    
+    return [
+        {
+            "id": item.id,
+            "opportunity_id": item.opportunity_id,
+            "created_at": item.created_at
+        }
+        for item in items
+    ]
+
+
+@router.post("/favorites", status_code=status.HTTP_201_CREATED)
+def add_favorite(
+    data: dict = {},
+    opportunity_id: Optional[int] = None,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Add opportunity to favorites"""
+    from app.models.watchlist import WatchlistItem
+    
+    opp_id = data.get("opportunity_id") or opportunity_id
+    if not opp_id:
+        raise HTTPException(status_code=400, detail="opportunity_id is required")
+    
+    # Check if already favorited
+    existing = db.query(WatchlistItem).filter(
+        WatchlistItem.user_id == current_user.id,
+        WatchlistItem.opportunity_id == opp_id
+    ).first()
+    
+    if existing:
+        return {
+            "id": existing.id,
+            "opportunity_id": existing.opportunity_id,
+            "created_at": existing.created_at,
+            "message": "Already in favorites"
+        }
+    
+    item = WatchlistItem(
+        user_id=current_user.id,
+        opportunity_id=opp_id
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    
+    return {
+        "id": item.id,
+        "opportunity_id": item.opportunity_id,
+        "created_at": item.created_at
+    }
+
+
+@router.get("/settings", response_model=dict)
+def get_user_settings(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get user's settings"""
+    return {
+        "id": current_user.id,
+        "notification_preferences": _load_notification_prefs(current_user),
+        "email": current_user.email,
+        "created_at": current_user.created_at
+    }
+
+
+@router.put("/settings", response_model=dict)
+def update_user_settings(
+    settings_data: dict,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Update user's settings"""
+    # Handle notification preferences update
+    if "notification_preferences" in settings_data:
+        prefs = settings_data["notification_preferences"]
+        current_user.notification_preferences = json.dumps(prefs)
+    
+    db.commit()
+    
+    return {
+        "id": current_user.id,
+        "notification_preferences": _load_notification_prefs(current_user),
+        "email": current_user.email,
+        "message": "Settings updated successfully"
     }

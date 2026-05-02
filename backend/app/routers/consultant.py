@@ -4,15 +4,18 @@ Three-path validation system: Validate Idea, Search Ideas, Identify Location
 Enhanced with Tier A/B location identification system
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, Response
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 import asyncio
+import json
+import hashlib
 
 from app.db.database import get_db
 from app.services.consultant_studio import ConsultantStudioService
 from app.services.success_profile.identify_location_service import IdentifyLocationService
+from app.services.cache_manager import get_cache_manager, search_ideas_cache_key
 from app.models.consultant_activity import ConsultantActivity
 from app.models.user import User
 from app.schemas.identify_location import (
@@ -308,9 +311,10 @@ async def validate_idea(
         )
 
 
-@router.post("/search-ideas", response_model=SearchIdeasResponse)
+@router.post("/search-ideas")
 async def search_ideas(
     request: SearchIdeasRequest,
+    response: Response,
     db: Session = Depends(get_db),
     user_id: int = 1,
 ):
@@ -320,14 +324,43 @@ async def search_ideas(
     Searches validated opportunities with AI-powered trend detection.
     Returns opportunities, detected trends, and AI synthesis.
     
+    CACHING:
+    - Results are cached for 5 minutes (300 seconds)
+    - Cached responses have <500ms latency
+    - Cache key includes query, category, and filters
+    - ETag and Cache-Control headers provided
+    
     GATING LOGIC:
     - FREE/GUEST users: See trends + top 2-3 opportunity previews (title, category, score only) + intelligence card + CTA
     - AUTHENTICATED PAID users: See all trends + full opportunity data (descriptions, all opportunities, competition analysis)
     """
-    import asyncio
     from app.models import User
     
     service = ConsultantStudioService(db)
+    cache = get_cache_manager()
+    
+    # Generate cache key from request parameters
+    cache_key = search_ideas_cache_key(
+        query=request.query,
+        category=request.category,
+        min_score=request.min_score,
+        time_range=request.time_range,
+        quality_filter=request.quality_filter
+    )
+    
+    # Try to get cached result
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        # Return cached result with cache headers
+        response.headers["Cache-Control"] = "public, max-age=300"
+        response.headers["X-Cache"] = "HIT"
+        
+        # Generate and add ETag
+        etag = cache.get_etag(cache_key)
+        if etag:
+            response.headers["ETag"] = etag
+        
+        return SearchIdeasResponse(**cached_result)
     
     # Check user subscription status
     user = db.query(User).filter(User.id == user_id).first()
@@ -366,7 +399,22 @@ async def search_ideas(
             ),
             timeout=65.0  # Increased from 15s to 65s for AI synthesis
         )
-        return SearchIdeasResponse(**result)
+        
+        # Cache the result for 5 minutes (300 seconds)
+        result_dict = result if isinstance(result, dict) else result.model_dump()
+        cache.set(cache_key, result_dict, ttl_seconds=300)
+        
+        # Add cache headers
+        response.headers["Cache-Control"] = "public, max-age=300"
+        response.headers["X-Cache"] = "MISS"
+        
+        # Generate and add ETag
+        content_hash = hashlib.md5(
+            json.dumps(result_dict, default=str, sort_keys=True).encode()
+        ).hexdigest()
+        response.headers["ETag"] = f'"{content_hash}"'
+        
+        return SearchIdeasResponse(**result_dict)
     except asyncio.TimeoutError:
         return SearchIdeasResponse(
             success=False,

@@ -10,6 +10,23 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 
+# Import supply metrics if available
+try:
+    from app.services.municipal_data.schemas import (
+        FacilitySupplyMetrics,
+        SupplyVerdict,
+    )
+    SUPPLY_METRICS_AVAILABLE = True
+except ImportError:
+    SUPPLY_METRICS_AVAILABLE = False
+    # Define minimal stubs if imports fail
+    class SupplyVerdict(str, Enum):
+        OVERSATURATED = "oversaturated"
+        BALANCED = "balanced"
+        UNDERSATURATED = "undersaturated"
+    
+    FacilitySupplyMetrics = None
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ENUMS
@@ -125,6 +142,11 @@ class CandidateProfile(BaseModel):
     
     # Scoring
     overall_score: float = Field(..., ge=0.0, le=100.0, description="Overall viability score")
+    
+    # Supply Analysis (NEW)
+    supply_verdict: Optional[str] = Field(None, description="Supply verdict (oversaturated/balanced/undersaturated)")
+    supply_metrics: Optional[Dict[str, Any]] = Field(None, description="Supply metrics from municipal data")
+    supply_score_adjustment: Optional[float] = Field(None, ge=0.5, le=1.5, description="Score multiplier based on supply (0.75 for oversaturated, 1.25 for undersaturated)")
     
     created_at: datetime = Field(default_factory=datetime.utcnow)
 

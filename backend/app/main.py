@@ -169,7 +169,7 @@ app.include_router(leads.router, prefix=f"{settings.API_V1_PREFIX}/admin/leads",
 app.include_router(leads_marketplace.router, prefix=f"{settings.API_V1_PREFIX}/marketplace/leads", tags=["Leads Marketplace"])
 app.include_router(lifecycle.router, prefix=settings.API_V1_PREFIX, tags=["Lifecycle"])
 app.include_router(reports.router, tags=["Report Templates"])
-app.include_router(generated_reports.router, prefix=f"{settings.API_V1_PREFIX}/reports", tags=["Generated Reports"])
+app.include_router(generated_reports.router, prefix=f"{settings.API_V1_PREFIX}/generated-reports", tags=["Generated Reports"])
 app.include_router(consultant.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Consultant Studio"])
 app.include_router(mapping_reports.router, tags=["Mapping Reports"])
 app.include_router(quick_actions.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Quick Actions"])
@@ -358,6 +358,16 @@ if FRONTEND_DIST.is_dir():
 
     @app.get("/{full_path:path}")
     async def serve_spa(request: Request, full_path: str):
+        # CRITICAL FIX: Do NOT serve frontend for API requests
+        # Return 404 JSON for unmatched API paths instead of serving frontend HTML
+        if full_path.startswith("api/"):
+            return {
+                "detail": "Not Found",
+                "status_code": 404,
+                "message": "API endpoint not found"
+            }
+        
+        # Only serve frontend for non-API paths
         file_path = FRONTEND_DIST / full_path
         if full_path and file_path.is_file():
             return FileResponse(str(file_path))

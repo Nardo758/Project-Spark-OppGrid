@@ -100,21 +100,31 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     if self._buckets[k].window_start < cutoff:
                         self._buckets.pop(k, None)
 
+            # Calculate reset timestamp (Unix timestamp in seconds)
+            reset_timestamp = int(now + reset_in)
+            
             if b.count > limit:
                 return JSONResponse(
                     status_code=429,
-                    content={"detail": "Rate limit exceeded"},
+                    content={
+                        "success": False,
+                        "error": {
+                            "code": "RATE_LIMIT_EXCEEDED",
+                            "message": "Rate limit exceeded",
+                            "details": [f"Max {limit} requests per minute"]
+                        }
+                    },
                     headers={
                         "Retry-After": str(reset_in),
                         "X-RateLimit-Limit": str(limit),
                         "X-RateLimit-Remaining": "0",
-                        "X-RateLimit-Reset": str(reset_in),
+                        "X-RateLimit-Reset": str(reset_timestamp),
                     },
                 )
 
         response: Response = await call_next(request)
         response.headers.setdefault("X-RateLimit-Limit", str(limit))
         response.headers.setdefault("X-RateLimit-Remaining", str(remaining))
-        response.headers.setdefault("X-RateLimit-Reset", str(reset_in))
+        response.headers.setdefault("X-RateLimit-Reset", str(reset_timestamp))
         return response
 

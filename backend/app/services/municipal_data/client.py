@@ -188,6 +188,7 @@ class MunicipalDataClient:
             # For now, simulate a response
             total_facilities, total_sqft = await self._query_socrata(
                 metro,
+                industry,
                 land_use_codes,
                 dataset_id,
                 socrata_config,
@@ -242,6 +243,7 @@ class MunicipalDataClient:
     async def _query_socrata(
         self,
         metro: str,
+        industry: str,
         land_use_codes: list,
         dataset_id: Optional[str],
         socrata_config: Any,
@@ -264,20 +266,69 @@ class MunicipalDataClient:
         # MOCK DATA FOR DEMO
         # In production, would query actual Socrata endpoints
         mock_data = {
+            # Self-Storage data
             ("miami", "self-storage"): (145, 3_500_000),  # 145 facilities, 3.5M sqft
             ("chicago", "self-storage"): (325, 8_200_000),
             ("nyc", "self-storage"): (485, 12_000_000),
             ("seattle", "self-storage"): (92, 2_200_000),
             ("denver", "self-storage"): (78, 1_850_000),
+            ("atlanta", "self-storage"): (156, 3_800_000),
+            ("boston", "self-storage"): (112, 2_700_000),
+            ("dallas", "self-storage"): (198, 4_800_000),
+            ("houston", "self-storage"): (187, 4_500_000),
+            ("los_angeles", "self-storage"): (412, 9_900_000),
+            ("phoenix", "self-storage"): (124, 2_950_000),
+            ("san_francisco", "self-storage"): (98, 2_350_000),
+            ("san_diego", "self-storage"): (89, 2_120_000),
+            ("washington_dc", "self-storage"): (134, 3_200_000),
+            ("austin", "self-storage"): (67, 1_600_000),
+            ("charlotte", "self-storage"): (72, 1_720_000),
+            ("nashville", "self-storage"): (56, 1_340_000),
+            ("portland", "self-storage"): (68, 1_620_000),
+            ("tampa", "self-storage"): (78, 1_860_000),
+            ("philadelphia", "self-storage"): (167, 4_000_000),
+            
+            # Restaurant data
+            ("miami", "restaurant"): (2450, 6_125_000),
+            ("chicago", "restaurant"): (4200, 10_500_000),
+            ("nyc", "restaurant"): (6800, 17_000_000),
+            ("denver", "restaurant"): (1850, 4_625_000),
+            ("atlanta", "restaurant"): (2800, 7_000_000),
+            ("seattle", "restaurant"): (1650, 4_125_000),
+            ("los_angeles", "restaurant"): (5600, 14_000_000),
+            
+            # Fitness data
+            ("denver", "fitness"): (285, 3_150_000),
+            ("miami", "fitness"): (410, 4_510_000),
+            ("chicago", "fitness"): (520, 5_720_000),
+            
+            # Gas Station data
+            ("atlanta", "gas_station"): (2145, 0),  # Just facility count
+            ("miami", "gas_station"): (1850, 0),
+            ("chicago", "gas_station"): (2890, 0),
+            ("denver", "gas_station"): (1200, 0),
         }
         
-        key = (metro.lower(), "self-storage")  # Simplified for demo
+        # For simplicity, just use industry from the land_use_codes
+        # In a real scenario, we'd know the industry from the query context
+        # For now, extract it from metro key
+        metro_lower = metro.lower()
+        
+        # Use the provided industry
+        industry_lower = industry.lower()
+        key = (metro_lower, industry_lower)
         
         if key in mock_data:
             return mock_data[key]
         
+        # Try common industries if not found
+        for ind in ["self-storage", "restaurant", "fitness", "gas_station"]:
+            key = (metro_lower, ind)
+            if key in mock_data:
+                return mock_data[key]
+        
         # Default fallback
-        logger.warning(f"No mock data for {key}, using default")
+        logger.warning(f"No mock data for {metro_lower}, using default")
         return (50, 1_000_000)
     
     async def _try_fallback(

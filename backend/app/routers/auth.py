@@ -7,10 +7,11 @@ import logging
 
 from app.db.database import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, User as UserSchema
+from app.schemas.user import UserCreate, User as UserSchema, UserUpdate
 from app.schemas.token import Token
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.config import settings
+from app.core.dependencies import get_current_active_user
 from app.core.tokens import (
     generate_verification_token,
     get_verification_token_expiry,
@@ -303,4 +304,44 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
     return {
         "message": "Password reset successfully",
         "email": user.email
+    }
+
+
+@router.get("/profile", response_model=UserSchema)
+def get_profile(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get current user's profile"""
+    return current_user
+
+
+@router.put("/profile", response_model=UserSchema)
+def update_profile(
+    user_data: UserUpdate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Update current user's profile"""
+    logger.info(f"[Auth] Updating profile for user id={current_user.id}")
+    
+    update_data = user_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+    
+    db.commit()
+    db.refresh(current_user)
+    logger.info(f"[Auth] Profile updated for user id={current_user.id}")
+    
+    return current_user
+
+
+@router.post("/logout")
+def logout(current_user: User = Depends(get_current_active_user)):
+    """Logout endpoint (token invalidation handled by client)"""
+    logger.info(f"[Auth] User logged out: user_id={current_user.id}")
+    
+    return {
+        "message": "Successfully logged out",
+        "success": True
     }
