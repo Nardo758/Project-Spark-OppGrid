@@ -198,10 +198,8 @@ def cache_with_ttl(
                 cache_key = key_func(*args, **kwargs)
             else:
                 # Use function name + args as key
-                cache_key = f"{key_prefix}:{json.dumps({
-                    'args': str(args),
-                    'kwargs': str(kwargs)
-                }, default=str)}"
+                _key_data = json.dumps({'args': str(args), 'kwargs': str(kwargs)}, default=str)
+                cache_key = f"{key_prefix}:{_key_data}"
             
             # Try to get from cache
             cache = get_cache_manager()
@@ -221,10 +219,8 @@ def cache_with_ttl(
             if key_func:
                 cache_key = key_func(*args, **kwargs)
             else:
-                cache_key = f"{key_prefix}:{json.dumps({
-                    'args': str(args),
-                    'kwargs': str(kwargs)
-                }, default=str)}"
+                _key_data = json.dumps({'args': str(args), 'kwargs': str(kwargs)}, default=str)
+                cache_key = f"{key_prefix}:{_key_data}"
             
             # Try to get from cache
             cache = get_cache_manager()
