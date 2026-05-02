@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, Download, FileText, Lock, Loader2, CheckCircle, Printer, Mail, FileDown } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import EconomicIntelPanel, { EconomicSnapshot } from './EconomicIntelPanel'
@@ -59,6 +59,7 @@ export default function ReportViewer({
   hasUnlockedAccess = false
 }: ReportViewerProps) {
   const { token } = useAuthStore()
+  const queryClient = useQueryClient()
   const [selectedLayer, setSelectedLayer] = useState<ReportLayer>(initialLayer)
   const [generatedReport, setGeneratedReport] = useState<GeneratedReport | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -107,6 +108,7 @@ export default function ReportViewer({
     onSuccess: (data) => {
       setGeneratedReport(data)
       setError(null)
+      queryClient.setQueryData(['report', opportunityId, selectedLayer], data)
     },
     onError: (err: Error) => {
       setError(err.message)
@@ -131,6 +133,11 @@ export default function ReportViewer({
       return data.reports?.length > 0 ? data.reports[0] : null
     },
   })
+
+  const handleClose = () => {
+    queryClient.invalidateQueries({ queryKey: ['report', opportunityId, selectedLayer] })
+    onClose()
+  }
 
   const handleGenerate = () => {
     setError(null)
@@ -399,7 +406,7 @@ export default function ReportViewer({
             <h2 className="text-xl font-bold text-stone-900">Generate Report</h2>
             <p className="text-sm text-stone-500">{opportunityTitle}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-stone-100 rounded-lg">
+          <button onClick={handleClose} className="p-2 hover:bg-stone-100 rounded-lg">
             <X className="w-5 h-5" />
           </button>
         </div>
