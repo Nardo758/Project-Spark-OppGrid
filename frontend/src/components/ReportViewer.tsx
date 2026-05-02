@@ -105,10 +105,10 @@ export default function ReportViewer({
         economic_snapshot: report.economic_snapshot ?? null,
       } as GeneratedReport
     },
-    onSuccess: (data) => {
+    onSuccess: (data, layer) => {
       setGeneratedReport(data)
       setError(null)
-      queryClient.setQueryData(['report', opportunityId, selectedLayer], data)
+      queryClient.setQueryData(['report', opportunityId, layer], data)
     },
     onError: (err: Error) => {
       setError(err.message)
