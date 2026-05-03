@@ -88,8 +88,13 @@ export default function Discover() {
           />
         </div>
 
-        {/* Personalized Recommendations (Compact Carousel) */}
-        {recommendedOpportunities.length > 0 && (
+        {/* Personalized Recommendations (Compact Carousel) — under-the-radar picks (feasibility < 50) */}
+        {(() => {
+          const trending = recommendedOpportunities
+            .filter((opp) => (opp.feasibility_score ?? 0) < 50)
+            .slice(0, 6)
+          if (trending.length === 0) return null
+          return (
           <div className="mb-8">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
@@ -101,12 +106,9 @@ export default function Discover() {
                     : '(sign in for personalized picks)'}
                 </span>
               </h2>
-              <button className="text-sm text-emerald-600 hover:text-emerald-700">
-                View All →
-              </button>
             </div>
             <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar">
-              {recommendedOpportunities.slice(0, 5).map((opp) => (
+              {trending.map((opp) => (
                 <div
                   key={opp.id}
                   className="min-w-[280px] bg-gradient-to-br from-purple-50 to-white border border-purple-100 rounded-lg p-4 cursor-pointer hover:border-purple-300 transition-all"
@@ -127,7 +129,8 @@ export default function Discover() {
               ))}
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Error Display */}
         {error && (
