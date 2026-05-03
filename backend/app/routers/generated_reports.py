@@ -978,6 +978,141 @@ def cleanup_stuck_reports(
     }
 
 
+@router.post("/admin/backfill-economic-snapshots")
+async def backfill_economic_snapshots(
+    dry_run: bool = Query(False, description="If true, count affected reports without saving"),
+    limit: int = Query(50, ge=1, le=500, description="Max reports to process in one call"),
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Admin endpoint: backfill economic snapshots for Layer 1/2/3 reports that were
+    generated before economic intelligence was wired into the orchestrator.
+
+    Finds all completed Layer reports with economic_snapshot IS NULL, fetches
+    fresh FRED/BLS/SEC data for each report's associated opportunity, and saves
+    the snapshot. Safe to run multiple times — already-filled reports are skipped.
+
+    Query params:
+      dry_run (bool) — count affected reports without writing anything (default: false)
+      limit   (int)  — max reports to process per call, for rate-limit safety (default: 50)
+    """
+    from app.models.opportunity import Opportunity
+    from app.services.report_orchestrator import ReportOrchestrator
+
+    layer_types = [
+        ReportType.LAYER_1_OVERVIEW,
+        ReportType.LAYER_2_DEEP_DIVE,
+        ReportType.LAYER_3_EXECUTION,
+    ]
+
+    reports_needing_backfill = (
+        db.query(GeneratedReport)
+        .filter(
+            GeneratedReport.report_type.in_(layer_types),
+            GeneratedReport.status == ReportStatus.COMPLETED,
+            GeneratedReport.economic_snapshot.is_(None),
+        )
+        .order_by(GeneratedReport.id)
+        .limit(limit)
+        .all()
+    )
+
+    total_eligible = (
+        db.query(GeneratedReport)
+        .filter(
+            GeneratedReport.report_type.in_(layer_types),
+            GeneratedReport.status == ReportStatus.COMPLETED,
+            GeneratedReport.economic_snapshot.is_(None),
+        )
+        .count()
+    )
+
+    if dry_run:
+        return {
+            "dry_run": True,
+            "total_eligible": total_eligible,
+            "would_process": len(reports_needing_backfill),
+            "limit": limit,
+            "message": f"{total_eligible} reports need backfill; would process {len(reports_needing_backfill)} in this batch.",
+        }
+
+    orchestrator = ReportOrchestrator()
+    filled = []
+    skipped = []
+    failed = []
+
+    for report in reports_needing_backfill:
+        opportunity = None
+        if report.opportunity_id:
+            opportunity = db.query(Opportunity).filter(Opportunity.id == report.opportunity_id).first()
+
+        business_type = (
+            getattr(opportunity, "category", None)
+            or getattr(opportunity, "title", None)
+            or "Business"
+        ) if opportunity else "Business"
+        state = getattr(opportunity, "region", None) or "" if opportunity else ""
+
+        try:
+            macro_context, labor_data, industry_benchmarks = await orchestrator._fetch_economic_intel(
+                business_type=business_type,
+                db=db,
+                state=state,
+            )
+            economic_snapshot = orchestrator._build_economic_snapshot(
+                macro_context, labor_data, industry_benchmarks
+            )
+
+            if economic_snapshot:
+                import json as _json
+                report.economic_snapshot = _json.dumps(economic_snapshot)
+                db.commit()
+                db.refresh(report)
+                filled.append({
+                    "report_id": report.id,
+                    "report_type": report.report_type.value,
+                    "opportunity_id": report.opportunity_id,
+                    "business_type": business_type,
+                    "sources": list(economic_snapshot.keys()),
+                })
+                logger.info(
+                    f"[Backfill] Saved economic snapshot for report {report.id} "
+                    f"({report.report_type.value}, opp={report.opportunity_id})"
+                )
+            else:
+                skipped.append({
+                    "report_id": report.id,
+                    "report_type": report.report_type.value,
+                    "reason": "no_economic_data_available",
+                })
+                logger.info(f"[Backfill] No economic data for report {report.id} — skipped")
+
+        except Exception as exc:
+            db.rollback()
+            failed.append({
+                "report_id": report.id,
+                "report_type": report.report_type.value,
+                "error": str(exc),
+            })
+            logger.error(f"[Backfill] Failed to backfill report {report.id}: {exc}")
+
+    return {
+        "dry_run": False,
+        "total_eligible": total_eligible,
+        "processed": len(reports_needing_backfill),
+        "filled": len(filled),
+        "skipped_no_data": len(skipped),
+        "failed": len(failed),
+        "remaining_after_run": total_eligible - len(filled),
+        "details": {
+            "filled": filled,
+            "skipped": skipped,
+            "failed": failed,
+        },
+    }
+
+
 @router.get("/{report_id}/status")
 def get_report_status(
     report_id: int,
