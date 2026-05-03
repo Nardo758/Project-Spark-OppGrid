@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     STRIPE_RECONCILE_JOB_ENABLED: bool = True
     STRIPE_RECONCILE_JOB_INTERVAL_SECONDS: int = 3600  # 1 hour
 
+    # Nightly backfill of missing economic_snapshot for completed Layer 1/2/3 reports.
+    # Self-healing: if the economic intel pipeline fails silently during report
+    # generation, this job picks up the slack overnight without admin intervention.
+    ECONOMIC_SNAPSHOT_BACKFILL_JOB_ENABLED: bool = True
+    ECONOMIC_SNAPSHOT_BACKFILL_JOB_INTERVAL_SECONDS: int = 86400  # nightly (24h)
+    ECONOMIC_SNAPSHOT_BACKFILL_BATCH_SIZE: int = 50
+
     # Email Configuration (Resend)
     RESEND_API_KEY: Optional[str] = None
     FROM_EMAIL: Optional[str] = "noreply@yourdomain.com"

@@ -252,6 +252,111 @@ async def _stripe_subscription_reconcile_job(db: Session) -> dict:
     return {"enabled": True, "checked": checked, "updated": updated, "errors": errors[:25]}
 
 
+async def _economic_snapshot_backfill_job(db: Session) -> dict:
+    """
+    Nightly self-healing job: backfill economic_snapshot for any completed
+    Layer 1/2/3 reports where it is still NULL.
+
+    Mirrors the admin endpoint POST /admin/backfill-economic-snapshots so a
+    silent failure in the economic-intel pipeline at generation time gets
+    automatically repaired overnight without admin intervention.
+    """
+    from app.models.generated_report import GeneratedReport, ReportStatus, ReportType
+    from app.models.opportunity import Opportunity
+    from app.services.report_orchestrator import ReportOrchestrator
+
+    layer_types = [
+        ReportType.LAYER_1_OVERVIEW,
+        ReportType.LAYER_2_DEEP_DIVE,
+        ReportType.LAYER_3_EXECUTION,
+    ]
+
+    batch_size = max(1, int(getattr(settings, "ECONOMIC_SNAPSHOT_BACKFILL_BATCH_SIZE", 50)))
+
+    base_filter = (
+        db.query(GeneratedReport)
+        .filter(
+            GeneratedReport.report_type.in_(layer_types),
+            GeneratedReport.status == ReportStatus.COMPLETED,
+            GeneratedReport.economic_snapshot.is_(None),
+        )
+    )
+    total_eligible = base_filter.count()
+    candidates = base_filter.order_by(GeneratedReport.id).limit(batch_size).all()
+
+    if not candidates:
+        logger.info("[EconomicSnapshotBackfill] No reports need backfill (eligible=%d)", total_eligible)
+        return {"total_eligible": total_eligible, "processed": 0, "filled": 0, "skipped": 0, "failed": 0}
+
+    orchestrator = ReportOrchestrator()
+    filled = 0
+    skipped = 0
+    failed = 0
+    failures: list[dict] = []
+
+    for report in candidates:
+        opportunity = None
+        if report.opportunity_id:
+            opportunity = db.query(Opportunity).filter(Opportunity.id == report.opportunity_id).first()
+
+        business_type = (
+            getattr(opportunity, "category", None)
+            or getattr(opportunity, "title", None)
+            or "Business"
+        ) if opportunity else "Business"
+        state = (getattr(opportunity, "region", None) or "") if opportunity else ""
+
+        try:
+            macro_context, labor_data, industry_benchmarks = await orchestrator._fetch_economic_intel(
+                business_type=business_type,
+                db=db,
+                state=state,
+            )
+            economic_snapshot = orchestrator._build_economic_snapshot(
+                macro_context, labor_data, industry_benchmarks
+            )
+
+            if economic_snapshot:
+                report.economic_snapshot = json.dumps(economic_snapshot)
+                db.commit()
+                db.refresh(report)
+                filled += 1
+                logger.info(
+                    "[EconomicSnapshotBackfill] Filled report %s (%s, opp=%s)",
+                    report.id, report.report_type, report.opportunity_id,
+                )
+            else:
+                skipped += 1
+                logger.info(
+                    "[EconomicSnapshotBackfill] No economic data for report %s — skipped",
+                    report.id,
+                )
+        except Exception as exc:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            failed += 1
+            failures.append({"report_id": report.id, "error": str(exc)})
+            logger.error(
+                "[EconomicSnapshotBackfill] Failed report %s: %s", report.id, exc
+            )
+
+    logger.info(
+        "[EconomicSnapshotBackfill] Run complete — eligible=%d processed=%d filled=%d skipped=%d failed=%d",
+        total_eligible, len(candidates), filled, skipped, failed,
+    )
+
+    return {
+        "total_eligible": total_eligible,
+        "processed": len(candidates),
+        "filled": filled,
+        "skipped": skipped,
+        "failed": failed,
+        "failures": failures[:25],
+    }
+
+
 async def _loop(job_name: str, interval_seconds: int, fn: Callable[[Session], Awaitable[dict]]) -> None:
     # Stagger initial run slightly so startup can settle.
     await asyncio.sleep(3)
@@ -292,6 +397,14 @@ def start_background_jobs() -> None:
     if settings.STRIPE_RECONCILE_JOB_ENABLED:
         loop.create_task(_loop("stripe_subscription_reconcile", settings.STRIPE_RECONCILE_JOB_INTERVAL_SECONDS, _stripe_subscription_reconcile_job))
         logger.info("Started job: stripe_subscription_reconcile")
+
+    if getattr(settings, "ECONOMIC_SNAPSHOT_BACKFILL_JOB_ENABLED", True):
+        loop.create_task(_loop(
+            "economic_snapshot_backfill",
+            int(getattr(settings, "ECONOMIC_SNAPSHOT_BACKFILL_JOB_INTERVAL_SECONDS", 86400)),
+            _economic_snapshot_backfill_job,
+        ))
+        logger.info("Started job: economic_snapshot_backfill")
 
     # Webhook delivery job - runs every 60 seconds
     try:
