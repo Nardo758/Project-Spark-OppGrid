@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, ShoppingCart, Star, TrendingUp, Database } from 'lucide-react'
+import { Eye, ShoppingCart, Star, Database } from 'lucide-react'
 import DatasetPreview from './DatasetPreview'
 import { useAuthStore } from '../stores/authStore'
 
@@ -40,12 +40,12 @@ export default function DatasetCard({ dataset }: { dataset: Dataset }) {
   const categoryColor = CATEGORY_COLORS[dataset.dataset_type] || CATEGORY_COLORS.raw_data
   const categoryLabel = CATEGORY_LABELS[dataset.dataset_type] || 'Data'
 
-  const formatPrice = (cents: number) => `$${(cents / 100).toFixed(2)}`
+  const formatPrice = (cents: number) => `$${(cents / 100).toFixed(0)}`
 
   const formatRecordCount = (count: number) => {
-    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M records`
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}K records`
-    return `${count} records`
+    if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`
+    if (count >= 1000) return `${(count / 1000).toFixed(1)}K`
+    return `${count}`
   }
 
   const formatFreshness = (freshness: string) => {
@@ -55,7 +55,7 @@ export default function DatasetCard({ dataset }: { dataset: Dataset }) {
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
     const diffDays = Math.floor(diffHours / 24)
 
-    if (diffHours < 1) return 'Just now'
+    if (diffHours < 1) return 'just now'
     if (diffHours < 24) return `${diffHours}h ago`
     if (diffDays < 30) return `${diffDays}d ago`
     if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`
@@ -80,80 +80,69 @@ export default function DatasetCard({ dataset }: { dataset: Dataset }) {
 
   return (
     <>
-      <div className="h-full flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg hover:border-gray-300 transition-all duration-200">
-        {/* Header with Category Badge */}
-        <div className="relative p-4 pb-4 border-b border-gray-100">
-          <div className={`absolute top-4 right-4 ${categoryColor.bg} ${categoryColor.text} px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1`}>
-            <span>{categoryColor.icon}</span>
-            {categoryLabel}
-          </div>
-          <h3 className="text-lg font-semibold text-gray-900 pr-24 line-clamp-2">
+      <div className="h-full flex flex-col bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-300 hover:shadow-sm transition-all">
+        {/* Top: badge + title */}
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">
             {dataset.name}
           </h3>
+          <span
+            className={`shrink-0 ${categoryColor.bg} ${categoryColor.text} px-2 py-0.5 rounded-full text-[11px] font-medium`}
+          >
+            {categoryColor.icon} {categoryLabel}
+          </span>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 flex flex-col p-4 space-y-3">
-          <p className="text-sm text-gray-600 line-clamp-2">
-            {dataset.description || 'High-quality market intelligence dataset'}
-          </p>
+        {/* Description */}
+        <p className="text-xs text-gray-600 line-clamp-2 mb-3">
+          {dataset.description || 'High-quality market intelligence dataset'}
+        </p>
 
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2 text-gray-600">
-              <Database className="w-4 h-4" />
-              <span>{formatRecordCount(dataset.record_count)}</span>
-            </div>
+        {/* Meta row */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 mb-3">
+          <span className="flex items-center gap-1">
+            <Database className="w-3.5 h-3.5" />
+            {formatRecordCount(dataset.record_count)} rows
+          </span>
+          <span>· Updated {formatFreshness(dataset.data_freshness)}</span>
+          {(dataset.vertical || dataset.city) && (
+            <span>· {[dataset.vertical, dataset.city].filter(Boolean).join(' • ')}</span>
+          )}
+        </div>
 
-            <div className="flex items-center gap-2 text-gray-600">
-              <TrendingUp className="w-4 h-4" />
-              <span>Updated {formatFreshness(dataset.data_freshness)}</span>
-            </div>
+        {/* Rating */}
+        <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
+          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+          <span>4.0</span>
+          <span className="text-gray-400">· 124 purchases</span>
+        </div>
 
-            {(dataset.vertical || dataset.city) && (
-              <div className="flex items-center gap-2 text-gray-500">
-                <span className="text-xs">
-                  {[dataset.vertical, dataset.city].filter(Boolean).join(' • ')}
-                </span>
-              </div>
-            )}
-          </div>
+        <div className="flex-1" />
 
-          <div className="flex items-center gap-1">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={`w-3 h-3 ${i < 4 ? 'fill-amber-500 text-amber-500' : 'text-gray-300'}`}
-              />
-            ))}
-            <span className="text-xs text-gray-500 ml-1">(124 purchases)</span>
-          </div>
-
-          <div className="flex-1" />
-
-          <div className="border-t border-gray-100 pt-3">
-            <div className="text-2xl font-bold text-gray-900">
+        {/* Footer: price + actions */}
+        <div className="flex items-center justify-between gap-2 pt-3 border-t border-gray-100">
+          <div>
+            <div className="text-lg font-bold text-gray-900 leading-none">
               {formatPrice(dataset.price_cents)}
             </div>
-            <p className="text-xs text-gray-500">One-time purchase</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">one-time</p>
           </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="border-t border-gray-100 p-4 space-y-2">
-          <button
-            onClick={handlePreview}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-medium bg-gray-100 hover:bg-gray-200 text-gray-900 transition-colors"
-          >
-            <Eye className="w-4 h-4" />
-            Preview
-          </button>
-          <button
-            onClick={handlePurchase}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg font-medium bg-black hover:bg-gray-800 text-white transition-colors"
-          >
-            <ShoppingCart className="w-4 h-4" />
-            Purchase
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handlePreview}
+              className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-900 transition-colors"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Preview
+            </button>
+            <button
+              onClick={handlePurchase}
+              className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-black hover:bg-gray-800 text-white transition-colors"
+            >
+              <ShoppingCart className="w-3.5 h-3.5" />
+              Buy
+            </button>
+          </div>
         </div>
       </div>
 

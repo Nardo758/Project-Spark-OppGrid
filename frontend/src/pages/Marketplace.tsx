@@ -45,17 +45,15 @@ export default function Marketplace() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Marketplace</h1>
-          <p className="text-gray-600">{activeMeta.description}</p>
-        </div>
-      </div>
-
-      {/* Tab bar */}
+      {/* Combined header + tab bar */}
       <div className="border-b border-gray-200 bg-white sticky top-16 z-30">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Marketplace</h1>
+              <p className="text-sm text-gray-500">{activeMeta.description}</p>
+            </div>
+          </div>
           <div className="flex gap-1" role="tablist" aria-label="Marketplace sections">
             {TABS.map((tab) => {
               const Icon = tab.icon
@@ -68,7 +66,7 @@ export default function Marketplace() {
                   aria-selected={isActive}
                   aria-controls={`tabpanel-${tab.id}`}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                     isActive
                       ? 'border-black text-gray-900'
                       : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
@@ -84,7 +82,7 @@ export default function Marketplace() {
       </div>
 
       {/* Tab content — both tabs stay mounted so each keeps its own filter/search state when switching */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div
           id="tabpanel-datasets"
           role="tabpanel"

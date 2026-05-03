@@ -116,77 +116,58 @@ export default function LeadsTab() {
 
   return (
     <div>
-      {/* Stats */}
-      <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">{totalLeads || '0'}</div>
-          <div className="text-sm text-gray-500">Active Leads</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">{categories.length}</div>
-          <div className="text-sm text-gray-500">Categories</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">92%</div>
-          <div className="text-sm text-gray-500">Response Rate</div>
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-          <div className="text-2xl font-bold text-gray-900">90</div>
-          <div className="text-sm text-gray-500">Day Access</div>
-        </div>
+      {/* Compact stats strip */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-600">
+        <span><span className="font-semibold text-gray-900">{totalLeads || 0}</span> active leads</span>
+        <span><span className="font-semibold text-gray-900">{categories.length}</span> categories</span>
+        <span><span className="font-semibold text-gray-900">92%</span> response rate</span>
+        <span><span className="font-semibold text-gray-900">90-day</span> access</span>
       </div>
 
-      {/* Search bar */}
-      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6">
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search leads by keyword, industry, or company..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-black focus:border-transparent"
-            />
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <select
-              value={selectedIndustry}
-              onChange={(e) => setSelectedIndustry(e.target.value)}
-              className="px-4 py-3 border border-gray-200 rounded-lg bg-white focus:ring-2 focus:ring-black"
-            >
-              {industries.map((ind) => (
-                <option key={ind} value={ind}>
-                  {ind}
-                </option>
-              ))}
-            </select>
-            <button className="px-4 py-3 bg-gray-100 hover:bg-gray-200 rounded-lg flex items-center gap-2 transition-colors">
-              <Filter className="w-4 h-4" />
-              More Filters
-            </button>
-          </div>
+      {/* Compact filter bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search leads by keyword, industry, or company..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+          />
         </div>
+        <select
+          value={selectedIndustry}
+          onChange={(e) => setSelectedIndustry(e.target.value)}
+          className="text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+        >
+          {industries.map((ind) => (
+            <option key={ind} value={ind}>
+              {ind}
+            </option>
+          ))}
+        </select>
+        <button className="text-sm px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 rounded-lg flex items-center gap-2 transition-colors text-gray-700">
+          <Filter className="w-4 h-4" />
+          More
+        </button>
       </div>
 
       <div className="flex gap-6">
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between mb-4">
-            <p className="text-gray-600">
+            <p className="text-sm text-gray-500">
               {loading ? 'Loading...' : `Showing ${leads.length} of ${totalLeads} leads`}
             </p>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">Sort by:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="text-sm border border-gray-200 rounded-lg px-3 py-2"
-              >
-                <option value="recent">Newest First</option>
-                <option value="quality">Quality Score</option>
-                <option value="price">Price</option>
-              </select>
-            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700"
+            >
+              <option value="recent">Newest First</option>
+              <option value="quality">Quality Score</option>
+              <option value="price">Price</option>
+            </select>
           </div>
 
           {loading ? (
@@ -208,7 +189,7 @@ export default function LeadsTab() {
               {leads.map((lead) => (
                 <div
                   key={lead.id}
-                  className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-shadow"
+                  className="bg-white rounded-xl border border-gray-200 p-4 hover:border-gray-300 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">

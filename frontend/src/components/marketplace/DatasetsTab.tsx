@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Filter, ChevronDown } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import DatasetCard from '../DatasetCard'
 
@@ -77,7 +77,6 @@ export default function DatasetsTab() {
     city: null,
     sortBy: 'newest',
   })
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null)
 
   const { data: datasets = [], isLoading, error } = useQuery({
     queryKey: ['datasets', filters],
@@ -102,247 +101,123 @@ export default function DatasetsTab() {
   })
 
   const filteredDatasets = datasets.filter((ds) => ds.is_active)
+  const hasActiveFilter =
+    filters.search || filters.category || filters.vertical || filters.city
+
+  const selectClass =
+    'text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent'
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Sidebar Filters */}
-      <div className="lg:w-72 flex-shrink-0">
-        <div className="sticky top-36 space-y-4">
-          {/* Search */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search datasets..."
-                value={filters.search}
-                onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
-              />
-            </div>
-          </div>
-
-          {/* Category Filter */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <button
-              onClick={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')}
-              className="w-full flex items-center justify-between mb-3"
-            >
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <Filter className="w-4 h-4" />
-                Category
-              </h3>
-              <ChevronDown
-                className={`w-4 h-4 text-gray-500 transition-transform ${
-                  openDropdown === 'category' ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-            {openDropdown === 'category' && (
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer group">
-                  <input
-                    type="radio"
-                    name="category"
-                    value=""
-                    checked={filters.category === null}
-                    onChange={() => setFilters({ ...filters, category: null })}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm text-gray-700 group-hover:text-gray-900">All Categories</span>
-                </label>
-                {CATEGORIES.map((cat) => (
-                  <label key={cat.value} className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="category"
-                      value={cat.value}
-                      checked={filters.category === cat.value}
-                      onChange={() => setFilters({ ...filters, category: cat.value })}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{cat.label}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Vertical Filter */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <button
-              onClick={() => setOpenDropdown(openDropdown === 'vertical' ? null : 'vertical')}
-              className="w-full flex items-center justify-between mb-3"
-            >
-              <h3 className="text-sm font-semibold text-gray-900">Vertical</h3>
-              <ChevronDown
-                className={`w-4 h-4 text-gray-500 transition-transform ${
-                  openDropdown === 'vertical' ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-            {openDropdown === 'vertical' && (
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                <label className="flex items-center gap-2 cursor-pointer group">
-                  <input
-                    type="radio"
-                    name="vertical"
-                    value=""
-                    checked={filters.vertical === null}
-                    onChange={() => setFilters({ ...filters, vertical: null })}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm text-gray-700 group-hover:text-gray-900">All Verticals</span>
-                </label>
-                {VERTICALS.map((vert) => (
-                  <label key={vert} className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="vertical"
-                      value={vert}
-                      checked={filters.vertical === vert}
-                      onChange={() => setFilters({ ...filters, vertical: vert })}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{vert}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* City Filter */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <button
-              onClick={() => setOpenDropdown(openDropdown === 'city' ? null : 'city')}
-              className="w-full flex items-center justify-between mb-3"
-            >
-              <h3 className="text-sm font-semibold text-gray-900">City</h3>
-              <ChevronDown
-                className={`w-4 h-4 text-gray-500 transition-transform ${
-                  openDropdown === 'city' ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-            {openDropdown === 'city' && (
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                <label className="flex items-center gap-2 cursor-pointer group">
-                  <input
-                    type="radio"
-                    name="city"
-                    value=""
-                    checked={filters.city === null}
-                    onChange={() => setFilters({ ...filters, city: null })}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm text-gray-700 group-hover:text-gray-900">All Cities</span>
-                </label>
-                {CITIES.map((city) => (
-                  <label key={city} className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="city"
-                      value={city}
-                      checked={filters.city === city}
-                      onChange={() => setFilters({ ...filters, city })}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{city}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Sort By */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <button
-              onClick={() => setOpenDropdown(openDropdown === 'sort' ? null : 'sort')}
-              className="w-full flex items-center justify-between mb-3"
-            >
-              <h3 className="text-sm font-semibold text-gray-900">Sort By</h3>
-              <ChevronDown
-                className={`w-4 h-4 text-gray-500 transition-transform ${
-                  openDropdown === 'sort' ? 'rotate-180' : ''
-                }`}
-              />
-            </button>
-            {openDropdown === 'sort' && (
-              <div className="space-y-2">
-                {SORT_OPTIONS.map((opt) => (
-                  <label key={opt.value} className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                      type="radio"
-                      name="sort"
-                      value={opt.value}
-                      checked={filters.sortBy === opt.value}
-                      onChange={() => setFilters({ ...filters, sortBy: opt.value })}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{opt.label}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+    <div>
+      {/* Compact filter bar */}
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search datasets..."
+            value={filters.search}
+            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+          />
         </div>
+        <select
+          value={filters.category ?? ''}
+          onChange={(e) => setFilters({ ...filters, category: e.target.value || null })}
+          className={selectClass}
+        >
+          <option value="">All Categories</option>
+          {CATEGORIES.map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.vertical ?? ''}
+          onChange={(e) => setFilters({ ...filters, vertical: e.target.value || null })}
+          className={selectClass}
+        >
+          <option value="">All Verticals</option>
+          {VERTICALS.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.city ?? ''}
+          onChange={(e) => setFilters({ ...filters, city: e.target.value || null })}
+          className={selectClass}
+        >
+          <option value="">All Cities</option>
+          {CITIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.sortBy}
+          onChange={(e) => setFilters({ ...filters, sortBy: e.target.value as SortOption })}
+          className={selectClass}
+        >
+          {SORT_OPTIONS.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        {hasActiveFilter && (
+          <button
+            onClick={() =>
+              setFilters({
+                search: '',
+                category: null,
+                vertical: null,
+                city: null,
+                sortBy: 'newest',
+              })
+            }
+            className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 min-w-0">
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">
-            {filteredDatasets.length} Dataset{filteredDatasets.length !== 1 ? 's' : ''} Available
-          </h2>
-          {filters.search && (
-            <p className="text-sm text-gray-600 mt-1">
-              Results for: <span className="font-medium">{filters.search}</span>
-            </p>
-          )}
+      {/* Result count */}
+      <p className="text-sm text-gray-500 mb-4">
+        {filteredDatasets.length} dataset{filteredDatasets.length !== 1 ? 's' : ''}
+      </p>
+
+      {isLoading && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-72 bg-gray-100 rounded-xl animate-pulse" />
+          ))}
         </div>
+      )}
 
-        {isLoading && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-96 bg-gray-100 rounded-xl animate-pulse" />
-            ))}
-          </div>
-        )}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+          Failed to load datasets. Please try again.
+        </div>
+      )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
-            Failed to load datasets. Please try again.
-          </div>
-        )}
+      {!isLoading && filteredDatasets.length === 0 && (
+        <div className="text-center py-12 bg-white border border-gray-200 rounded-xl">
+          <p className="text-gray-600">No datasets found matching your filters.</p>
+        </div>
+      )}
 
-        {!isLoading && filteredDatasets.length === 0 && (
-          <div className="text-center py-12 bg-white border border-gray-200 rounded-xl">
-            <p className="text-gray-600 text-lg">No datasets found matching your filters.</p>
-            <button
-              onClick={() =>
-                setFilters({
-                  search: '',
-                  category: null,
-                  vertical: null,
-                  city: null,
-                  sortBy: 'newest',
-                })
-              }
-              className="mt-4 px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-lg transition-colors"
-            >
-              Clear Filters
-            </button>
-          </div>
-        )}
-
-        {!isLoading && filteredDatasets.length > 0 && (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredDatasets.map((dataset) => (
-              <DatasetCard key={dataset.id} dataset={dataset} />
-            ))}
-          </div>
-        )}
-      </div>
+      {!isLoading && filteredDatasets.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredDatasets.map((dataset) => (
+            <DatasetCard key={dataset.id} dataset={dataset} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
