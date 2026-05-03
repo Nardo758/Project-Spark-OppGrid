@@ -61,18 +61,18 @@ const individualTiers = [
     slots: 3,
     seats: 1,
     reportDiscount: 10,
-    extraSlotPrice: 40,
+    extraSlotPrice: 35,
     features: [
       { text: '3 opportunity slots/month', included: true },
       { text: 'Full platform access', included: true },
       { text: '10% off all reports', included: true },
-      { text: 'Additional slots: $40 each', included: true },
+      { text: 'Additional slots: $35 each', included: true },
       { text: 'Priority support', included: true },
       { text: 'Commercial use', included: false },
     ],
     cta: 'Start Growing',
     popular: true,
-    gradient: 'from-purple-500 to-indigo-600',
+    gradient: 'from-emerald-500 to-teal-600',
   },
   {
     id: 'pro',
@@ -84,18 +84,18 @@ const individualTiers = [
     slots: 5,
     seats: 1,
     reportDiscount: 15,
-    extraSlotPrice: 35,
+    extraSlotPrice: 25,
     features: [
       { text: '5 opportunity slots/month', included: true },
       { text: 'Full platform access', included: true },
       { text: '15% off all reports', included: true },
-      { text: 'Additional slots: $35 each', included: true },
+      { text: 'Additional slots: $25 each', included: true },
       { text: 'Priority support', included: true },
-      { text: 'Commercial use', included: false },
+      { text: 'Commercial use', included: true },
     ],
     cta: 'Go Pro',
     popular: false,
-    gradient: 'from-emerald-500 to-teal-600',
+    gradient: 'from-emerald-600 to-teal-700',
   },
 ]
 
@@ -146,7 +146,7 @@ const businessTiers = [
     ],
     cta: 'Scale Up',
     popular: true,
-    gradient: 'from-purple-600 to-indigo-700',
+    gradient: 'from-emerald-600 to-teal-700',
   },
   {
     id: 'enterprise',
@@ -510,10 +510,10 @@ export default function Pricing() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50/50 via-white to-emerald-50/30">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-full text-sm font-medium mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 text-emerald-700 rounded-full text-sm font-medium mb-6">
             <Sparkles className="w-4 h-4" />
             Professional Business Intelligence. AI Speed.
           </div>
@@ -521,7 +521,7 @@ export default function Pricing() {
             Discover. Claim. Execute.
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-6">
-            Start at <span className="font-semibold text-purple-600">$20/month</span>{' '}
+            Start at <span className="font-semibold text-emerald-600">$20/month</span>{' '}
             - 10x more accessible than competitors. Pay to play, not to browse.
           </p>
           <p className="text-lg text-gray-500">
@@ -584,11 +584,11 @@ export default function Pricing() {
               <div
                 key={tier.id}
                 className={`relative bg-white rounded-2xl border-2 ${
-                  tier.popular ? 'border-purple-500 shadow-xl' : 'border-gray-200'
+                  tier.popular ? 'border-emerald-500 shadow-xl' : 'border-gray-200'
                 } overflow-hidden`}
               >
                 {tier.popular && (
-                  <div className="absolute top-0 left-0 right-0 bg-purple-500 text-white text-center text-sm py-1 font-medium">
+                  <div className="absolute top-0 left-0 right-0 bg-emerald-500 text-white text-center text-sm py-1 font-medium">
                     Most Popular
                   </div>
                 )}
@@ -626,7 +626,7 @@ export default function Pricing() {
                     disabled={billingLoading !== null}
                     className={`block w-full py-3 rounded-lg text-center font-medium transition-colors disabled:opacity-50 ${
                       tier.popular
-                        ? 'bg-purple-600 text-white hover:bg-purple-700'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
@@ -653,11 +653,11 @@ export default function Pricing() {
               <div
                 key={tier.id}
                 className={`relative bg-white rounded-2xl border-2 ${
-                  tier.popular ? 'border-purple-500 shadow-xl' : 'border-gray-200'
+                  tier.popular ? 'border-emerald-500 shadow-xl' : 'border-gray-200'
                 } overflow-hidden`}
               >
                 {tier.popular && (
-                  <div className="absolute top-0 left-0 right-0 bg-purple-500 text-white text-center text-sm py-1 font-medium">
+                  <div className="absolute top-0 left-0 right-0 bg-emerald-500 text-white text-center text-sm py-1 font-medium">
                     Most Popular
                   </div>
                 )}
@@ -704,7 +704,7 @@ export default function Pricing() {
                     disabled={billingLoading !== null}
                     className={`block w-full py-3 rounded-lg text-center font-medium transition-colors disabled:opacity-50 ${
                       tier.popular
-                        ? 'bg-purple-600 text-white hover:bg-purple-700'
+                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
@@ -734,7 +734,7 @@ export default function Pricing() {
                 <div className="flex items-center gap-3 mb-4">
                   <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
                     i === 0 ? 'bg-blue-100 text-blue-600' :
-                    i === 1 ? 'bg-purple-100 text-purple-600' :
+                    i === 1 ? 'bg-amber-100 text-amber-600' :
                     'bg-emerald-100 text-emerald-600'
                   }`}>
                     {i === 0 ? <Lightbulb className="w-5 h-5" /> :
@@ -746,7 +746,7 @@ export default function Pricing() {
                     <div className="font-semibold text-gray-900">{layer.name}</div>
                   </div>
                 </div>
-                <div className="text-xs text-purple-600 font-medium mb-4 p-2 bg-purple-50 rounded-lg">
+                <div className="text-xs text-emerald-600 font-medium mb-4 p-2 bg-emerald-50 rounded-lg">
                   {layer.access}
                 </div>
                 <ul className="space-y-2">
@@ -768,31 +768,31 @@ export default function Pricing() {
             <p className="text-gray-600">Transform opportunities into investor-ready documentation</p>
           </div>
 
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl border border-purple-200 p-8 mb-8">
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 p-8 mb-8">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
-              <div className="w-16 h-16 bg-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                <Target className="w-8 h-8 text-purple-600" />
+              <div className="w-16 h-16 bg-emerald-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Target className="w-8 h-8 text-emerald-600" />
               </div>
               <div className="flex-1">
-                <div className="text-sm text-purple-600 font-medium">BEST VALUE - START HERE</div>
+                <div className="text-sm text-emerald-600 font-medium">BEST VALUE - START HERE</div>
                 <h3 className="text-2xl font-bold text-gray-900">Feasibility Study</h3>
                 <p className="text-gray-600">Quick viability check - prove our quality before you invest in the full suite</p>
               </div>
               <div className="text-right">
-                <div className="text-4xl font-bold text-purple-600">$25</div>
+                <div className="text-4xl font-bold text-emerald-600">$25</div>
                 <div className="text-sm text-gray-500 line-through">$1,500-$15,000 from consultants</div>
-                <div className="text-xs text-purple-500 font-medium">Save 98%+</div>
+                <div className="text-xs text-emerald-500 font-medium">Save 98%+</div>
               </div>
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             {reports.filter(r => r.id !== 'feasibility').map((report) => (
-              <div key={report.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:border-purple-300 transition-colors">
+              <div key={report.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:border-emerald-300 transition-colors">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <report.icon className="w-5 h-5 text-purple-600" />
+                    <div className="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                      <report.icon className="w-5 h-5 text-emerald-600" />
                     </div>
                     <div>
                       <h4 className="font-semibold text-gray-900">{report.name}</h4>
@@ -801,7 +801,7 @@ export default function Pricing() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-2xl font-bold text-purple-600">{report.priceLabel}</span>
+                  <span className="text-2xl font-bold text-emerald-600">{report.priceLabel}</span>
                   <span className="text-xs text-gray-400 line-through">{report.consultantPrice}</span>
                 </div>
               </div>
@@ -816,12 +816,12 @@ export default function Pricing() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {bundles.map((bundle) => (
-              <div key={bundle.id} className="bg-white rounded-xl border-2 border-gray-200 hover:border-purple-300 transition-colors overflow-hidden">
+              <div key={bundle.id} className="bg-white rounded-xl border-2 border-gray-200 hover:border-emerald-300 transition-colors overflow-hidden">
                 <div className="p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-1">{bundle.name}</h3>
                   <p className="text-sm text-gray-500 mb-4">{bundle.description}</p>
                   <div className="flex items-baseline gap-2 mb-4">
-                    <span className="text-3xl font-bold text-purple-600">
+                    <span className="text-3xl font-bold text-emerald-600">
                       {bundle.priceLabel || `$${bundle.price}`}
                     </span>
                     {bundle.savings > 0 && (
@@ -847,7 +847,7 @@ export default function Pricing() {
                         navigate(`/discover?bundle=${bundle.id}`)
                       }
                     }}
-                    className="block w-full py-3 bg-purple-600 text-white rounded-lg text-center font-medium hover:bg-purple-700 transition-colors"
+                    className="block w-full py-3 bg-emerald-600 text-white rounded-lg text-center font-medium hover:bg-emerald-700 transition-colors"
                   >
                     Get {bundle.name}
                   </button>
@@ -886,7 +886,7 @@ export default function Pricing() {
                   <span className="font-medium">$99/month</span>
                 </li>
               </ul>
-              <Link to="/api" className="text-purple-600 hover:text-purple-700 text-sm font-medium">
+              <Link to="/api" className="text-emerald-600 hover:text-emerald-700 text-sm font-medium">
                 View API Documentation →
               </Link>
             </div>
@@ -915,7 +915,7 @@ export default function Pricing() {
                   <span className="font-medium">$150-$500/hour</span>
                 </li>
               </ul>
-              <Link to="/leads" className="text-purple-600 hover:text-purple-700 text-sm font-medium">
+              <Link to="/leads" className="text-emerald-600 hover:text-emerald-700 text-sm font-medium">
                 Browse Leads →
               </Link>
             </div>
@@ -950,7 +950,7 @@ export default function Pricing() {
           </div>
         </div>
 
-        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-2xl p-8 md:p-12 text-center text-white">
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-8 md:p-12 text-center text-white">
           <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
           <p className="text-white/80 mb-8 max-w-2xl mx-auto">
             Browse opportunities and get your first Feasibility Study for just $25. No subscription required.
@@ -958,13 +958,13 @@ export default function Pricing() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               to="/opportunities"
-              className="px-8 py-3 bg-white text-purple-600 rounded-lg font-medium hover:bg-gray-100 transition-colors"
+              className="px-8 py-3 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors"
             >
               Browse Opportunities
             </Link>
             <Link
               to="/build"
-              className="px-8 py-3 bg-purple-500 text-white rounded-lg font-medium hover:bg-purple-400 transition-colors border border-white/20"
+              className="px-8 py-3 bg-white/10 text-white rounded-lg font-medium hover:bg-white/20 transition-colors border border-white/20"
             >
               See Sample Reports
             </Link>
