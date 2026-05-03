@@ -86,7 +86,7 @@ export default function DatasetPreview({
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Metadata Section */}
-          {preview && (
+          {preview && preview.metadata && (
             <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
               <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
                 <Database className="w-4 h-4" />
@@ -96,13 +96,15 @@ export default function DatasetPreview({
                 <div>
                   <p className="text-xs text-gray-500 uppercase font-semibold">Total Records</p>
                   <p className="text-lg font-bold text-white mt-1">
-                    {formatRecordCount(preview.metadata.record_count)}
+                    {formatRecordCount(preview.metadata.record_count ?? 0)}
                   </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 uppercase font-semibold">Last Updated</p>
                   <p className="text-lg font-bold text-white mt-1">
-                    {formatFreshness(preview.metadata.data_freshness)}
+                    {preview.metadata.data_freshness
+                      ? formatFreshness(preview.metadata.data_freshness)
+                      : '—'}
                   </p>
                 </div>
                 {preview.metadata.vertical && (
@@ -143,7 +145,7 @@ export default function DatasetPreview({
           )}
 
           {/* Table Section */}
-          {preview && preview.rows.length > 0 && !error && (
+          {preview && (preview.rows?.length ?? 0) > 0 && (preview.columns?.length ?? 0) > 0 && !error && (
             <div className="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
               <h3 className="text-sm font-semibold text-white p-4 border-b border-gray-700 flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
@@ -191,13 +193,13 @@ export default function DatasetPreview({
                 </table>
               </div>
               <div className="bg-gray-900 px-4 py-3 text-xs text-gray-400 border-t border-gray-700">
-                Showing {Math.min(5, preview.rows.length)} of {preview.metadata.record_count} total records
+                Showing {Math.min(5, preview.rows.length)} of {preview.metadata?.record_count ?? preview.rows.length} total records
               </div>
             </div>
           )}
 
           {/* Empty State */}
-          {preview && preview.rows.length === 0 && !error && (
+          {preview && (preview.rows?.length ?? 0) === 0 && !error && (
             <div className="text-center py-12 bg-gray-800 border border-gray-700 rounded-lg">
               <p className="text-gray-400">No preview data available</p>
             </div>

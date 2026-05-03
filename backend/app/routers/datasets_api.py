@@ -185,6 +185,69 @@ def list_purchases_early(
     return list_purchases(authorization=authorization, db=db)
 
 
+@router.get("/{dataset_id}/preview", response_model=dict)
+def preview_dataset(
+    dataset_id: str = Path(..., description="Dataset ID"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get a preview (first 5 rows + metadata) of a dataset."""
+    try:
+        dataset = db.query(Dataset).filter(
+            Dataset.id == dataset_id,
+            Dataset.is_active == True,
+        ).first()
+
+        if not dataset:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Dataset not found",
+            )
+
+        delivery = get_delivery_service()
+        rows: List[dict] = []
+        columns: List[str] = []
+
+        try:
+            if dataset.dataset_type == DatasetType.OPPORTUNITIES.value or dataset.dataset_type == DatasetType.OPPORTUNITIES:
+                rows = delivery._generate_mock_opportunities(dataset)
+                columns = ['id', 'title', 'vertical', 'city', 'success_probability',
+                           'confidence', 'risk_profile', 'market_health', 'trend_momentum', 'reasoning']
+            elif dataset.dataset_type == DatasetType.MARKETS.value or dataset.dataset_type == DatasetType.MARKETS:
+                rows = delivery._generate_mock_markets(dataset)
+                columns = ['vertical', 'city', 'market_health_score', 'saturation_level',
+                           'demand_vs_supply', 'business_count', 'growth_rate', 'confidence']
+            elif dataset.dataset_type == DatasetType.TRENDS.value or dataset.dataset_type == DatasetType.TRENDS:
+                rows = delivery._generate_mock_trends(dataset)
+                columns = ['trend_name', 'vertical', 'acceleration_factor', 'direction',
+                           'signal_count', 'confidence', 'top_cities']
+            elif dataset.dataset_type == DatasetType.RAW_DATA.value or dataset.dataset_type == DatasetType.RAW_DATA:
+                rows = delivery._generate_mock_raw_data(dataset)
+                columns = ['source_type', 'external_id', 'title', 'description', 'processed',
+                           'received_at', 'observed_at']
+        except Exception as gen_err:
+            logger.warning(f"Preview row generation failed for dataset {dataset_id}: {gen_err}")
+            rows = []
+
+        return {
+            "metadata": {
+                "record_count": dataset.record_count or 0,
+                "data_freshness": dataset.data_freshness or (dataset.generated_at.isoformat() if dataset.generated_at else ""),
+                "vertical": dataset.vertical,
+                "city": dataset.city,
+            },
+            "rows": rows[:5],
+            "columns": columns,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating preview for dataset {dataset_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
 @router.get("/{dataset_id}", response_model=dict)
 def get_dataset(
     dataset_id: str = Path(..., description="Dataset ID"),
