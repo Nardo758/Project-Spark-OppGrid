@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X, Download, FileText, Lock, Loader2, CheckCircle, Printer, Mail, FileDown } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
@@ -133,6 +133,49 @@ export default function ReportViewer({
       return data.reports?.length > 0 ? data.reports[0] : null
     },
   })
+
+  const [lazySnapshot, setLazySnapshot] = useState<EconomicSnapshot | null>(null)
+  const [lazySnapshotLoading, setLazySnapshotLoading] = useState(false)
+  const attemptedSnapshotFetchRef = useRef<Set<number>>(new Set())
+
+  const fetchSnapshotMutation = useMutation({
+    mutationFn: async (reportId: number) => {
+      const res = await fetch(`/api/v1/generated-reports/${reportId}/fetch-economic-snapshot`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Failed to fetch economic snapshot')
+      const data = await res.json()
+      return (data.economic_snapshot ?? null) as EconomicSnapshot | null
+    },
+    onMutate: () => setLazySnapshotLoading(true),
+    onSuccess: (snapshot) => {
+      setLazySnapshot(snapshot)
+      setLazySnapshotLoading(false)
+    },
+    onError: () => {
+      setLazySnapshot(null)
+      setLazySnapshotLoading(false)
+    },
+  })
+
+  const displayReportForEffect = generatedReport || existingReportQuery.data
+  const displayReportId = displayReportForEffect?.id
+  const displayReportHasSnapshot = !!displayReportForEffect?.economic_snapshot
+  const isLayerReport =
+    selectedLayer === 'layer1' || selectedLayer === 'layer2' || selectedLayer === 'layer3'
+
+  useEffect(() => {
+    if (!isOpen) return
+    if (!isLayerReport) return
+    if (!displayReportId) return
+    if (displayReportHasSnapshot) return
+    if (attemptedSnapshotFetchRef.current.has(displayReportId)) return
+    if (!token) return
+    attemptedSnapshotFetchRef.current.add(displayReportId)
+    setLazySnapshot(null)
+    fetchSnapshotMutation.mutate(displayReportId)
+  }, [isOpen, isLayerReport, displayReportId, displayReportHasSnapshot, token])
 
   const handleClose = () => {
     queryClient.invalidateQueries({ queryKey: ['report', opportunityId, selectedLayer] })
@@ -510,9 +553,36 @@ export default function ReportViewer({
                 className="prose prose-stone max-w-none bg-stone-50 rounded-xl p-8 border border-stone-200"
                 dangerouslySetInnerHTML={{ __html: displayReport.content ?? '' }}
               />
-              {displayReport.economic_snapshot && (
+              {displayReport.economic_snapshot ? (
                 <EconomicIntelPanel snapshot={displayReport.economic_snapshot} />
-              )}
+              ) : lazySnapshot ? (
+                <EconomicIntelPanel snapshot={lazySnapshot} />
+              ) : lazySnapshotLoading && isLayerReport ? (
+                <div className="mt-6 border border-emerald-200 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-50/60 to-slate-50">
+                  <div className="px-5 py-4 bg-emerald-900/5 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center">
+                      <Loader2 className="w-4 h-4 text-white animate-spin" />
+                    </div>
+                    <div className="text-left">
+                      <h3 className="text-sm font-semibold text-emerald-900">
+                        Economic Intelligence
+                      </h3>
+                      <p className="text-xs text-emerald-700/80">
+                        Loading FRED, BLS, and SEC market data…
+                      </p>
+                    </div>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    <div className="h-4 bg-emerald-100/70 rounded animate-pulse w-2/3" />
+                    <div className="h-4 bg-emerald-100/70 rounded animate-pulse w-1/2" />
+                    <div className="grid grid-cols-3 gap-3 mt-4">
+                      <div className="h-16 bg-emerald-100/60 rounded animate-pulse" />
+                      <div className="h-16 bg-emerald-100/60 rounded animate-pulse" />
+                      <div className="h-16 bg-emerald-100/60 rounded animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : (
             <div className="text-center py-12">

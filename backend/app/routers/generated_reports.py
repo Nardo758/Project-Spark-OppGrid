@@ -978,6 +978,79 @@ def cleanup_stuck_reports(
     }
 
 
+@router.post("/{report_id}/fetch-economic-snapshot", response_model=GeneratedReportDetail)
+async def fetch_economic_snapshot_for_report(
+    report_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Lazy-load the economic snapshot for a single report.
+
+    If the report already has an economic_snapshot, returns it immediately.
+    Otherwise, fetches FRED/BLS/SEC data for the report's opportunity, saves
+    it, and returns the updated report. The user must own the report (or be
+    admin) to trigger a fetch.
+    """
+    from app.models.opportunity import Opportunity
+    from app.services.report_orchestrator import ReportOrchestrator
+
+    report = db.query(GeneratedReport).filter(GeneratedReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if report.user_id != current_user.id and not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Not authorized to access this report")
+
+    if report.economic_snapshot:
+        return GeneratedReportDetail.from_orm_with_snapshot(report)
+
+    opportunity = None
+    if report.opportunity_id:
+        opportunity = db.query(Opportunity).filter(Opportunity.id == report.opportunity_id).first()
+
+    business_type = (
+        getattr(opportunity, "category", None)
+        or getattr(opportunity, "title", None)
+        or "Business"
+    ) if opportunity else "Business"
+    state = (getattr(opportunity, "region", None) or "") if opportunity else ""
+
+    orchestrator = ReportOrchestrator()
+    try:
+        macro_context, labor_data, industry_benchmarks = await orchestrator._fetch_economic_intel(
+            business_type=business_type,
+            db=db,
+            state=state,
+        )
+        snapshot = orchestrator._build_economic_snapshot(
+            macro_context, labor_data, industry_benchmarks
+        )
+
+        if snapshot:
+            import json as _json
+            report.economic_snapshot = _json.dumps(snapshot)
+            db.commit()
+            db.refresh(report)
+            logger.info(
+                f"[FetchEconomicSnapshot] Saved snapshot for report {report_id} "
+                f"(opp={report.opportunity_id}, business_type={business_type})"
+            )
+        else:
+            logger.info(
+                f"[FetchEconomicSnapshot] No economic data available for report {report_id}"
+            )
+    except Exception as exc:
+        db.rollback()
+        logger.error(f"[FetchEconomicSnapshot] Failed for report {report_id}: {exc}")
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to fetch economic intelligence data. Please try again.",
+        )
+
+    return GeneratedReportDetail.from_orm_with_snapshot(report)
+
+
 @router.post("/admin/backfill-economic-snapshots")
 async def backfill_economic_snapshots(
     dry_run: bool = Query(False, description="If true, count affected reports without saving"),
