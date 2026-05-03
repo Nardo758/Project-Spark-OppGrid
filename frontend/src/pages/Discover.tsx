@@ -64,6 +64,30 @@ export default function Discover() {
           </p>
         </div>
 
+        {/* Filters */}
+        <div className="mb-8">
+          <FilterBar
+            filters={{
+              search: filters.search || '',
+              category: filters.category || null,
+              feasibility: null,
+              location: filters.geographic_scope || null,
+              sortBy: filters.sort_by || 'feasibility',
+              maxDaysOld: filters.max_age_days ?? null,
+              myAccessOnly: filters.my_access_only || false,
+            }}
+            onFiltersChange={(newFilters) => setFilters({
+              search: newFilters.search,
+              category: newFilters.category || undefined,
+              geographic_scope: newFilters.location || undefined,
+              sort_by: newFilters.sortBy,
+              max_age_days: newFilters.maxDaysOld ?? undefined,
+              my_access_only: newFilters.myAccessOnly,
+            })}
+            resultsCount={total}
+          />
+        </div>
+
         {/* Personalized Recommendations (Compact Carousel) */}
         {recommendedOpportunities.length > 0 && (
           <div className="mb-8">
@@ -105,30 +129,6 @@ export default function Discover() {
           </div>
         )}
 
-        {/* Filters */}
-        <div className="mb-8">
-          <FilterBar
-            filters={{
-              search: filters.search || '',
-              category: filters.category || null,
-              feasibility: null,
-              location: filters.geographic_scope || null,
-              sortBy: filters.sort_by || 'feasibility',
-              maxDaysOld: filters.max_age_days ?? null,
-              myAccessOnly: filters.my_access_only || false,
-            }}
-            onFiltersChange={(newFilters) => setFilters({
-              search: newFilters.search,
-              category: newFilters.category || undefined,
-              geographic_scope: newFilters.location || undefined,
-              sort_by: newFilters.sortBy,
-              max_age_days: newFilters.maxDaysOld ?? undefined,
-              my_access_only: newFilters.myAccessOnly,
-            })}
-            resultsCount={total}
-          />
-        </div>
-
         {/* Error Display */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -158,14 +158,16 @@ export default function Discover() {
           </div>
         )}
 
-        {/* Opportunity Grid */}
-        <OpportunityGrid
-          opportunities={opportunities}
-          isLoading={loading}
-          viewMode="grid"
-          onValidate={quickValidate}
-          onSave={toggleSave}
-        />
+        {/* Opportunity Grid (with built-in loading + empty states) */}
+        {(loading || opportunities.length > 0) && (
+          <OpportunityGrid
+            opportunities={opportunities}
+            isLoading={loading}
+            viewMode="grid"
+            onValidate={quickValidate}
+            onSave={toggleSave}
+          />
+        )}
 
         {/* Pagination */}
         {opportunities.length > 0 && (
@@ -184,15 +186,15 @@ export default function Discover() {
         {!loading && opportunities.length === 0 && (
           <div className="text-center py-16">
             <div className="text-6xl mb-4">🔍</div>
-            <h3 className="text-xl font-semibold text-stone-900 mb-2">
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
               No opportunities found
             </h3>
-            <p className="text-stone-600 mb-6">
+            <p className="text-gray-600 mb-6">
               Try adjusting your filters or search terms
             </p>
             <button
               onClick={() => setFilters({})}
-              className="px-6 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+              className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
             >
               Clear All Filters
             </button>
