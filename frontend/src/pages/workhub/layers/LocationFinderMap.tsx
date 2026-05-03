@@ -1075,7 +1075,7 @@ export function LocationFinderMap({ state, onCenterChange, clickToSetEnabled = f
         return
       }
       
-      existingSource.setData(geoJsonData)
+      existingSource.setData(geoJsonData || { type: 'FeatureCollection' as const, features: [] })
       if (map.getLayer(pointLayerId)) {
         map.setLayoutProperty(pointLayerId, 'visibility', 'visible')
       }

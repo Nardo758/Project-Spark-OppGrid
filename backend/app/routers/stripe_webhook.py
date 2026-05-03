@@ -697,17 +697,19 @@ def _handle_studio_report_purchase(session: dict, db: Session):
     report_type_map = {
         "market_analysis": GenReportType.MARKET_ANALYSIS,
         "strategic_assessment": GenReportType.STRATEGIC_ASSESSMENT,
-        "strategic": GenReportType.STRATEGIC,
+        "strategic": GenReportType.STRATEGIC_ASSESSMENT,
         "pestle_analysis": GenReportType.PESTLE_ANALYSIS,
-        "pestle": GenReportType.PESTLE,
+        "pestle": GenReportType.PESTLE_ANALYSIS,
         "business_plan": GenReportType.BUSINESS_PLAN,
         "financial_model": GenReportType.FINANCIAL_MODEL,
-        "financial": GenReportType.FINANCIAL,
-        "financials": GenReportType.FINANCIAL,
+        "financial": GenReportType.FINANCIAL_MODEL,
+        "financials": GenReportType.FINANCIAL_MODEL,
         "pitch_deck": GenReportType.PITCH_DECK,
-        "feasibility": GenReportType.FEASIBILITY,
+        "feasibility": GenReportType.FEASIBILITY_STUDY,
         "feasibility_study": GenReportType.FEASIBILITY_STUDY,
         "location_analysis": GenReportType.LOCATION_ANALYSIS,
+        "competitive_analysis": GenReportType.COMPETITIVE_ANALYSIS,
+        "customer_interview": GenReportType.CUSTOMER_INTERVIEW,
     }
     gen_report_type = report_type_map.get(report_type, GenReportType.MARKET_ANALYSIS)
     

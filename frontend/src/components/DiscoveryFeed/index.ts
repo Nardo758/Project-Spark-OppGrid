@@ -21,6 +21,5 @@ export { default as ComparisonPanel } from './ComparisonPanel'
 export { default as ComparisonModal } from './ComparisonModal'
 export { default as SavedSearchModal } from './SavedSearchModal'
 
-// Types (if they exist)
+// Types
 export type * from './types'
-export type * from '../Discovery/types'

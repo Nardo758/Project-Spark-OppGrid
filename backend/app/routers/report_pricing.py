@@ -1593,6 +1593,8 @@ async def generate_free_report(
         "financial_model": ReportType.FINANCIAL_MODEL,
         "pitch_deck": ReportType.PITCH_DECK,
         "location_analysis": ReportType.LOCATION_ANALYSIS,
+        "competitive_analysis": ReportType.COMPETITIVE_ANALYSIS,
+        "customer_interview": ReportType.CUSTOMER_INTERVIEW,
     }
 
     report_type_enum = report_type_map.get(request_data.report_type)
