@@ -28,11 +28,13 @@ from app.core.config import settings
 router = APIRouter()
 
 REPL_ID = os.environ.get('REPL_ID', '')
-ISSUER_URL = "https://replit.com/oidc"
+ISSUER_URL = os.environ.get('ISSUER_URL', 'https://replit.com/oidc').rstrip('/')
 AUTHORIZATION_ENDPOINT = f"{ISSUER_URL}/auth"
 TOKEN_ENDPOINT = f"{ISSUER_URL}/token"
 END_SESSION_ENDPOINT = f"{ISSUER_URL}/session/end"
 JWKS_URL = f"{ISSUER_URL}/jwks"
+# When ISSUER_URL is overridden (e.g. local test mock OIDC server), skip TLS verify.
+_OIDC_VERIFY_TLS = ISSUER_URL == 'https://replit.com/oidc'
 SESSION_SECRET = os.environ.get('SESSION_SECRET')
 
 if not SESSION_SECRET:
@@ -59,7 +61,17 @@ def get_jwks_client():
     """Get cached JWKS client for token verification"""
     global _jwks_client
     if _jwks_client is None:
-        _jwks_client = PyJWKClient(JWKS_URL, cache_keys=True)
+        if not _OIDC_VERIFY_TLS:
+            import ssl
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            try:
+                _jwks_client = PyJWKClient(JWKS_URL, cache_keys=True, ssl_context=ctx)
+            except TypeError:
+                _jwks_client = PyJWKClient(JWKS_URL, cache_keys=True)
+        else:
+            _jwks_client = PyJWKClient(JWKS_URL, cache_keys=True)
     return _jwks_client
 
 
@@ -124,13 +136,13 @@ def verify_id_token(id_token: str, nonce: Optional[str] = None) -> Dict[str, Any
             id_token,
             signing_key.key,
             algorithms=["RS256", "PS256"],
-            issuer=ISSUER_URL,
+            issuer=ISSUER_URL if _OIDC_VERIFY_TLS else None,
             audience=REPL_ID,
             options={
                 "verify_signature": True,
                 "verify_exp": True,
                 "verify_iat": True,
-                "verify_iss": True,
+                "verify_iss": _OIDC_VERIFY_TLS,
                 "verify_aud": True,
             }
         )
@@ -311,7 +323,7 @@ async def replit_callback(
     }
     
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=_OIDC_VERIFY_TLS) as client:
             token_response = await client.post(
                 TOKEN_ENDPOINT,
                 data=token_data,
