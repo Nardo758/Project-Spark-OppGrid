@@ -88,11 +88,15 @@ export default function Discover() {
           />
         </div>
 
-        {/* Personalized Recommendations (Compact Carousel) — under-the-radar picks (feasibility < 50) */}
+        {/* Personalized Recommendations (Compact Carousel)
+            - Logged out: show low-feasibility teaser ideas only (don't give away the good ones)
+            - Logged in: show real personalized recommendations, top 6 */}
         {(() => {
-          const trending = recommendedOpportunities
-            .filter((opp) => (opp.feasibility_score ?? 0) < 50)
-            .slice(0, 6)
+          const trending = isAuthenticated
+            ? recommendedOpportunities.slice(0, 6)
+            : recommendedOpportunities
+                .filter((opp) => (opp.feasibility_score ?? 0) < 50)
+                .slice(0, 6)
           if (trending.length === 0) return null
           return (
           <div className="mb-8">
