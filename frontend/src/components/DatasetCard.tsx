@@ -137,7 +137,7 @@ export default function DatasetCard({ dataset }: { dataset: Dataset }) {
             </button>
             <button
               onClick={handlePurchase}
-              className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-black hover:bg-gray-800 text-white transition-colors"
+              className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors"
             >
               <ShoppingCart className="w-3.5 h-3.5" />
               Buy

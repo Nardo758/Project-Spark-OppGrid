@@ -133,13 +133,13 @@ export default function LeadsTab() {
             placeholder="Search leads by keyword, industry, or company..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
           />
         </div>
         <select
           value={selectedIndustry}
           onChange={(e) => setSelectedIndustry(e.target.value)}
-          className="text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+          className="text-sm px-3 py-2 border border-gray-200 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
         >
           {industries.map((ind) => (
             <option key={ind} value={ind}>
@@ -263,7 +263,7 @@ export default function LeadsTab() {
                         <button
                           onClick={() => handlePurchase(lead.id)}
                           disabled={purchasing === lead.id}
-                          className="w-full px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                          className="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                         >
                           {purchasing === lead.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -275,7 +275,7 @@ export default function LeadsTab() {
                       ) : (
                         <Link
                           to="/signup"
-                          className="w-full px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
+                          className="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
                         >
                           <Lock className="w-4 h-4" />
                           Sign Up to Buy
@@ -324,7 +324,7 @@ export default function LeadsTab() {
                       onClick={() => setSelectedIndustry(cat.name)}
                       className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
                         selectedIndustry === cat.name
-                          ? 'bg-black text-white'
+                          ? 'bg-emerald-600 text-white'
                           : 'hover:bg-gray-100'
                       }`}
                     >

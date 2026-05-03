@@ -201,7 +201,7 @@ export default function Discover() {
             </p>
             <button
               onClick={() => setFilters({})}
-              className="px-6 py-2 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors"
+              className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
             >
               Clear All Filters
             </button>

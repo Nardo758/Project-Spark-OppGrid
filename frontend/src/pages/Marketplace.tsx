@@ -44,9 +44,9 @@ export default function Marketplace() {
   const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50/40 via-white to-white">
       {/* Combined header + tab bar */}
-      <div className="border-b border-gray-200 bg-white sticky top-16 z-30">
+      <div className="border-b border-gray-200 bg-white/80 backdrop-blur sticky top-16 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
           <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
             <div>
@@ -68,7 +68,7 @@ export default function Marketplace() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                     isActive
-                      ? 'border-black text-gray-900'
+                      ? 'border-emerald-600 text-emerald-700'
                       : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
                   }`}
                 >
