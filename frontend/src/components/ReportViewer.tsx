@@ -152,10 +152,13 @@ export default function ReportViewer({
     onSuccess: (snapshot) => {
       setLazySnapshot(snapshot)
       setLazySnapshotLoading(false)
+      queryClient.invalidateQueries({ queryKey: ['report', opportunityId, selectedLayer] })
     },
-    onError: () => {
+    onError: (_err, reportId) => {
       setLazySnapshot(null)
       setLazySnapshotLoading(false)
+      // Allow a retry on next mount/open after a transient failure.
+      attemptedSnapshotFetchRef.current.delete(reportId)
     },
   })
 
