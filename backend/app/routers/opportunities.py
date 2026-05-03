@@ -53,7 +53,8 @@ async def get_recommended_opportunities(
 
     user_interests: List[str] = []
 
-    # Base query: active, approved, high-quality opportunities
+    # Base filter for authenticated, personalized recommendations:
+    # active, approved, high-quality opportunities.
     base_filter = [
         Opportunity.status == "active",
         Opportunity.moderation_status == 'approved',
@@ -99,9 +100,14 @@ async def get_recommended_opportunities(
                 desc(Opportunity.feasibility_score)
             ).limit(limit).all()
     else:
-        # Guest: return top public opportunities sorted by feasibility
-        candidates = db.query(Opportunity).filter(*base_filter).order_by(
-            desc(Opportunity.feasibility_score),
+        # Guest: show low-feasibility "teaser" opportunities so we don't
+        # give away the highest-quality picks to logged-out visitors.
+        # Newest teasers first to keep the carousel fresh.
+        candidates = db.query(Opportunity).filter(
+            Opportunity.status == "active",
+            Opportunity.moderation_status == 'approved',
+            Opportunity.feasibility_score < 50,
+        ).order_by(
             desc(Opportunity.created_at)
         ).limit(limit).all()
 
