@@ -15,13 +15,13 @@ import { useDiscoveryStore } from '../stores/discoveryStore'
 export default function Discover() {
   const {
     // State
-    opportunities,
-    recommendedOpportunities,
+    opportunities: opportunitiesRaw,
+    recommendedOpportunities: recommendedRaw,
     filters,
     page,
     pageSize,
     total,
-    selectedOpportunityIds,
+    selectedOpportunityIds: selectedIdsRaw,
     loading,
     error,
     isGated,
@@ -36,6 +36,12 @@ export default function Discover() {
     toggleSave,
     clearSelection,
   } = useDiscoveryStore()
+
+  // Defensive guards: Zustand devtools middleware can restore stale state
+  // from a previous Redux DevTools session that may be missing array fields
+  const opportunities = opportunitiesRaw ?? []
+  const recommendedOpportunities = recommendedRaw ?? []
+  const selectedOpportunityIds = selectedIdsRaw ?? []
 
   // Initialize from URL on mount
   useEffect(() => {

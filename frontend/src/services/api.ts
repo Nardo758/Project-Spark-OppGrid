@@ -130,7 +130,8 @@ export async function fetchRecommendedOpportunities(
     headers: getHeaders(),
   })
 
-  return handleResponse<Opportunity[]>(response)
+  const data = await handleResponse<{ opportunities: Opportunity[]; total: number; user_interests: string[] }>(response)
+  return Array.isArray(data) ? data : (data?.opportunities ?? [])
 }
 
 /**

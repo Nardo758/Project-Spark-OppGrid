@@ -35,11 +35,11 @@ def get_categories(db: Session = Depends(get_db)):
 @router.get("/recommended")
 async def get_recommended_opportunities(
     limit: int = Query(10, ge=1, le=50),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """
-    Get personalized opportunity recommendations
+    Get personalized opportunity recommendations (guests get top-ranked public opportunities).
     
     Uses AI-powered match scoring based on:
     - User's category interests (from validation history)
@@ -50,59 +50,67 @@ async def get_recommended_opportunities(
     **Returns:** Top N opportunities ranked by match score (0-100)
     """
     from app.models.validation import Validation
-    from app.services.ai_router import AIRouter, TaskType
-    
-    # Get user's category interests from validation history
-    user_validated_categories = db.query(Opportunity.category).join(
-        Validation, Opportunity.id == Validation.opportunity_id
-    ).filter(
-        Validation.user_id == current_user.id,
-        Opportunity.category.isnot(None)
-    ).distinct().limit(5).all()
-    
-    user_interests = [c[0] for c in user_validated_categories if c[0]]
-    
+
+    user_interests: List[str] = []
+
     # Base query: active, approved, high-quality opportunities
-    query = db.query(Opportunity).filter(
+    base_filter = [
         Opportunity.status == "active",
         Opportunity.moderation_status == 'approved',
-        Opportunity.feasibility_score >= 60  # Only recommend high-feasibility
-    )
-    
-    # Prioritize user's interest categories if available
-    if user_interests:
-        query = query.filter(Opportunity.category.in_(user_interests))
-    
-    # Exclude already validated by user
-    user_validated_ids = db.query(Validation.opportunity_id).filter(
-        Validation.user_id == current_user.id
-    ).subquery()
-    query = query.filter(~Opportunity.id.in_(user_validated_ids))
-    
-    # Get candidates (fetch more than needed for scoring)
-    candidates = query.order_by(
-        desc(Opportunity.feasibility_score),
-        desc(Opportunity.created_at)
-    ).limit(limit * 3).all()
-    
-    if not candidates:
-        # No personalized results - return general high-quality opportunities
-        query = db.query(Opportunity).filter(
-            Opportunity.status == "active",
-            Opportunity.moderation_status == 'approved',
-            Opportunity.feasibility_score >= 70
-        ).filter(~Opportunity.id.in_(user_validated_ids))
-        
+        Opportunity.feasibility_score >= 60,
+    ]
+
+    if current_user:
+        # Get user's category interests from validation history
+        user_validated_categories = db.query(Opportunity.category).join(
+            Validation, Opportunity.id == Validation.opportunity_id
+        ).filter(
+            Validation.user_id == current_user.id,
+            Opportunity.category.isnot(None)
+        ).distinct().limit(5).all()
+
+        user_interests = [c[0] for c in user_validated_categories if c[0]]
+
+        # Exclude already validated by user
+        user_validated_ids = db.query(Validation.opportunity_id).filter(
+            Validation.user_id == current_user.id
+        ).subquery()
+
+        query = db.query(Opportunity).filter(*base_filter)
+
+        # Prioritize user's interest categories if available
+        if user_interests:
+            query = query.filter(Opportunity.category.in_(user_interests))
+
+        query = query.filter(~Opportunity.id.in_(user_validated_ids))
+
         candidates = query.order_by(
-            desc(Opportunity.feasibility_score)
+            desc(Opportunity.feasibility_score),
+            desc(Opportunity.created_at)
+        ).limit(limit * 3).all()
+
+        if not candidates:
+            # No personalized results — return general high-quality opportunities
+            candidates = db.query(Opportunity).filter(
+                Opportunity.status == "active",
+                Opportunity.moderation_status == 'approved',
+                Opportunity.feasibility_score >= 70
+            ).filter(~Opportunity.id.in_(user_validated_ids)).order_by(
+                desc(Opportunity.feasibility_score)
+            ).limit(limit).all()
+    else:
+        # Guest: return top public opportunities sorted by feasibility
+        candidates = db.query(Opportunity).filter(*base_filter).order_by(
+            desc(Opportunity.feasibility_score),
+            desc(Opportunity.created_at)
         ).limit(limit).all()
-    
+
     # Calculate match scores for each candidate
     scored_opportunities = []
-    
+
     for opp in candidates:
-        match_score = calculate_match_score(opp, current_user, user_interests, db)
-        
+        match_score = calculate_match_score(opp, current_user, user_interests, db) if current_user else 50
+
         opp_dict = {
             "id": opp.id,
             "title": opp.title,
@@ -116,12 +124,12 @@ async def get_recommended_opportunities(
             "market_size": opp.market_size,
             "created_at": opp.created_at
         }
-        
+
         scored_opportunities.append(opp_dict)
-    
+
     # Sort by match score (desc) and return top N
     scored_opportunities.sort(key=lambda x: x['match_score'], reverse=True)
-    
+
     return {
         "opportunities": scored_opportunities[:limit],
         "total": len(scored_opportunities),
