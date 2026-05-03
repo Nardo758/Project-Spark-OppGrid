@@ -44,17 +44,17 @@ export default function Marketplace() {
   const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <div className="bg-gradient-to-r from-gray-900 to-gray-800 border-b border-gray-700 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Marketplace</h1>
-          <p className="text-gray-400 text-lg">{activeMeta.description}</p>
+      <div className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Marketplace</h1>
+          <p className="text-gray-600">{activeMeta.description}</p>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div className="border-b border-gray-700 bg-gray-900/60 sticky top-16 z-30 backdrop-blur">
+      <div className="border-b border-gray-200 bg-white sticky top-16 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex gap-1" role="tablist" aria-label="Marketplace sections">
             {TABS.map((tab) => {
@@ -70,8 +70,8 @@ export default function Marketplace() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 transition-colors ${
                     isActive
-                      ? 'border-blue-500 text-white'
-                      : 'border-transparent text-gray-400 hover:text-white hover:border-gray-600'
+                      ? 'border-black text-gray-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
                   }`}
                 >
                   <Icon className="w-4 h-4" />

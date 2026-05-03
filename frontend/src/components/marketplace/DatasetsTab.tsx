@@ -101,39 +101,39 @@ export default function DatasetsTab() {
     },
   })
 
-  const filteredDatasets = datasets.filter(ds => ds.is_active)
+  const filteredDatasets = datasets.filter((ds) => ds.is_active)
 
   return (
     <div className="flex flex-col lg:flex-row gap-8">
       {/* Sidebar Filters */}
       <div className="lg:w-72 flex-shrink-0">
-        <div className="sticky top-20 space-y-6">
+        <div className="sticky top-36 space-y-4">
           {/* Search */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
             <div className="relative">
-              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-500" />
+              <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search datasets..."
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                className="w-full pl-10 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent"
               />
             </div>
           </div>
 
           {/* Category Filter */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
             <button
               onClick={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')}
-              className="w-full flex items-center justify-between mb-4"
+              className="w-full flex items-center justify-between mb-3"
             >
-              <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                 <Filter className="w-4 h-4" />
                 Category
               </h3>
               <ChevronDown
-                className={`w-4 h-4 text-gray-400 transition-transform ${
+                className={`w-4 h-4 text-gray-500 transition-transform ${
                   openDropdown === 'category' ? 'rotate-180' : ''
                 }`}
               />
@@ -149,7 +149,7 @@ export default function DatasetsTab() {
                     onChange={() => setFilters({ ...filters, category: null })}
                     className="w-4 h-4"
                   />
-                  <span className="text-sm text-gray-300 group-hover:text-white">All Categories</span>
+                  <span className="text-sm text-gray-700 group-hover:text-gray-900">All Categories</span>
                 </label>
                 {CATEGORIES.map((cat) => (
                   <label key={cat.value} className="flex items-center gap-2 cursor-pointer group">
@@ -161,7 +161,7 @@ export default function DatasetsTab() {
                       onChange={() => setFilters({ ...filters, category: cat.value })}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm text-gray-300 group-hover:text-white">{cat.label}</span>
+                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{cat.label}</span>
                   </label>
                 ))}
               </div>
@@ -169,14 +169,14 @@ export default function DatasetsTab() {
           </div>
 
           {/* Vertical Filter */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
             <button
               onClick={() => setOpenDropdown(openDropdown === 'vertical' ? null : 'vertical')}
-              className="w-full flex items-center justify-between mb-4"
+              className="w-full flex items-center justify-between mb-3"
             >
-              <h3 className="text-sm font-semibold text-white">Vertical</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Vertical</h3>
               <ChevronDown
-                className={`w-4 h-4 text-gray-400 transition-transform ${
+                className={`w-4 h-4 text-gray-500 transition-transform ${
                   openDropdown === 'vertical' ? 'rotate-180' : ''
                 }`}
               />
@@ -192,7 +192,7 @@ export default function DatasetsTab() {
                     onChange={() => setFilters({ ...filters, vertical: null })}
                     className="w-4 h-4"
                   />
-                  <span className="text-sm text-gray-300 group-hover:text-white">All Verticals</span>
+                  <span className="text-sm text-gray-700 group-hover:text-gray-900">All Verticals</span>
                 </label>
                 {VERTICALS.map((vert) => (
                   <label key={vert} className="flex items-center gap-2 cursor-pointer group">
@@ -204,7 +204,7 @@ export default function DatasetsTab() {
                       onChange={() => setFilters({ ...filters, vertical: vert })}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm text-gray-300 group-hover:text-white">{vert}</span>
+                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{vert}</span>
                   </label>
                 ))}
               </div>
@@ -212,14 +212,14 @@ export default function DatasetsTab() {
           </div>
 
           {/* City Filter */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
             <button
               onClick={() => setOpenDropdown(openDropdown === 'city' ? null : 'city')}
-              className="w-full flex items-center justify-between mb-4"
+              className="w-full flex items-center justify-between mb-3"
             >
-              <h3 className="text-sm font-semibold text-white">City</h3>
+              <h3 className="text-sm font-semibold text-gray-900">City</h3>
               <ChevronDown
-                className={`w-4 h-4 text-gray-400 transition-transform ${
+                className={`w-4 h-4 text-gray-500 transition-transform ${
                   openDropdown === 'city' ? 'rotate-180' : ''
                 }`}
               />
@@ -235,7 +235,7 @@ export default function DatasetsTab() {
                     onChange={() => setFilters({ ...filters, city: null })}
                     className="w-4 h-4"
                   />
-                  <span className="text-sm text-gray-300 group-hover:text-white">All Cities</span>
+                  <span className="text-sm text-gray-700 group-hover:text-gray-900">All Cities</span>
                 </label>
                 {CITIES.map((city) => (
                   <label key={city} className="flex items-center gap-2 cursor-pointer group">
@@ -247,7 +247,7 @@ export default function DatasetsTab() {
                       onChange={() => setFilters({ ...filters, city })}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm text-gray-300 group-hover:text-white">{city}</span>
+                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{city}</span>
                   </label>
                 ))}
               </div>
@@ -255,14 +255,14 @@ export default function DatasetsTab() {
           </div>
 
           {/* Sort By */}
-          <div className="bg-gray-800 border border-gray-700 rounded-lg p-4">
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
             <button
               onClick={() => setOpenDropdown(openDropdown === 'sort' ? null : 'sort')}
-              className="w-full flex items-center justify-between mb-4"
+              className="w-full flex items-center justify-between mb-3"
             >
-              <h3 className="text-sm font-semibold text-white">Sort By</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Sort By</h3>
               <ChevronDown
-                className={`w-4 h-4 text-gray-400 transition-transform ${
+                className={`w-4 h-4 text-gray-500 transition-transform ${
                   openDropdown === 'sort' ? 'rotate-180' : ''
                 }`}
               />
@@ -279,7 +279,7 @@ export default function DatasetsTab() {
                       onChange={() => setFilters({ ...filters, sortBy: opt.value })}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm text-gray-300 group-hover:text-white">{opt.label}</span>
+                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{opt.label}</span>
                   </label>
                 ))}
               </div>
@@ -291,11 +291,11 @@ export default function DatasetsTab() {
       {/* Main Content */}
       <div className="flex-1 min-w-0">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-gray-900">
             {filteredDatasets.length} Dataset{filteredDatasets.length !== 1 ? 's' : ''} Available
           </h2>
           {filters.search && (
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-gray-600 mt-1">
               Results for: <span className="font-medium">{filters.search}</span>
             </p>
           )}
@@ -304,20 +304,20 @@ export default function DatasetsTab() {
         {isLoading && (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-96 bg-gray-800 rounded-lg animate-pulse" />
+              <div key={i} className="h-96 bg-gray-100 rounded-xl animate-pulse" />
             ))}
           </div>
         )}
 
         {error && (
-          <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 text-red-300">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
             Failed to load datasets. Please try again.
           </div>
         )}
 
         {!isLoading && filteredDatasets.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">No datasets found matching your filters.</p>
+          <div className="text-center py-12 bg-white border border-gray-200 rounded-xl">
+            <p className="text-gray-600 text-lg">No datasets found matching your filters.</p>
             <button
               onClick={() =>
                 setFilters({
@@ -328,7 +328,7 @@ export default function DatasetsTab() {
                   sortBy: 'newest',
                 })
               }
-              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              className="mt-4 px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-lg transition-colors"
             >
               Clear Filters
             </button>
