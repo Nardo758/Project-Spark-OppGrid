@@ -17,7 +17,7 @@ export default function Services() {
       subtitle="Buy one-off reports, tools, and expert help — no subscription required."
       actions={
         <>
-          <Link to="/discover" className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 font-medium">
+          <Link to="/discover" className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium">
             Browse opportunities
           </Link>
           <Link to="/signup" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">
@@ -48,7 +48,7 @@ export default function Services() {
             <span className="text-gray-700">Instant delivery</span>
           </div>
           <div className="mt-5 flex gap-2">
-            <Link to="/idea-engine" className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 font-medium">
+            <Link to="/idea-engine" className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium">
               Generate now
             </Link>
             <Link to="/pricing" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">
@@ -63,7 +63,7 @@ export default function Services() {
           <p className="mt-2 text-sm text-gray-600">Industry overview + competitor landscape + growth signals.</p>
           <div className="mt-4 text-sm text-gray-700">From <span className="font-semibold">$299</span></div>
           <div className="mt-5 flex gap-2">
-            <Link to="/signup" className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 font-medium">
+            <Link to="/signup" className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium">
               Buy a report
             </Link>
             <Link to="/discover" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">
@@ -78,7 +78,7 @@ export default function Services() {
           <p className="mt-2 text-sm text-gray-600">Talk to an operator, marketer, or engineer to unblock next steps.</p>
           <div className="mt-4 text-sm text-gray-700">From <span className="font-semibold">$99</span></div>
           <div className="mt-5 flex gap-2">
-            <Link to="/network" className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 font-medium">
+            <Link to="/network" className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium">
               View network
             </Link>
             <Link to="/contact" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">

@@ -98,7 +98,7 @@ export default function Home() {
                 {/* Validate Your Idea */}
                 <Link
                   to="/build/reports"
-                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-gray-800 transition-colors whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-emerald-700 transition-colors whitespace-nowrap"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   Validate Your Idea

@@ -327,7 +327,7 @@ export default function Funding() {
             <div className="flex flex-wrap gap-3">
               <Link
                 to="/build/business-plan"
-                className="px-4 py-2 bg-black text-white rounded-lg font-medium hover:bg-gray-800"
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700"
               >
                 Generate Business Plan
               </Link>

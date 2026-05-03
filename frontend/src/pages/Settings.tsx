@@ -681,7 +681,7 @@ export default function Settings() {
                       className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-900"
                     />
                   </div>
-                  <button className="px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors">
+                  <button className="px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 transition-colors">
                     Save Changes
                   </button>
                 </div>
@@ -770,7 +770,7 @@ export default function Settings() {
                           <button
                             onClick={openBillingPortal}
                             disabled={loadingPortal}
-                            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium disabled:opacity-50"
+                            className="flex items-center gap-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium disabled:opacity-50"
                           >
                             {loadingPortal ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
@@ -1023,7 +1023,7 @@ export default function Settings() {
                       ) : (
                         <button
                           onClick={initiate2FASetup}
-                          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors text-sm font-medium"
+                          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
                         >
                           Enable
                         </button>
@@ -1090,7 +1090,7 @@ export default function Settings() {
                         <button
                           onClick={enable2FA}
                           disabled={otpCode.length !== 6 || loading2FA}
-                          className="w-full py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                          className="w-full py-2 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                         >
                           {loading2FA ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -1163,7 +1163,7 @@ export default function Settings() {
 
                       <button
                         onClick={() => { setShowBackupCodes(false); setBackupCodes([]); }}
-                        className="w-full mt-2 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors font-medium"
+                        className="w-full mt-2 py-2 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium"
                       >
                         I've Saved My Codes
                       </button>

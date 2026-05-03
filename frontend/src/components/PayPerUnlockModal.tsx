@@ -101,7 +101,7 @@ function PayPerUnlockInner({
             <button
               type="button"
               onClick={submit}
-              className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 font-medium disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium disabled:opacity-50"
               disabled={submitting || !stripe || !elements}
             >
               {submitting ? 'Processing…' : confirmLabel || `Pay ${amountLabel}`}

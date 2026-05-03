@@ -8,7 +8,7 @@ export default function Tools() {
       subtitle="Quick utilities to move from opportunity to execution."
       actions={
         <>
-          <Link to="/idea-engine" className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 font-medium">
+          <Link to="/idea-engine" className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium">
             Validate an idea
           </Link>
           <Link to="/services" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">

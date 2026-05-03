@@ -139,7 +139,7 @@ export default function Login() {
             <button
               type="button"
               onClick={handleReplit}
-              className="w-full py-3 bg-black text-white rounded-lg hover:bg-gray-800 font-medium"
+              className="w-full py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium"
             >
               Continue with Replit
             </button>
@@ -229,7 +229,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>

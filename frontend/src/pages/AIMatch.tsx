@@ -8,7 +8,7 @@ export default function AIMatch() {
       subtitle="Get matched with the right experts for your opportunity and stage."
       actions={
         <>
-          <Link to="/network" className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 font-medium">
+          <Link to="/network" className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium">
             Browse network
           </Link>
           <Link to="/services" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">

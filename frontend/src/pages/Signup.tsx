@@ -268,7 +268,7 @@ export default function Signup() {
             <button
               type="submit"
               disabled={isLoading || checkoutLoading || showNextSteps || paymentModalOpen}
-              className="w-full py-3 bg-black text-white rounded-lg hover:bg-gray-800 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? (
                 <>
@@ -305,7 +305,7 @@ export default function Signup() {
                 <button
                   type="button"
                   onClick={() => navigate('/pricing?from=signup&plan=builder')}
-                  className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm font-medium"
+                  className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
                 >
                   View paid plans & upgrade
                 </button>
@@ -333,7 +333,7 @@ export default function Signup() {
                   type="button"
                   onClick={retryCheckout}
                   disabled={checkoutLoading}
-                  className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   {checkoutLoading ? (
                     <>

@@ -349,7 +349,7 @@ export default function ApiPortal() {
                     tier.popular
                       ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                       : tier.id === 'enterprise'
-                        ? 'bg-gray-900 text-white hover:bg-gray-800'
+                        ? 'bg-gray-900 text-white hover:bg-emerald-700'
                         : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                   }`}
                 >

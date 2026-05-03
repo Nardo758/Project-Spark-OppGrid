@@ -56,7 +56,7 @@ export default function EnterpriseContactModal({ onClose, source = 'pricing' }: 
           </p>
           <button
             onClick={onClose}
-            className="px-6 py-2.5 bg-black text-white rounded-lg hover:bg-gray-800 font-medium"
+            className="px-6 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium"
           >
             Close
           </button>
@@ -178,7 +178,7 @@ export default function EnterpriseContactModal({ onClose, source = 'pricing' }: 
             </button>
             <button
               type="submit"
-              className="px-6 py-2.5 rounded-lg bg-black text-white hover:bg-gray-800 font-medium disabled:opacity-50 flex items-center gap-2"
+              className="px-6 py-2.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center gap-2"
               disabled={submitting}
             >
               {submitting ? (

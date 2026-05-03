@@ -1962,7 +1962,7 @@ export default function ReportLibrary({
             <p className="text-xs text-gray-400 mb-5">Your analysis data is preserved after sign-in</p>
             <Link
               to="/login"
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-800 transition-all hover:shadow-md active:scale-[0.98]"
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-all hover:shadow-md active:scale-[0.98]"
             >
               <LogIn className="w-4 h-4" />
               Sign In

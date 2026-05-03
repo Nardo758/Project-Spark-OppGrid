@@ -266,7 +266,7 @@ export default function OpportunityGateModal({ isOpen, onClose, opportunity, onP
                 </button>
                 <button
                   onClick={handleSignup}
-                  className="flex items-center justify-center gap-2 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-gray-800 transition-colors text-sm font-medium"
+                  className="flex items-center justify-center gap-2 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-emerald-700 transition-colors text-sm font-medium"
                 >
                   <Sparkles className="w-4 h-4" />
                   Sign Up Free

@@ -154,7 +154,7 @@ function PaymentForm({
             <button
               type="button"
               onClick={handleSubmit}
-              className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-800 font-medium disabled:opacity-50 flex items-center gap-2"
+              className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center gap-2"
               disabled={submitting || !stripe || !elements}
             >
               {submitting ? (
@@ -303,7 +303,7 @@ export default function IdeaEngine() {
           <button
             onClick={handleGenerate}
             disabled={!idea.trim() || isGenerating}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
             {isGenerating ? (
               <>
@@ -391,7 +391,7 @@ export default function IdeaEngine() {
             ) : (
               <Link
                 to={`/login?next=${encodeURIComponent('/idea-engine')}`}
-                className="w-full px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 font-medium text-center block"
+                className="w-full px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium text-center block"
               >
                 Sign in to Get Full Validation
               </Link>
@@ -475,7 +475,7 @@ export default function IdeaEngine() {
 
           <div className="mt-8 pt-6 border-t border-gray-200">
             <div className="flex flex-col sm:flex-row gap-4">
-              <button className="flex-1 px-6 py-3 bg-black text-white rounded-lg hover:bg-gray-800 font-medium">
+              <button className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
                 Generate Full Roadmap
               </button>
               <Link to="/discover" className="flex-1 px-6 py-3 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 font-medium text-center">
