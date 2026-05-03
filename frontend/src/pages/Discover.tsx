@@ -11,6 +11,7 @@ import {
   Pagination,
 } from '../components/DiscoveryFeed'
 import { useDiscoveryStore } from '../stores/discoveryStore'
+import { useAuthStore } from '../stores/authStore'
 
 export default function Discover() {
   const {
@@ -36,6 +37,7 @@ export default function Discover() {
     toggleSave,
     clearSelection,
   } = useDiscoveryStore()
+  const { isAuthenticated } = useAuthStore()
 
   // Defensive guards: Zustand devtools middleware can restore stale state
   // from a previous Redux DevTools session that may be missing array fields
@@ -68,9 +70,11 @@ export default function Discover() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                 <span className="text-purple-600">✨</span>
-                Recommended for You
+                {isAuthenticated ? 'Recommended for You' : 'Trending Opportunities'}
                 <span className="text-xs text-gray-500 font-normal">
-                  (based on your past interactions)
+                  {isAuthenticated
+                    ? '(based on your past interactions)'
+                    : '(sign in for personalized picks)'}
                 </span>
               </h2>
               <button className="text-sm text-emerald-600 hover:text-emerald-700">
