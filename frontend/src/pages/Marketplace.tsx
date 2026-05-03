@@ -27,11 +27,7 @@ export default function Marketplace() {
 
   const setActiveTab = (tab: TabId) => {
     const next = new URLSearchParams(searchParams)
-    if (tab === 'datasets') {
-      next.delete('tab')
-    } else {
-      next.set('tab', tab)
-    }
+    next.set('tab', tab)
     setSearchParams(next, { replace: false })
   }
 
@@ -75,9 +71,22 @@ export default function Marketplace() {
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — both tabs stay mounted so each keeps its own filter/search state when switching */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'datasets' ? <DatasetsTab /> : <LeadsTab />}
+        <div
+          role="tabpanel"
+          aria-labelledby="tab-datasets"
+          hidden={activeTab !== 'datasets'}
+        >
+          <DatasetsTab />
+        </div>
+        <div
+          role="tabpanel"
+          aria-labelledby="tab-leads"
+          hidden={activeTab !== 'leads'}
+        >
+          <LeadsTab />
+        </div>
       </div>
     </div>
   )

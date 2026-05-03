@@ -18,13 +18,22 @@ interface Dataset {
   is_active: boolean
 }
 
+type SortOption = 'price_asc' | 'price_desc' | 'newest' | 'popular'
+
 interface MarketplaceFilters {
   search: string
   category: string | null
   vertical: string | null
   city: string | null
-  sortBy: 'price_asc' | 'price_desc' | 'newest' | 'popular'
+  sortBy: SortOption
 }
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: 'newest', label: 'Newest First' },
+  { value: 'popular', label: 'Most Popular' },
+  { value: 'price_asc', label: 'Price: Low to High' },
+  { value: 'price_desc', label: 'Price: High to Low' },
+]
 
 const CATEGORIES = [
   { value: 'opportunities', label: 'Opportunities' },
@@ -260,19 +269,14 @@ export default function DatasetsTab() {
             </button>
             {openDropdown === 'sort' && (
               <div className="space-y-2">
-                {[
-                  { value: 'newest', label: 'Newest First' },
-                  { value: 'popular', label: 'Most Popular' },
-                  { value: 'price_asc', label: 'Price: Low to High' },
-                  { value: 'price_desc', label: 'Price: High to Low' },
-                ].map((opt) => (
+                {SORT_OPTIONS.map((opt) => (
                   <label key={opt.value} className="flex items-center gap-2 cursor-pointer group">
                     <input
                       type="radio"
                       name="sort"
                       value={opt.value}
                       checked={filters.sortBy === opt.value}
-                      onChange={() => setFilters({ ...filters, sortBy: opt.value as any })}
+                      onChange={() => setFilters({ ...filters, sortBy: opt.value })}
                       className="w-4 h-4"
                     />
                     <span className="text-sm text-gray-300 group-hover:text-white">{opt.label}</span>
