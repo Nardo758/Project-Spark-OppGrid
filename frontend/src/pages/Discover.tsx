@@ -111,11 +111,11 @@ export default function Discover() {
                 </span>
               </h2>
             </div>
-            <div className="flex gap-4 overflow-x-auto pb-2 hide-scrollbar">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {trending.map((opp) => (
                 <div
                   key={opp.id}
-                  className="min-w-[280px] bg-gradient-to-br from-purple-50 to-white border border-purple-100 rounded-lg p-4 cursor-pointer hover:border-purple-300 transition-all"
+                  className="bg-gradient-to-br from-purple-50 to-white border border-purple-100 rounded-lg p-4 cursor-pointer hover:border-purple-300 transition-all"
                   onClick={() => window.location.href = `/opportunity/${opp.id}`}
                 >
                   <div className="flex items-start justify-between mb-2">
