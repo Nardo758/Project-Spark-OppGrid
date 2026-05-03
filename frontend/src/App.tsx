@@ -15,7 +15,6 @@ import Services from './pages/Services'
 import Network from './pages/Network'
 import JoinNetwork from './pages/JoinNetwork'
 import ExpertApplication from './pages/ExpertApplication'
-import Leads from './pages/Leads'
 import Funding from './pages/Funding'
 import Tools from './pages/Tools'
 import Learn from './pages/Learn'
@@ -111,7 +110,7 @@ function App() {
         />
         <Route path="login" element={<Login />} />
         <Route path="signup" element={<Signup />} />
-        <Route path="leads" element={<Leads />} />
+        <Route path="leads" element={<Navigate to="/marketplace?tab=leads" replace />} />
         <Route path="tools" element={<Tools />} />
         <Route path="learn" element={<Learn />} />
         <Route path="ai-roadmap" element={<AIRoadmap />} />

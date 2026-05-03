@@ -11,7 +11,6 @@ const guestNavItems = [
   { name: 'Discover', path: '/discover' },
   { name: 'Marketplace', path: '/marketplace' },
   { name: 'Consultant Studio', path: '/build/reports' },
-  { name: 'Leads', path: '/leads' },
   { 
     name: 'Join Our Network',
     dropdown: [
@@ -43,7 +42,6 @@ const paidNavItems = [
       { name: 'Find Expert Help', path: '/build/experts', description: 'Connect with industry experts' },
       { name: 'Business Plan', path: '/build/business-plan', description: 'AI-powered business planning' },
       { name: 'Find Money', path: '/build/funding', description: 'Explore funding options' },
-      { name: 'Leads', path: '/leads', description: 'Generate and manage leads' },
     ]
   },
   { name: 'API', path: '/developer' },
