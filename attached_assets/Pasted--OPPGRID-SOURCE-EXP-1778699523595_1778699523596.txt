@@ -1,0 +1,1142 @@
+================================================================================
+OPPGRID SOURCE EXPANSION SPECIFICATION v1.0
+================================================================================
+Author: Architectural spec for Replit agent handoff
+Status: Ready for implementation
+Estimated effort: 6-8 days
+Repo: github.com/Nardo758/Project-Spark-OppGrid
+Branch: feature/source-expansion
+
+--------------------------------------------------------------------------------
+GOAL
+--------------------------------------------------------------------------------
+Expand the opportunity-discovery funnel along two axes:
+
+  A. Add source-specific signal matrices for the four sources that have
+     webhook ingestion plumbing but no signal extraction logic:
+     Yelp, Nextdoor, GreatSchools, Twitter/X.
+
+  B. Promote macro/economic data (FRED, BLS, SEC-API, Census, Google Trends)
+     from enrichment-only to discovery sources. Macro anomalies will seed
+     candidate opportunities that the existing signal pipeline can validate.
+
+After this spec lands, OppGrid will have 7 active discovery sources (up from
+3) plus a macro-anomaly discovery engine that can surface opportunities no
+single complaint source would reveal.
+
+--------------------------------------------------------------------------------
+CURRENT STATE (audited from repo HEAD 3c7c7b0)
+--------------------------------------------------------------------------------
+EXISTS:
+  backend/app/services/reddit_keyword_matrix.py        (~production-ready)
+  backend/app/services/google_maps_keyword_matrix.py   (~production-ready)
+  backend/app/services/craigslist_keyword_matrix.py    (~production-ready)
+  backend/app/services/signal_to_opportunity.py        (clustering, scoring,
+                                                        confidence tiers)
+  backend/app/services/opportunity_processor.py        (AI scoring)
+  backend/app/services/webhook_gateway.py              (HMAC ingest)
+  backend/app/services/{fred,bls,sec_api,census,google_trends}_service.py
+                                                       (enrichment only)
+
+MISSING:
+  - Signal matrices for: Yelp, Nextdoor, GreatSchools, Twitter/X
+  - Macro-anomaly discovery (currently macro services answer "what's the
+    unemployment rate in ZIP X?" but never proactively flag "ZIP X just
+    spiked +3.2% unemployment, that's a signal").
+
+--------------------------------------------------------------------------------
+PART A — FOUR NEW SIGNAL MATRICES
+--------------------------------------------------------------------------------
+All four matrices follow the established pattern from reddit_keyword_matrix.py:
+
+  - Top-level constants: source-specific tiers/categories
+  - A regex-driven pattern dictionary (with baseline_confidence and
+    business_category_mapping per category)
+  - A single primary entry point: score_<source>_item(payload) -> dict
+  - Output shape: {
+        "signal_score": float (0.0-1.0),
+        "validation_level": str ("goldmine"|"validated"|"weak_signal"|"noise"),
+        "matched_patterns": List[str],
+        "category_hint": str,
+        "location_hint": {"city": str, "state": str, "confidence": float}
+                         | None,
+        "raw_excerpt": str (max 280 chars),
+    }
+
+The score is consumed by signal_to_opportunity.SignalToOpportunityProcessor
+via the same intake path that reddit/google-maps already use.
+
+================================================================================
+A.1  YELP SIGNAL MATRIX  —  backend/app/services/yelp_keyword_matrix.py
+================================================================================
+RATIONALE: Yelp reviews are *service failures* in structured form. A 1-2 star
+review with phrases like "no one in [city] does X right" is a near-pure
+demand signal. Geographic data is API-structured (business_location object)
+so confidence is 1.0 for location.
+
+PAYLOAD ASSUMPTION: Webhook delivers per /v1/webhooks/yelp from the existing
+webhook_gateway.py contract. Expected fields:
+  - review.id, review.text, review.rating (1-5), review.created_at
+  - business.id, business.name, business.categories[]
+  - business.location.{city, state, zip_code, lat, lng}
+
+IMPLEMENTATION:
+
+```python
+"""
+OppGrid Keyword Matrix — Yelp
+==============================
+Scores Yelp reviews for service-gap signals. Low-star reviews mentioning
+"no one", "can't find", "no good X in [area]" are the high-confidence
+patterns. Location is taken structurally from the business object.
+
+Primary entry point: score_yelp_review()
+"""
+
+import re
+from typing import Optional, Dict, List, Any
+
+
+# ============================================================================
+# RATING-BASED TIERS
+# ============================================================================
+# Lower-star reviews carry more demand signal. 1-2 star = explicit failure.
+
+YELP_RATING_TIERS = {
+    1: {"boost": 0.25, "reason": "Explicit service failure"},
+    2: {"boost": 0.18, "reason": "Significant dissatisfaction"},
+    3: {"boost": 0.08, "reason": "Mixed signal, possible gap"},
+    4: {"boost": 0.00, "reason": "Mostly positive, low signal"},
+    5: {"boost": 0.00, "reason": "Positive review, ignored"},
+}
+
+
+# ============================================================================
+# CATEGORY-PRIORITY MAPPING
+# ============================================================================
+# Yelp categories that map to high-opportunity business types.
+
+YELP_CATEGORY_PRIORITY = {
+    "homeservices":       {"boost": 0.15, "category": "home_services"},
+    "professional":       {"boost": 0.12, "category": "professional"},
+    "auto":               {"boost": 0.10, "category": "automotive"},
+    "health":             {"boost": 0.12, "category": "healthcare"},
+    "education":          {"boost": 0.10, "category": "education"},
+    "petservices":        {"boost": 0.10, "category": "pet_services"},
+    "childcare":          {"boost": 0.15, "category": "childcare"},
+    "elderlycare":        {"boost": 0.15, "category": "elderly_care"},
+    "restaurants":        {"boost": 0.05, "category": "restaurant"},
+    "shopping":           {"boost": 0.05, "category": "retail"},
+}
+
+
+# ============================================================================
+# PATTERN CATEGORIES
+# ============================================================================
+
+YELP_CATEGORIES = {
+
+    "explicit_market_gap": {
+        "baseline_confidence": 0.92,
+        "validation_level": "goldmine",
+        "patterns": [
+            {"pattern": r"\bno (?:one|where|body) (?:in|around) (?:this|the|our)",  "confidence": 0.95},
+            {"pattern": r"can(?:'?t|not) find (?:a|any|good)",                       "confidence": 0.92},
+            {"pattern": r"no (?:good|decent|reliable) (?:option|place|business)",   "confidence": 0.90},
+            {"pattern": r"(?:wish|need) (?:there was|someone would) (?:open|start)", "confidence": 0.95},
+            {"pattern": r"only (?:option|one|game) in town",                        "confidence": 0.88},
+            {"pattern": r"have to drive (?:to|all the way)",                        "confidence": 0.85},
+        ],
+        "business_category_mapping": ["any"],
+    },
+
+    "service_quality_failure": {
+        "baseline_confidence": 0.78,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"(?:rude|unprofessional|incompetent|dishonest)",            "confidence": 0.75},
+            {"pattern": r"(?:never|don'?t) (?:return|answer|respond|show up)",       "confidence": 0.82},
+            {"pattern": r"overcharged|ripped off|scammed",                          "confidence": 0.78},
+            {"pattern": r"(?:waited|wait(?:ed|ing)) (?:for )?(?:hours|forever|all day)", "confidence": 0.72},
+            {"pattern": r"(?:bait and switch|hidden (?:fee|charge))",                "confidence": 0.80},
+            {"pattern": r"(?:had to|ended up) (?:going|driving) (?:to|elsewhere)",   "confidence": 0.80},
+        ],
+        "business_category_mapping": ["any"],
+    },
+
+    "competitive_displacement": {
+        "baseline_confidence": 0.82,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"used to (?:go to|use|love)",                                "confidence": 0.78},
+            {"pattern": r"switched (?:to|from)",                                      "confidence": 0.82},
+            {"pattern": r"(?:better|worse) than",                                     "confidence": 0.65},
+            {"pattern": r"(?:closed|shut down|out of business)",                      "confidence": 0.85},
+            {"pattern": r"under new (?:management|ownership)",                        "confidence": 0.72},
+        ],
+        "business_category_mapping": ["any"],
+    },
+
+    "demand_intensity": {
+        "baseline_confidence": 0.70,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"booked (?:out|up|solid) (?:for|weeks|months)",              "confidence": 0.88},
+            {"pattern": r"(?:can'?t|impossible to) get (?:an? )?appointment",         "confidence": 0.85},
+            {"pattern": r"waitlist|waiting list",                                     "confidence": 0.78},
+            {"pattern": r"(?:sold out|all gone) (?:by|before|within)",                "confidence": 0.75},
+        ],
+        "business_category_mapping": ["any"],
+    },
+}
+
+
+GOLDMINE_THRESHOLD = 0.85
+VALIDATED_THRESHOLD = 0.70
+WEAK_THRESHOLD = 0.50
+
+
+def _classify_level(score: float) -> str:
+    if score >= GOLDMINE_THRESHOLD: return "goldmine"
+    if score >= VALIDATED_THRESHOLD: return "validated"
+    if score >= WEAK_THRESHOLD: return "weak_signal"
+    return "noise"
+
+
+def _extract_excerpt(text: str, matched_pattern: str, window: int = 140) -> str:
+    """Return ~280 char excerpt centered on the first regex hit."""
+    if not text:
+        return ""
+    m = re.search(matched_pattern, text, re.IGNORECASE)
+    if not m:
+        return text[:280]
+    start = max(0, m.start() - window)
+    end = min(len(text), m.end() + window)
+    return ("..." if start > 0 else "") + text[start:end] + ("..." if end < len(text) else "")
+
+
+def score_yelp_review(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Score a single Yelp review payload.
+
+    Args:
+        payload: Dict matching the /v1/webhooks/yelp schema. Must contain:
+                 review.text (str), review.rating (int), business.categories
+                 (list[str]), business.location (dict).
+
+    Returns:
+        Standard signal output dict (see Part A header).
+    """
+    review = payload.get("review", {})
+    business = payload.get("business", {})
+
+    text = (review.get("text") or "").strip()
+    rating = int(review.get("rating") or 5)
+    categories = business.get("categories") or []
+    location = business.get("location") or {}
+
+    if not text or len(text) < 20:
+        return _noise_result("text too short")
+
+    # 1. Apply rating tier boost (low stars = high signal)
+    tier_boost = YELP_RATING_TIERS.get(rating, {"boost": 0.0})["boost"]
+
+    # 2. Category boost
+    category_hint = "other"
+    category_boost = 0.0
+    for cat_slug in categories:
+        cat_lower = (cat_slug or "").lower()
+        for key, cfg in YELP_CATEGORY_PRIORITY.items():
+            if key in cat_lower:
+                if cfg["boost"] > category_boost:
+                    category_boost = cfg["boost"]
+                    category_hint = cfg["category"]
+
+    # 3. Pattern matching
+    best_score = 0.0
+    matched: List[str] = []
+    matched_pattern_for_excerpt = None
+
+    for cat_name, cat_cfg in YELP_CATEGORIES.items():
+        for pat in cat_cfg["patterns"]:
+            if re.search(pat["pattern"], text, re.IGNORECASE):
+                matched.append(f"{cat_name}:{pat['pattern']}")
+                if pat["confidence"] > best_score:
+                    best_score = pat["confidence"]
+                    matched_pattern_for_excerpt = pat["pattern"]
+
+    if not matched:
+        return _noise_result("no patterns matched")
+
+    # 4. Combine
+    final_score = min(1.0, best_score + tier_boost + category_boost)
+
+    return {
+        "signal_score": round(final_score, 3),
+        "validation_level": _classify_level(final_score),
+        "matched_patterns": matched,
+        "category_hint": category_hint,
+        "location_hint": {
+            "city": location.get("city"),
+            "state": location.get("state"),
+            "zip": location.get("zip_code"),
+            "lat": location.get("lat"),
+            "lng": location.get("lng"),
+            "confidence": 1.0,  # Yelp business location is API-verified
+        } if location.get("city") else None,
+        "raw_excerpt": _extract_excerpt(text, matched_pattern_for_excerpt or ""),
+        "source_specific": {
+            "rating": rating,
+            "yelp_business_id": business.get("id"),
+        },
+    }
+
+
+def _noise_result(reason: str) -> Dict[str, Any]:
+    return {
+        "signal_score": 0.0,
+        "validation_level": "noise",
+        "matched_patterns": [],
+        "category_hint": "other",
+        "location_hint": None,
+        "raw_excerpt": "",
+        "source_specific": {"skip_reason": reason},
+    }
+```
+
+================================================================================
+A.2  NEXTDOOR SIGNAL MATRIX  —  backend/app/services/nextdoor_keyword_matrix.py
+================================================================================
+RATIONALE: Nextdoor posts are *hyper-local complaints* with the most precise
+geography of any source (neighborhood polygons). The signal-to-noise is high
+for service gaps because the population is local homeowners with money to
+spend. Treat neighborhood-tagged posts as 1.0-confidence location.
+
+PAYLOAD ASSUMPTION: per /v1/webhooks/nextdoor:
+  - post.id, post.title, post.body, post.category
+    ("Crime & Safety"|"General"|"Recommendations"|"Lost & Found"|...)
+  - post.neighborhood.{name, city, state, zip, polygon (GeoJSON), centroid}
+
+KEY DIFFERENCES FROM YELP MATRIX:
+  - No rating field — replace YELP_RATING_TIERS with NEXTDOOR_CATEGORY_TIERS
+    (where "Recommendations" gets the highest boost because it's people
+     literally asking for services).
+  - location_hint.confidence = 1.0 always (neighborhood-tagged).
+  - Add a polygon field to location_hint so the geographic_extractor can
+    persist the neighborhood boundary directly.
+
+NEXTDOOR_CATEGORY_TIERS = {
+    "Recommendations":  {"boost": 0.25, "reason": "Explicit ask for services"},
+    "Classifieds":      {"boost": 0.15, "reason": "Local commerce signal"},
+    "General":          {"boost": 0.05, "reason": "Mixed signal"},
+    "Crime & Safety":   {"boost": 0.08, "reason": "Security service demand"},
+    "Lost & Found":     {"boost": 0.10, "reason": "Pet/property service demand"},
+    "Free Items":       {"boost": 0.00, "reason": "Low commercial signal"},
+}
+
+NEXTDOOR_CATEGORIES = {
+    "explicit_recommendation_request": {
+        "baseline_confidence": 0.94,
+        "validation_level": "goldmine",
+        "patterns": [
+            {"pattern": r"(?:anyone|anybody) (?:know|recommend)",         "confidence": 0.92},
+            {"pattern": r"looking for (?:a|recommendations? for)",        "confidence": 0.94},
+            {"pattern": r"(?:can|could) anyone (?:suggest|recommend)",    "confidence": 0.92},
+            {"pattern": r"need (?:a |someone )(?:good|reliable|trustworthy)", "confidence": 0.88},
+            {"pattern": r"who do you (?:use|recommend|trust) for",        "confidence": 0.95},
+            {"pattern": r"in (?:dire )?need of",                          "confidence": 0.85},
+        ],
+        "business_category_mapping": ["any"],
+    },
+    "neighborhood_gap": {
+        "baseline_confidence": 0.88,
+        "validation_level": "goldmine",
+        "patterns": [
+            {"pattern": r"why (?:isn'?t|aren'?t) there (?:a|any)",         "confidence": 0.95},
+            {"pattern": r"we need (?:a|more) (?:in|around) (?:our|the)",   "confidence": 0.92},
+            {"pattern": r"closest (?:one|option) is (?:in|over|like)",     "confidence": 0.88},
+            {"pattern": r"have to (?:go|drive) (?:to|out of)",             "confidence": 0.82},
+        ],
+        "business_category_mapping": ["any"],
+    },
+    "service_complaint": {
+        "baseline_confidence": 0.72,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"(?:beware|warning|stay away)",                   "confidence": 0.78},
+            {"pattern": r"would (?:not|never) (?:recommend|use|hire)",     "confidence": 0.75},
+            {"pattern": r"(?:terrible|horrible|awful) (?:experience|service)", "confidence": 0.72},
+            {"pattern": r"(?:overcharged|scammed|cheated)",                "confidence": 0.78},
+        ],
+        "business_category_mapping": ["any"],
+    },
+    "demand_volume": {
+        "baseline_confidence": 0.70,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"(?:everyone|so many people) (?:asking|looking)",  "confidence": 0.78},
+            {"pattern": r"keep seeing (?:posts|requests|people asking)",    "confidence": 0.75},
+            {"pattern": r"(?:third|fourth|fifth|another) (?:post|request) about", "confidence": 0.82},
+        ],
+        "business_category_mapping": ["any"],
+    },
+}
+
+ENTRY POINT:
+  def score_nextdoor_post(payload: dict) -> dict:
+      # Mirrors score_yelp_review() but uses NEXTDOOR_CATEGORY_TIERS keyed
+      # on post.category, and writes neighborhood polygon into
+      # location_hint["polygon"].
+
+================================================================================
+A.3  GREATSCHOOLS SIGNAL MATRIX  —  backend/app/services/greatschools_keyword_matrix.py
+================================================================================
+RATIONALE: School ratings and parent reviews are a structural proxy for two
+opportunity categories: (1) education services (tutoring, after-school,
+test prep, specialized programs), and (2) family-decision-driver businesses
+(any service whose market correlates with families moving to/from a school
+district). A 3-star or below school with active parent complaints in a
+growing ZIP = a discoverable education-services opportunity.
+
+PAYLOAD ASSUMPTION: per /v1/webhooks/greatschools:
+  - school.{id, name, level, rating (1-10), enrollment}
+  - school.location.{address, city, state, zip, lat, lng, district}
+  - review.{rating (1-5), text, role ("parent"|"student"|"teacher"),
+            posted_at}
+
+KEY DIFFERENCES:
+  - TWO scoring modes: review-mode (parent complaint text) and
+    school-stat-mode (low GS rating + high enrollment = supply gap).
+  - Output category_hint is almost always "education" or "family_services".
+  - Add `school_rating` and `district` to source_specific so the AI step can
+    use them in opportunity_processor.
+
+GREATSCHOOLS_RATING_TIERS = {  # GS rating 1-10 (lower = more opportunity)
+    range(1, 4):  {"boost": 0.20, "reason": "Underperforming school = service demand"},
+    range(4, 7):  {"boost": 0.10, "reason": "Mid-performing, supplemental services market"},
+    range(7, 11): {"boost": 0.02, "reason": "Strong school, low supplemental demand"},
+}
+
+GREATSCHOOLS_CATEGORIES = {
+    "tutoring_demand": {
+        "baseline_confidence": 0.88,
+        "validation_level": "goldmine",
+        "patterns": [
+            {"pattern": r"need(?:s|ed)? (?:a )?tutor",                     "confidence": 0.95},
+            {"pattern": r"(?:falling|fell) behind",                        "confidence": 0.85},
+            {"pattern": r"(?:struggling|struggle) with (?:math|reading|writing|science)", "confidence": 0.88},
+            {"pattern": r"(?:supplement|extra help|outside help)",         "confidence": 0.85},
+        ],
+        "business_category_mapping": ["education", "tutoring"],
+    },
+    "specialized_program_gap": {
+        "baseline_confidence": 0.90,
+        "validation_level": "goldmine",
+        "patterns": [
+            {"pattern": r"no (?:gifted|GATE|honors|AP|IB) program",         "confidence": 0.95},
+            {"pattern": r"(?:special needs|IEP|504|autism|ADHD) (?:support|services|program)", "confidence": 0.92},
+            {"pattern": r"(?:no|lack of) (?:music|art|drama|sports|STEM)",  "confidence": 0.88},
+            {"pattern": r"(?:overcrowded|too many students|class sizes too)", "confidence": 0.85},
+        ],
+        "business_category_mapping": ["education", "enrichment"],
+    },
+    "safety_environment_gap": {
+        "baseline_confidence": 0.78,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"(?:bullying|unsafe|fights|drugs)",                "confidence": 0.78},
+            {"pattern": r"(?:considering|looking at) (?:private|charter|homeschool)", "confidence": 0.85},
+            {"pattern": r"(?:moved|moving|leaving) (?:the )?district",      "confidence": 0.82},
+        ],
+        "business_category_mapping": ["education", "alternative_schools"],
+    },
+    "facilities_gap": {
+        "baseline_confidence": 0.70,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"(?:outdated|run-?down|falling apart)",            "confidence": 0.72},
+            {"pattern": r"no (?:after-?school|aftercare|extended day)",     "confidence": 0.88},
+            {"pattern": r"(?:lack of|no) (?:counselors|nurses|specialists)", "confidence": 0.82},
+        ],
+        "business_category_mapping": ["childcare", "after_school"],
+    },
+}
+
+ENTRY POINTS:
+  def score_greatschools_review(payload: dict) -> dict:
+      # Scores parent/student review text.
+
+  def score_greatschools_school_stats(payload: dict) -> dict:
+      # Pure structural signal: low rating × high enrollment × growing zip.
+      # Returns a signal even if no review text is present.
+      # signal_score = max(0, (5 - school.rating/2) * 0.15) +
+      #                enrollment_boost + zip_growth_boost
+      # category_hint = "education"
+      # validation_level = "weak_signal" by default unless enrollment > 800
+
+================================================================================
+A.4  TWITTER/X SIGNAL MATRIX  —  backend/app/services/twitter_keyword_matrix.py
+================================================================================
+RATIONALE: Twitter is high-volume, high-noise. The matrix must be more
+restrictive than Reddit's. Geographic data is sparse and often imprecise
+(geo_place_id when present, otherwise hashtag/text inference). Treat
+location_hint.confidence as 0.80 even for geo-tagged tweets.
+
+PAYLOAD ASSUMPTION: per /v1/webhooks/twitter:
+  - tweet.{id, text, created_at, lang, retweet_count, like_count, reply_count}
+  - tweet.author.{username, follower_count, verified}
+  - tweet.geo.{place_id, place_name, coordinates}  (optional)
+
+KEY DIFFERENCES:
+  - SPAM/promo filter MUST run first (links + low-followers + new account = drop).
+  - Use engagement as a credibility multiplier (verified or >500 likes = +0.10).
+  - Hashtag-based geo only when 2+ city-specific hashtags agree.
+  - Patterns must be tighter than Reddit's to avoid sarcasm and memes.
+
+TWITTER_SPAM_FILTERS = {
+    "max_links_in_text": 1,
+    "min_account_age_days": 30,
+    "min_follower_count": 25,
+    "promo_keyword_drop": [r"\b(?:DM me|link in bio|crypto|airdrop|NFT|OnlyFans)\b"],
+}
+
+TWITTER_ENGAGEMENT_BOOST = {
+    "verified_author":    0.10,
+    "likes_gt_500":       0.10,
+    "likes_gt_100":       0.05,
+    "replies_gt_50":      0.08,
+    "retweets_gt_100":    0.05,
+}
+
+TWITTER_CATEGORIES = {
+    "explicit_demand": {
+        "baseline_confidence": 0.90,
+        "validation_level": "goldmine",
+        "patterns": [
+            {"pattern": r"(?:i'?d|would) pay (?:for|good money)",             "confidence": 0.95},
+            {"pattern": r"someone (?:please |needs to )?(?:build|make|create)", "confidence": 0.88},
+            {"pattern": r"why (?:isn'?t|is there no) (?:an? )?app for",       "confidence": 0.92},
+            {"pattern": r"take my money",                                     "confidence": 0.85},
+        ],
+        "business_category_mapping": ["any"],
+    },
+    "service_failure_local": {
+        "baseline_confidence": 0.75,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"(?:can'?t find|nobody (?:in|near) (?:me|here)) (?:that|who)", "confidence": 0.85},
+            {"pattern": r"(?:every|all the) (?:place|business|company) (?:in|around) [A-Z]", "confidence": 0.80},
+            {"pattern": r"(?:closest|nearest) one is (?:\d+\s*(?:miles?|hours?))",         "confidence": 0.82},
+        ],
+        "business_category_mapping": ["any"],
+    },
+    "trend_signal": {
+        "baseline_confidence": 0.68,
+        "validation_level": "validated",
+        "patterns": [
+            {"pattern": r"(?:everyone|all my friends) is (?:doing|using|buying)", "confidence": 0.72},
+            {"pattern": r"(?:why is|how is) [a-z\s]+ (?:so expensive|hard to find)", "confidence": 0.72},
+        ],
+        "business_category_mapping": ["any"],
+    },
+}
+
+ENTRY POINT:
+  def score_tweet(payload: dict) -> dict:
+      # Apply spam filter first; return noise if drop conditions met.
+      # Apply engagement boost. Confidence cap 1.0.
+
+--------------------------------------------------------------------------------
+PART B — MACRO SIGNAL DISCOVERY ENGINE
+--------------------------------------------------------------------------------
+GOAL: Turn the existing fred/bls/sec/census/google_trends services from
+enrichment-only into proactive opportunity sources.
+
+CORE IDEA: A macro anomaly alone is not an opportunity. But a macro anomaly
+correlated with existing micro-signals (or with strong demographic backdrop)
+is one of the highest-confidence signal types available. This engine:
+
+  1. Scans macro endpoints on a schedule for ANOMALIES (configurable rules).
+  2. For each anomaly, looks for correlating micro-signals in scraped_sources.
+  3. Emits a "macro candidate" signal into the same intake path used by
+     reddit/yelp/etc.
+
+================================================================================
+B.1  MacroSignalScanner SERVICE  —  backend/app/services/macro_signal_scanner.py
+================================================================================
+NEW FILE. ~400 LOC. Implements scanning + correlation orchestrator.
+
+```python
+"""
+Macro Signal Scanner — turns FRED/BLS/SEC/Census/GoogleTrends into a
+discovery source for opportunities.
+
+Schedule: every 6 hours via job_runner.
+Output: rows in scraped_sources with source_platform='macro_anomaly'
+        consumed by SignalToOpportunityProcessor like any other signal.
+"""
+
+import logging
+from datetime import datetime, timedelta
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, asdict
+from sqlalchemy.orm import Session
+
+from app.services.fred_service import FREDService
+from app.services.bls_service import BLSService
+from app.services.sec_api_service import SECApiService
+from app.services.census_service import CensusService
+from app.services.google_trends_service import GoogleTrendsService
+from app.models.scraped_source import ScrapedSource  # existing intake model
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class MacroAnomaly:
+    source: str              # 'fred' | 'bls' | 'sec' | 'census' | 'trends'
+    indicator: str           # e.g. 'UNRATE_CBSA_45300' (Tampa unemployment)
+    geo_scope: str           # 'national' | 'state' | 'metro' | 'zip'
+    geo_id: str              # CBSA code, state FIPS, ZIP, etc.
+    geo_label: str           # 'Tampa, FL'
+    value: float
+    baseline: float
+    delta_pct: float
+    direction: str           # 'up' | 'down'
+    severity: str            # 'mild' | 'moderate' | 'severe'
+    category_hints: List[str]
+    detected_at: datetime
+    rationale: str           # human-readable why this matters
+
+
+# ============================================================================
+# ANOMALY RULES PER SOURCE
+# ============================================================================
+# Each rule produces zero-or-more MacroAnomaly records.
+
+# FRED rules — regional unemployment, housing, GDP per metro
+FRED_RULES = [
+    {
+        "indicator_id": "UNRATE_CBSA",
+        "scope": "metro",
+        "trigger": "delta_pct > 0.15 over 90 days",  # +15% relative change
+        "severity_thresholds": {"mild": 0.15, "moderate": 0.25, "severe": 0.40},
+        "category_hints": ["retraining", "gig_economy", "food_assistance",
+                           "financial_advisory", "discount_retail"],
+        "rationale_template": "Unemployment rose {delta_pct:+.1%} in {geo} "
+                              "over 90 days. Service demand shifts toward "
+                              "affordability and reskilling.",
+    },
+    {
+        "indicator_id": "PERMIT_CBSA",  # housing starts
+        "scope": "metro",
+        "trigger": "delta_pct > 0.20 over 180 days",
+        "severity_thresholds": {"mild": 0.20, "moderate": 0.35, "severe": 0.50},
+        "category_hints": ["home_services", "moving", "construction",
+                           "real_estate_services", "interior_design"],
+        "rationale_template": "Building permits up {delta_pct:+.1%} in {geo}. "
+                              "New-construction service demand inbound.",
+    },
+    {
+        "indicator_id": "MEHOINUSA_STATE",  # median household income
+        "scope": "state",
+        "trigger": "delta_pct < -0.05 OR delta_pct > 0.10",
+        "category_hints": ["financial_advisory", "luxury_services",
+                           "discount_retail"],
+    },
+]
+
+# BLS rules — wage trends, employment by sector
+BLS_RULES = [
+    {
+        "indicator_id": "QCEW_AVG_WEEKLY_WAGE",
+        "scope": "metro",
+        "industries": ["construction", "healthcare", "leisure_hospitality"],
+        "trigger": "delta_pct > 0.10 YoY",
+        "category_hints": ["staffing", "training", "professional_services"],
+    },
+    {
+        "indicator_id": "OEWS_OCCUPATION_GROWTH",
+        "scope": "metro",
+        "trigger": "abs(delta_pct) > 0.08 YoY",
+        "category_hints": ["education", "career_services", "tools_software"],
+    },
+]
+
+# Census rules — population growth/loss by ZIP
+CENSUS_RULES = [
+    {
+        "indicator_id": "ACS_POPULATION_GROWTH",
+        "scope": "zip",
+        "trigger": "delta_pct > 0.08 over 5 years OR delta_pct < -0.05",
+        "category_hints_growth": ["home_services", "childcare", "healthcare",
+                                  "retail", "food_beverage"],
+        "category_hints_decline": ["elderly_care", "consolidation_services"],
+    },
+    {
+        "indicator_id": "ACS_MEDIAN_AGE_SHIFT",
+        "scope": "zip",
+        "trigger": "abs(delta) > 3 years over 5 years",
+        "category_hints_younger": ["childcare", "education", "fitness", "entertainment"],
+        "category_hints_older": ["elderly_care", "healthcare", "estate_planning"],
+    },
+]
+
+# SEC rules — public-company commentary as a leading indicator
+SEC_RULES = [
+    {
+        "filing_types": ["10-K", "10-Q", "8-K"],
+        "earnings_call": True,
+        "keywords_supply_shortage": [
+            "underserved market", "capacity constraints", "unable to meet demand",
+            "backlog", "waitlist", "shortage of", "labor constraints",
+        ],
+        "keywords_competitive_exit": [
+            "exiting the market", "discontinuing", "closing locations",
+            "restructuring", "divesting",
+        ],
+        "category_mapping": {
+            # public_ticker -> business category these signals point at
+            "PSA":  "self_storage",
+            "EXR":  "self_storage",
+            "CUBE": "self_storage",
+            "LULU": "athletic_apparel",
+            "CMG":  "fast_casual_dining",
+            "PLNT": "fitness_low_cost",
+            # ... extend via existing secret_sauce_injector mapping
+        },
+    },
+]
+
+# Google Trends rules — relative search interest spikes
+TRENDS_RULES = [
+    {
+        "trigger": "interest_breakout > 80 OR weekly_growth > 0.50",
+        "geo_scope": "dma",
+        "category_hints": "infer_from_query_root",
+        "rationale_template": "Search interest for '{query}' broke out in "
+                              "{geo} ({delta_pct:+.0%} WoW). Early demand "
+                              "signal.",
+    },
+]
+
+
+# ============================================================================
+# SCANNER
+# ============================================================================
+
+class MacroSignalScanner:
+    """Periodic scanner for macro anomalies across all configured sources."""
+
+    def __init__(self, db: Session):
+        self.db = db
+        self.fred = FREDService()
+        self.bls = BLSService()
+        self.sec = SECApiService()
+        self.census = CensusService()
+        self.trends = GoogleTrendsService()
+
+    def scan_all(self) -> Dict[str, Any]:
+        """Run all anomaly rules; emit signals; return summary."""
+        stats = {"anomalies_detected": 0, "signals_emitted": 0, "errors": 0}
+        anomalies: List[MacroAnomaly] = []
+
+        try:
+            anomalies.extend(self._scan_fred())
+            anomalies.extend(self._scan_bls())
+            anomalies.extend(self._scan_census())
+            anomalies.extend(self._scan_sec())
+            anomalies.extend(self._scan_trends())
+        except Exception as e:
+            logger.exception("Macro scan failed")
+            stats["errors"] += 1
+
+        stats["anomalies_detected"] = len(anomalies)
+
+        for anomaly in anomalies:
+            try:
+                if self._emit_signal(anomaly):
+                    stats["signals_emitted"] += 1
+            except Exception as e:
+                logger.exception(f"Failed to emit anomaly: {anomaly.indicator}")
+                stats["errors"] += 1
+
+        return stats
+
+    def _scan_fred(self) -> List[MacroAnomaly]:
+        """Walk FRED_RULES; query fred_service for each indicator/geo;
+        compute deltas; produce MacroAnomaly records when triggers fire."""
+        out = []
+        for rule in FRED_RULES:
+            try:
+                # Iterate over configured metros / states
+                # (use a target list from app.data or env, e.g. top-100 CBSAs)
+                for geo_id, geo_label in self._target_metros():
+                    series = self.fred.get_series(rule["indicator_id"], geo_id,
+                                                  lookback_days=180)
+                    if not series or len(series) < 2:
+                        continue
+                    current = series[-1].value
+                    baseline = series[0].value
+                    if baseline == 0:
+                        continue
+                    delta_pct = (current - baseline) / abs(baseline)
+                    if self._trigger_fires(rule, delta_pct):
+                        out.append(MacroAnomaly(
+                            source="fred",
+                            indicator=f"{rule['indicator_id']}_{geo_id}",
+                            geo_scope=rule["scope"],
+                            geo_id=geo_id,
+                            geo_label=geo_label,
+                            value=current,
+                            baseline=baseline,
+                            delta_pct=delta_pct,
+                            direction="up" if delta_pct > 0 else "down",
+                            severity=self._severity(rule, delta_pct),
+                            category_hints=rule["category_hints"],
+                            detected_at=datetime.utcnow(),
+                            rationale=rule["rationale_template"].format(
+                                delta_pct=delta_pct, geo=geo_label),
+                        ))
+            except Exception as e:
+                logger.warning(f"FRED rule {rule['indicator_id']} failed: {e}")
+        return out
+
+    def _scan_bls(self) -> List[MacroAnomaly]:
+        # Analogous structure to _scan_fred() using BLS_RULES
+        return []  # implement per BLS_RULES
+
+    def _scan_census(self) -> List[MacroAnomaly]:
+        # ACS 5-year deltas by ZIP. Use a ZIP target list (env-controlled).
+        return []
+
+    def _scan_sec(self) -> List[MacroAnomaly]:
+        """Scan recent 10-K/10-Q/8-K filings + earnings calls for the
+        supply-shortage and competitive-exit keyword sets.
+        For each hit, emit a national-scope anomaly tagged with the
+        category from SEC_RULES.category_mapping (the secret-sauce
+        ticker→category lookup)."""
+        return []
+
+    def _scan_trends(self) -> List[MacroAnomaly]:
+        """Pull breakout queries by DMA from google_trends_service.
+        For each, infer category_hints from the query root via simple
+        regex against known category vocab; emit metro-scope anomaly."""
+        return []
+
+    # ------------------------------------------------------------------
+    def _emit_signal(self, a: MacroAnomaly) -> bool:
+        """Write the anomaly into scraped_sources so the existing
+        SignalToOpportunityProcessor will cluster + validate it like any
+        other signal."""
+        # Correlate with existing micro-signals first
+        corroborating = self._find_corroborating_signals(a)
+
+        signal_score = self._compute_macro_signal_score(a, corroborating)
+        if signal_score < 0.50:
+            return False  # too weak, skip
+
+        row = ScrapedSource(
+            source_type="macro_anomaly",
+            source_id=f"{a.source}:{a.indicator}:{a.detected_at.isoformat()}",
+            raw_data={
+                "anomaly": asdict(a),
+                "corroborating_signal_ids": [s.id for s in corroborating],
+                "signal_score": signal_score,
+                "validation_level": (
+                    "goldmine" if signal_score >= 0.85 else
+                    "validated" if signal_score >= 0.70 else
+                    "weak_signal"
+                ),
+                "category_hint": a.category_hints[0] if a.category_hints else "other",
+                "location_hint": {
+                    "city": a.geo_label.split(",")[0].strip() if "," in a.geo_label else None,
+                    "state": a.geo_label.split(",")[-1].strip() if "," in a.geo_label else None,
+                    "scope": a.geo_scope,
+                    "geo_id": a.geo_id,
+                    "confidence": 0.95,
+                },
+                "raw_excerpt": a.rationale,
+            },
+            source_platform="macro_anomaly",
+            scraped_at=a.detected_at,
+            processed=0,
+        )
+        self.db.add(row)
+        self.db.commit()
+        return True
+
+    def _find_corroborating_signals(self, a: MacroAnomaly) -> List[ScrapedSource]:
+        """Find scraped_sources rows in the same geo + category in the last
+        60 days. These boost the macro anomaly's signal_score."""
+        # Implementation: query scraped_sources where:
+        #   location.city == a.geo_city
+        #   AND category_hint IN a.category_hints
+        #   AND scraped_at > now() - 60d
+        # Return up to 50.
+        return []
+
+    def _compute_macro_signal_score(self, a: MacroAnomaly,
+                                    corroborating: List) -> float:
+        """Base score from anomaly severity, boosted by corroboration."""
+        base = {"mild": 0.55, "moderate": 0.72, "severe": 0.85}.get(a.severity, 0.50)
+        # +0.02 per corroborating signal, capped at +0.15
+        corroboration_boost = min(0.15, len(corroborating) * 0.02)
+        return min(1.0, base + corroboration_boost)
+
+    # ------------------------------------------------------------------
+    # helpers — _target_metros, _trigger_fires, _severity
+    # ------------------------------------------------------------------
+    def _target_metros(self):
+        """Return list of (CBSA_code, label) tuples to scan.
+        Pull from app/data/target_metros.json or env-configurable."""
+        return []
+
+    def _trigger_fires(self, rule: dict, delta_pct: float) -> bool:
+        thresholds = rule.get("severity_thresholds", {})
+        return abs(delta_pct) >= thresholds.get("mild", 999)
+
+    def _severity(self, rule: dict, delta_pct: float) -> str:
+        thresholds = rule.get("severity_thresholds", {})
+        ad = abs(delta_pct)
+        if ad >= thresholds.get("severe", 999): return "severe"
+        if ad >= thresholds.get("moderate", 999): return "moderate"
+        return "mild"
+
+
+def run_macro_scan(db: Session) -> Dict[str, Any]:
+    """Public entry point — called by job_runner."""
+    scanner = MacroSignalScanner(db)
+    return scanner.scan_all()
+```
+
+================================================================================
+B.2  CORROBORATION LOGIC (IMPORTANT)
+================================================================================
+The most powerful pattern is macro × micro fusion. Rules:
+
+  - A macro anomaly with ZERO corroborating signals → emitted as
+    "weak_signal" candidate. SignalToOpportunityProcessor will still cluster
+    it but only the AI step decides whether to create a full Opportunity.
+
+  - A macro anomaly with 1-5 corroborating signals → "validated".
+
+  - A macro anomaly with 6+ corroborating signals → "goldmine".
+
+This means the macro scanner can also act as a CONFIDENCE AMPLIFIER for the
+other sources — a Reddit post about Tampa childcare wait-lists becomes much
+more valuable when paired with a Census 5-year +12% under-5 population
+spike for the same ZIP.
+
+--------------------------------------------------------------------------------
+PART C — INTEGRATION TOUCHPOINTS
+--------------------------------------------------------------------------------
+
+================================================================================
+C.1  signal_to_opportunity.py UPDATES
+================================================================================
+LINE-LEVEL CHANGES:
+
+  1. SignalToOpportunityProcessor._load_scraped_data — already filters
+     by `processed == 0`. No code change needed; the new source_platforms
+     ('yelp', 'nextdoor', 'greatschools', 'twitter', 'macro_anomaly') will
+     flow through naturally.
+
+  2. SignalToOpportunityProcessor._score_signals — add dispatch for the
+     new platforms. Pseudocode:
+
+         from app.services.yelp_keyword_matrix      import score_yelp_review
+         from app.services.nextdoor_keyword_matrix  import score_nextdoor_post
+         from app.services.greatschools_keyword_matrix import (
+             score_greatschools_review, score_greatschools_school_stats)
+         from app.services.twitter_keyword_matrix   import score_tweet
+
+         PLATFORM_SCORERS = {
+             'reddit':         score_reddit_post,
+             'google_maps':    score_google_maps_review,
+             'craigslist':     score_craigslist_post,
+             'yelp':           score_yelp_review,
+             'nextdoor':       score_nextdoor_post,
+             'twitter':        score_tweet,
+             'greatschools':   score_greatschools_review,
+             'macro_anomaly':  _passthrough_macro_score,  # already scored
+         }
+
+         scorer = PLATFORM_SCORERS.get(signal.source_platform)
+         if scorer:
+             result = scorer(signal.raw_data)
+         else:
+             result = _default_score(signal)
+
+  3. _cluster_signals — already location+category based. NO CHANGE.
+
+  4. _create_opportunity — add a new column write:
+         opportunity.confidence_tier = result['validation_level']
+     (requires DB migration — see C.2)
+
+================================================================================
+C.2  DATABASE MIGRATIONS
+================================================================================
+ALEMBIC MIGRATION FILE:
+  backend/alembic/versions/XXXX_source_expansion.py
+
+```python
+def upgrade():
+    # Add confidence_tier so SignalToOpportunity result is queryable
+    op.add_column('opportunities', sa.Column(
+        'confidence_tier', sa.String(20), nullable=True, index=True
+    ))
+
+    # Track which source platforms contributed to each opportunity
+    op.add_column('opportunities', sa.Column(
+        'contributing_sources', sa.JSON, nullable=True
+    ))
+    # shape: {"reddit": 3, "yelp": 1, "macro_anomaly": 1, "total_sources": 3}
+
+    # Macro context cache so the card doesn't re-fetch every render
+    op.add_column('opportunities', sa.Column(
+        'macro_context', sa.JSON, nullable=True
+    ))
+    # shape: {
+    #   "unemployment_delta_90d": 0.18,
+    #   "population_5y_delta": 0.12,
+    #   "median_income": 72000,
+    #   "trend_direction": "rising"
+    # }
+
+    op.create_index('ix_opportunities_confidence_tier',
+                    'opportunities', ['confidence_tier'])
+
+def downgrade():
+    op.drop_index('ix_opportunities_confidence_tier', 'opportunities')
+    op.drop_column('opportunities', 'macro_context')
+    op.drop_column('opportunities', 'contributing_sources')
+    op.drop_column('opportunities', 'confidence_tier')
+```
+
+================================================================================
+C.3  JOB RUNNER REGISTRATION
+================================================================================
+In backend/app/services/job_runner.py, register:
+
+  - macro_signal_scan       : every 6 hours
+                              calls macro_signal_scanner.run_macro_scan(db)
+  - process_scraped_signals : every 15 minutes (already exists?)
+                              calls SignalToOpportunityProcessor.process_scraped_data()
+
+================================================================================
+C.4  WEBHOOK GATEWAY ROUTING (sanity check)
+================================================================================
+Verify webhook_gateway.py already routes:
+  POST /v1/webhooks/yelp          → source_platform='yelp'
+  POST /v1/webhooks/nextdoor      → source_platform='nextdoor'
+  POST /v1/webhooks/greatschools  → source_platform='greatschools'
+  POST /v1/webhooks/twitter       → source_platform='twitter'
+
+If any of those endpoints are stubbed or missing, the agent should add them
+mirroring the existing reddit/google-maps webhook handlers. HMAC-SHA256
+signature verification is required per OppGrid_Webhook_API_Integration.docx.
+
+--------------------------------------------------------------------------------
+FILE MAP — WHAT GETS CREATED OR TOUCHED
+--------------------------------------------------------------------------------
+NEW FILES:
+  backend/app/services/yelp_keyword_matrix.py                    (NEW, ~300 LOC)
+  backend/app/services/nextdoor_keyword_matrix.py                (NEW, ~280 LOC)
+  backend/app/services/greatschools_keyword_matrix.py            (NEW, ~320 LOC)
+  backend/app/services/twitter_keyword_matrix.py                 (NEW, ~340 LOC)
+  backend/app/services/macro_signal_scanner.py                   (NEW, ~450 LOC)
+  backend/app/data/target_metros.json                            (NEW, top-100 CBSAs)
+  backend/app/data/target_zips.json                              (NEW, growth-tier ZIPs)
+  backend/alembic/versions/<ts>_source_expansion.py              (NEW migration)
+  backend/tests/unit/test_yelp_keyword_matrix.py                 (NEW)
+  backend/tests/unit/test_nextdoor_keyword_matrix.py             (NEW)
+  backend/tests/unit/test_greatschools_keyword_matrix.py         (NEW)
+  backend/tests/unit/test_twitter_keyword_matrix.py              (NEW)
+  backend/tests/integration/test_macro_signal_scanner.py         (NEW)
+
+MODIFIED FILES:
+  backend/app/services/signal_to_opportunity.py
+      → add PLATFORM_SCORERS dispatch (see C.1)
+      → write confidence_tier and contributing_sources on opportunity create
+  backend/app/services/job_runner.py
+      → register macro_signal_scan every 6h
+  backend/app/services/webhook_gateway.py
+      → confirm/add yelp/nextdoor/greatschools/twitter endpoints
+  backend/app/models/opportunity.py
+      → add confidence_tier, contributing_sources, macro_context columns
+
+UNCHANGED (but referenced):
+  backend/app/services/opportunity_processor.py
+  backend/app/services/{fred,bls,sec_api,census,google_trends}_service.py
+  backend/app/services/geographic_extractor.py
+
+--------------------------------------------------------------------------------
+ENVIRONMENT VARIABLES (verify present in .env / Replit secrets)
+--------------------------------------------------------------------------------
+REQUIRED (most already set):
+  FRED_API_KEY
+  BLS_API_KEY
+  SEC_API_KEY                  # SEC-API.io paid tier
+  CENSUS_API_KEY
+  GOOGLE_TRENDS_API_KEY        # via SerpAPI or pytrends fallback
+  YELP_WEBHOOK_SECRET          # HMAC-SHA256 shared with scraper
+  NEXTDOOR_WEBHOOK_SECRET
+  GREATSCHOOLS_WEBHOOK_SECRET
+  TWITTER_WEBHOOK_SECRET
+
+NEW (introduced by this spec):
+  MACRO_SCAN_INTERVAL_HOURS=6
+  MACRO_SCAN_METROS_FILE=app/data/target_metros.json
+  MACRO_SCAN_ZIPS_FILE=app/data/target_zips.json
+  MACRO_SCAN_MIN_SCORE=0.50    # below this, anomalies are dropped, not emitted
+  MACRO_SCAN_DRY_RUN=false     # when true, log but don't write scraped_sources
+
+--------------------------------------------------------------------------------
+ROLLOUT CHECKLIST
+--------------------------------------------------------------------------------
+WEEK 1 — Source matrices
+  [ ] Implement yelp_keyword_matrix.py + unit tests (10 fixtures)
+  [ ] Implement nextdoor_keyword_matrix.py + unit tests
+  [ ] Implement greatschools_keyword_matrix.py + unit tests
+  [ ] Implement twitter_keyword_matrix.py + unit tests
+  [ ] Verify webhook_gateway.py has all 4 endpoints; add if missing
+  [ ] Update signal_to_opportunity.py PLATFORM_SCORERS dispatch
+  [ ] Run alembic migration (confidence_tier, contributing_sources, macro_context)
+
+WEEK 2 — Macro scanner
+  [ ] Implement macro_signal_scanner.py with FRED + Census rules only
+  [ ] Populate app/data/target_metros.json (top 100 CBSAs)
+  [ ] Populate app/data/target_zips.json (top 500 growth-tier ZIPs)
+  [ ] Register macro_signal_scan in job_runner
+  [ ] Run in MACRO_SCAN_DRY_RUN=true mode for 3 days, inspect output
+
+WEEK 3 — Expand macro + validate
+  [ ] Add BLS, SEC, Google Trends rules
+  [ ] Flip MACRO_SCAN_DRY_RUN=false
+  [ ] Monitor: # anomalies/day, # signals emitted, % becoming opportunities
+  [ ] Tune severity thresholds based on real data
+  [ ] Verify corroboration boost is firing (logs)
+
+POST-LAUNCH SUCCESS METRICS
+  - Daily new opportunities from yelp/nextdoor/greatschools/twitter > 0
+  - Macro anomalies emitted/day: 10-50 (range to monitor; <10 = thresholds
+    too strict, >50 = too noisy)
+  - % macro-only opportunities that survive AI validation: target > 30%
+  - Distribution check: no single source > 60% of new opportunities
+
+--------------------------------------------------------------------------------
+NEXT SPEC IN QUEUE
+--------------------------------------------------------------------------------
+After this lands, the matching companion spec is:
+
+  OPPGRID OPPORTUNITY CARD ENRICHMENT v1.0
+  — surface confidence_tier, contributing_sources, macro_context, urgency,
+    location, demographics on the Opportunity Card UI.
+
+That spec depends on the DB columns added in this one (confidence_tier,
+contributing_sources, macro_context) being live.
+
+================================================================================
+END OF SPECIFICATION
+================================================================================
