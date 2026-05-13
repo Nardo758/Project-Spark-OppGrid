@@ -176,6 +176,80 @@ class WebhookGateway:
         field = id_fields.get(source, "id")
         return str(data.get(field, "")) if data.get(field) else None
 
+    @staticmethod
+    def _normalize_yelp_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        """Map a flat Yelp webhook dict to the nested shape score_yelp_review expects."""
+        if "review" in data or "business" in data:
+            return data
+        coords = data.get("coordinates") or {}
+        if not isinstance(coords, dict):
+            coords = {}
+        return {
+            "review": {
+                "id": data.get("review_id") or data.get("id"),
+                "text": data.get("text") or data.get("review_text") or data.get("body") or "",
+                "rating": data.get("rating") or data.get("review_rating"),
+            },
+            "business": {
+                "id": data.get("business_id"),
+                "name": data.get("name"),
+                "categories": data.get("categories") or [],
+                "location": {
+                    "city": coords.get("city"),
+                    "state": coords.get("state"),
+                    "lat": coords.get("lat") or coords.get("latitude"),
+                    "lng": coords.get("lng") or coords.get("longitude"),
+                },
+            },
+        }
+
+    @staticmethod
+    def _normalize_nextdoor_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        """Map a flat Nextdoor webhook dict to the nested shape score_nextdoor_post expects."""
+        if "post" in data:
+            return data
+        neighborhood = data.get("neighborhood") or {}
+        if isinstance(neighborhood, str):
+            neighborhood = {"name": neighborhood}
+        return {
+            "post": {
+                "id": data.get("post_id"),
+                "title": data.get("title") or "",
+                "body": data.get("body") or data.get("content") or data.get("text") or "",
+                "category": data.get("category") or data.get("post_category"),
+                "neighborhood": neighborhood,
+            },
+        }
+
+    @staticmethod
+    def _normalize_twitter_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+        """Map a flat Twitter webhook dict to the nested shape score_tweet expects."""
+        if "tweet" in data:
+            return data
+        raw_author = data.get("author") or {}
+        if not isinstance(raw_author, dict):
+            raw_author = {}
+        return {
+            "tweet": {
+                "id": data.get("tweetId") or data.get("tweet_id") or data.get("id"),
+                "text": data.get("text") or "",
+                "lang": data.get("lang", "en"),
+                "like_count": (
+                    data.get("like_count") or data.get("favoriteCount")
+                    or data.get("likeCount") or 0
+                ),
+                "reply_count": data.get("reply_count") or data.get("replyCount") or 0,
+                "retweet_count": data.get("retweet_count") or data.get("retweetCount") or 0,
+                "created_at": data.get("created_at") or data.get("createdAt"),
+                "author": {
+                    "username": raw_author.get("username") or data.get("author_username") or "",
+                    "follower_count": raw_author.get("follower_count") or data.get("follower_count") or 0,
+                    "verified": raw_author.get("verified") or data.get("verified") or False,
+                },
+                "geo": data.get("geo") or {},
+            },
+        }
+
     async def process_webhook(
         self,
         source: str,
@@ -269,10 +343,11 @@ class WebhookGateway:
                 )
             
             # Enrich Yelp reviews with demand signal score before storage.
+            # Normalise flat webhook payload to the nested shape the scorer expects.
             if source == "yelp":
                 try:
                     from app.services.yelp_keyword_matrix import score_yelp_review
-                    yelp_score = score_yelp_review(data)
+                    yelp_score = score_yelp_review(self._normalize_yelp_payload(data))
                     data = {**data, "_oppgrid_signal": yelp_score}
                 except Exception as _score_exc:
                     logger.warning("Yelp scoring failed for item: %s", _score_exc)
@@ -281,7 +356,7 @@ class WebhookGateway:
             if source == "nextdoor":
                 try:
                     from app.services.nextdoor_keyword_matrix import score_nextdoor_post
-                    nextdoor_score = score_nextdoor_post(data)
+                    nextdoor_score = score_nextdoor_post(self._normalize_nextdoor_payload(data))
                     data = {**data, "_oppgrid_signal": nextdoor_score}
                 except Exception as _score_exc:
                     logger.warning("Nextdoor scoring failed for item: %s", _score_exc)
@@ -306,7 +381,7 @@ class WebhookGateway:
             if source == "twitter":
                 try:
                     from app.services.twitter_keyword_matrix import score_tweet
-                    twitter_score = score_tweet(data)
+                    twitter_score = score_tweet(self._normalize_twitter_payload(data))
                     data = {**data, "_oppgrid_signal": twitter_score}
                 except Exception as _score_exc:
                     logger.warning("Twitter scoring failed for item: %s", _score_exc)

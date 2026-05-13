@@ -306,6 +306,104 @@ class SignalToOpportunityProcessor:
                                       "location_hint": None, "raw_excerpt": ""}
 
     @staticmethod
+    def _normalize_yelp_payload(data: Dict) -> Dict:
+        """Map a flat Yelp webhook/signal dict to the nested shape score_yelp_review expects."""
+        if "review" in data or "business" in data:
+            return data
+        coords = data.get("coordinates") or {}
+        if isinstance(coords, str):
+            coords = {}
+        return {
+            "review": {
+                "id": data.get("review_id") or data.get("id"),
+                "text": data.get("text") or data.get("review_text") or data.get("content") or "",
+                "rating": data.get("rating") or data.get("review_rating"),
+            },
+            "business": {
+                "id": data.get("business_id"),
+                "name": data.get("name"),
+                "categories": data.get("categories") or [],
+                "location": {
+                    "city": coords.get("city") if isinstance(coords, dict) else None,
+                    "state": coords.get("state") if isinstance(coords, dict) else None,
+                    "lat": coords.get("lat") or coords.get("latitude") if isinstance(coords, dict) else None,
+                    "lng": coords.get("lng") or coords.get("longitude") if isinstance(coords, dict) else None,
+                },
+            },
+        }
+
+    @staticmethod
+    def _normalize_nextdoor_payload(data: Dict) -> Dict:
+        """Map a flat Nextdoor webhook/signal dict to the nested shape score_nextdoor_post expects."""
+        if "post" in data:
+            return data
+        neighborhood = data.get("neighborhood") or {}
+        if isinstance(neighborhood, str):
+            neighborhood = {"name": neighborhood}
+        return {
+            "post": {
+                "id": data.get("post_id"),
+                "title": data.get("title") or "",
+                "body": data.get("body") or data.get("content") or data.get("text") or "",
+                "category": data.get("category") or data.get("post_category"),
+                "neighborhood": neighborhood,
+            },
+        }
+
+    @staticmethod
+    def _normalize_twitter_payload(data: Dict) -> Dict:
+        """Map a flat Twitter webhook/signal dict to the nested shape score_tweet expects."""
+        if "tweet" in data:
+            return data
+        raw_author = data.get("author") or {}
+        if not isinstance(raw_author, dict):
+            raw_author = {}
+        return {
+            "tweet": {
+                "id": data.get("tweetId") or data.get("tweet_id") or data.get("id"),
+                "text": data.get("text") or "",
+                "lang": data.get("lang", "en"),
+                "like_count": (
+                    data.get("like_count") or data.get("favoriteCount")
+                    or data.get("likeCount") or 0
+                ),
+                "reply_count": data.get("reply_count") or data.get("replyCount") or 0,
+                "retweet_count": data.get("retweet_count") or data.get("retweetCount") or 0,
+                "created_at": data.get("created_at") or data.get("createdAt"),
+                "author": {
+                    "username": (
+                        raw_author.get("username")
+                        or data.get("author_username") or ""
+                    ),
+                    "follower_count": (
+                        raw_author.get("follower_count")
+                        or data.get("follower_count") or 0
+                    ),
+                    "verified": (
+                        raw_author.get("verified")
+                        or data.get("verified") or False
+                    ),
+                },
+                "geo": data.get("geo") or {},
+            },
+        }
+
+    @staticmethod
+    def _score_yelp_signal(signal: Dict) -> Dict:
+        """Adapter: normalize flat signal dict then call score_yelp_review."""
+        return score_yelp_review(SignalToOpportunityProcessor._normalize_yelp_payload(signal))
+
+    @staticmethod
+    def _score_nextdoor_signal(signal: Dict) -> Dict:
+        """Adapter: normalize flat signal dict then call score_nextdoor_post."""
+        return score_nextdoor_post(SignalToOpportunityProcessor._normalize_nextdoor_payload(signal))
+
+    @staticmethod
+    def _score_twitter_signal(signal: Dict) -> Dict:
+        """Adapter: normalize flat signal dict then call score_tweet."""
+        return score_tweet(SignalToOpportunityProcessor._normalize_twitter_payload(signal))
+
+    @staticmethod
     def _score_reddit_signal(signal: Dict) -> Dict:
         """Adapter: reconstruct score_reddit_post kwargs from the signal dict."""
         text = " ".join(filter(None, [
@@ -420,10 +518,12 @@ class SignalToOpportunityProcessor:
         """Apply pattern matching and scoring to all 7 supported platforms."""
 
         # Full platform dispatch — covers all 7 sources including pre-existing ones.
+        # Yelp/Nextdoor/Twitter use adapter methods that normalize flat signal
+        # dicts into the nested payload shape the matrix scorers require.
         PLATFORM_SCORERS = {
-            'yelp':          score_yelp_review,
-            'nextdoor':      score_nextdoor_post,
-            'twitter':       score_tweet,
+            'yelp':          self._score_yelp_signal,
+            'nextdoor':      self._score_nextdoor_signal,
+            'twitter':       self._score_twitter_signal,
             'greatschools':  self._score_greatschools_signal,
             'reddit':        self._score_reddit_signal,
             'craigslist':    self._score_craigslist_signal,
@@ -1603,7 +1703,9 @@ Consumer analysis across {signal_count} data points reveals a clear demand patte
                 
                 pattern = None
                 if signal.get('patterns_matched'):
-                    pattern = signal['patterns_matched'][0].get('pattern', '') if signal['patterns_matched'] else None
+                    first = signal['patterns_matched'][0]
+                    # New matrices emit str patterns; legacy ones emit dicts.
+                    pattern = first.get('pattern', '') if isinstance(first, dict) else str(first)
                 
                 self.db.execute(insert_query, {
                     'opp_id': opportunity_id,
