@@ -56,6 +56,17 @@ logger = logging.getLogger(__name__)
 
 DRY_RUN: bool = os.getenv("MACRO_SCAN_DRY_RUN", "").lower() in ("true", "1", "yes")
 
+def _is_dry_run() -> bool:
+    """
+    Re-evaluate dry-run flag at call time so that runtime env changes (e.g. in
+    tests that patch os.environ) are respected without requiring a module reload.
+    Falls back to the module-level DRY_RUN constant as a cached default.
+    """
+    env_val = os.getenv("MACRO_SCAN_DRY_RUN", "")
+    if env_val:
+        return env_val.lower() in ("true", "1", "yes")
+    return DRY_RUN
+
 _DATA_DIR = Path(__file__).parent.parent / "data"
 
 SEVERITY_SCORES: Dict[str, float] = {
@@ -527,7 +538,7 @@ class MacroSignalScanner:
             **anomaly.metadata,
         }
 
-        if DRY_RUN:
+        if _is_dry_run():
             logger.info(
                 "[MacroScan DRY-RUN] Would emit: %s | score=%.2f tier=%s geo=%s",
                 anomaly.rule_name, anomaly.final_score, anomaly.conf_tier, anomaly.geo,
@@ -570,7 +581,7 @@ class MacroSignalScanner:
     async def scan_all(self, db: Session) -> Dict[str, Any]:
         stats: Dict[str, Any] = {
             "started_at":    datetime.utcnow().isoformat(),
-            "dry_run":       DRY_RUN,
+            "dry_run":       _is_dry_run(),
             "anomalies":     [],
             "emitted":       0,
             "skipped":       0,
@@ -622,7 +633,7 @@ class MacroSignalScanner:
 
             stats["by_source"][source_name] = emitted_count
 
-        if not DRY_RUN:
+        if not _is_dry_run():
             try:
                 db.commit()
             except Exception as exc:
@@ -816,7 +827,19 @@ class MacroSignalScanner:
         geo: str,
         geo_meta: Dict[str, Any],
     ) -> None:
-        """Apply CENSUS_RULES to a data dict and append matching MacroAnomaly objects."""
+        """
+        Apply CENSUS_RULES to a Census data dict and append matching MacroAnomaly objects.
+
+        Census data is ACS 5-year survey (annual release) so period-over-period delta
+        comparisons are not meaningful within a single scan run.  Instead, rules use
+        absolute level thresholds calibrated against national averages:
+          unemployment_rate > 6.0 % (national avg ~3.7 %)
+          poverty_rate      > 12.0% (national avg ~11.6%)
+          median_rent       > $1,500/mo (national median ~$1,200)
+
+        If strict delta-percent trigger semantics are required in future, a
+        Census time-series cache (prior-year values in the DB) would be needed.
+        """
         for rule in CENSUS_RULES:
             metric = rule["metric"]
             value  = data.get(metric)

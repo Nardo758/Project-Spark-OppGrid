@@ -621,3 +621,49 @@ class TestDBIntegration:
         assert anomaly.conf_tier == "goldmine", (
             f"Expected goldmine with corr={GOLDMINE_THRESHOLD}, got {anomaly.conf_tier}"
         )
+
+    def test_idempotency_dedupe_skips_second_emit(self, db):
+        """
+        Emitting the same anomaly twice in non-dry-run mode must write exactly
+        one row; the second call should be skipped (external_id dedup guard).
+        """
+        from sqlalchemy import text as sa_text
+        import app.services.macro_signal_scanner as mod
+
+        scanner = MacroSignalScanner()
+        anomaly = _make_anomaly("mild", geo="Dedupe-City")
+        anomaly.final_score = 0.55
+        anomaly.conf_tier   = "weak_signal"
+        ext_id = anomaly.external_id()
+
+        original_dry = mod.DRY_RUN
+        mod.DRY_RUN = False
+        try:
+            # First emit — should insert
+            result1 = scanner._emit_signal(db, anomaly)
+            db.flush()
+
+            # Second emit — same external_id same day → should skip
+            result2 = scanner._emit_signal(db, anomaly)
+
+            count = db.execute(
+                sa_text(
+                    "SELECT COUNT(*) FROM scraped_sources WHERE external_id = :eid"
+                ),
+                {"eid": ext_id},
+            ).scalar()
+
+            assert count == 1, (
+                f"Expected exactly 1 row for ext_id={ext_id}, got {count}. "
+                "Idempotency guard may not be preventing duplicate inserts."
+            )
+            assert result1 is not None, "First emit should return a row"
+            assert result2 is None,     "Second emit (duplicate) should return None"
+        finally:
+            # Clean up the inserted row
+            db.execute(
+                sa_text("DELETE FROM scraped_sources WHERE external_id = :eid"),
+                {"eid": ext_id},
+            )
+            db.flush()
+            mod.DRY_RUN = original_dry
