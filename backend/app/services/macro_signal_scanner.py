@@ -20,10 +20,13 @@ Confidence tier
   goldmine    → corr_count >= 6  (macro × micro confirmation)
   validated   → corr_count >= 2 AND final_score >= 0.70
   weak_signal → all lone macro anomalies (corr_count < 2)
-  noise       → score < threshold (filtered before emit)
 
-This ensures lone macro anomalies always enter as weak_signal for AI
-evaluation, as specified in the Signal-to-Opportunity algorithm.
+Idempotency
+-----------
+Emit is day-granular: external_id encodes source + rule + geo + YYYYMMDD.
+Before inserting, the scanner checks whether a row with that external_id was
+already written today and skips if so, without rolling back other signals in
+the batch.
 
 Dry-run mode
 ------------
@@ -43,8 +46,9 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
+import httpx
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -63,6 +67,12 @@ SEVERITY_SCORES: Dict[str, float] = {
 CORR_BOOST_PER_SIGNAL: float = 0.02
 CORR_BOOST_CAP:        float = 0.15
 GOLDMINE_THRESHOLD:    int   = 6
+
+# Max metros/ZIPs per run to keep API usage bounded
+_CENSUS_MAX_METROS: int = 10
+_CENSUS_MAX_ZIPS:   int = 20
+# Step for ZIP sampling so we spread across the list rather than only hitting one city
+_CENSUS_ZIP_STEP:   int = 25
 
 
 # ---------------------------------------------------------------------------
@@ -112,62 +122,62 @@ FRED_RULES: List[Dict[str, Any]] = [
     },
 ]
 
-# BLS rules reference NAICS codes and test employment_change_yoy (fraction, e.g. 0.03 = 3%)
+# BLS rules — employment_change_yoy is a fraction (0.03 = +3%)
 BLS_RULES: List[Dict[str, Any]] = [
     {
-        "naics":       "722511",
+        "naics":         "722511",
         "industry_name": "Full-Service Restaurants",
-        "name":        "Restaurant Employment Surge",
-        "category":    "food_beverage",
-        "threshold":   0.03,
-        "moderate_at": 0.06,
-        "severe_at":   0.10,
-        "direction":   "up",
-        "description": "Restaurant employment grew {delta:.1%} YoY — market-entry demand rising",
+        "name":          "Restaurant Employment Surge",
+        "category":      "food_beverage",
+        "threshold":     0.03,
+        "moderate_at":   0.06,
+        "severe_at":     0.10,
+        "direction":     "up",
+        "description":   "Restaurant employment grew {delta:.1%} YoY — market-entry demand rising",
     },
     {
-        "naics":       "713940",
+        "naics":         "713940",
         "industry_name": "Fitness & Recreational Sports Centers",
-        "name":        "Fitness Employment Contraction",
-        "category":    "fitness",
-        "threshold":   0.03,
-        "moderate_at": 0.06,
-        "severe_at":   0.10,
-        "direction":   "down",
-        "description": "Fitness sector employment fell {delta:.1%} YoY — facility closures creating supply gap",
+        "name":          "Fitness Employment Contraction",
+        "category":      "fitness",
+        "threshold":     0.03,
+        "moderate_at":   0.06,
+        "severe_at":     0.10,
+        "direction":     "down",
+        "description":   "Fitness sector employment fell {delta:.1%} YoY — facility closures creating supply gap",
     },
     {
-        "naics":       "624410",
+        "naics":         "624410",
         "industry_name": "Child Day Care Services",
-        "name":        "Childcare Employment Drop",
-        "category":    "childcare",
-        "threshold":   0.02,
-        "moderate_at": 0.05,
-        "severe_at":   0.08,
-        "direction":   "down",
-        "description": "Childcare employment contracted {delta:.1%} YoY — childcare supply crunch opportunity",
+        "name":          "Childcare Employment Drop",
+        "category":      "childcare",
+        "threshold":     0.02,
+        "moderate_at":   0.05,
+        "severe_at":     0.08,
+        "direction":     "down",
+        "description":   "Childcare employment contracted {delta:.1%} YoY — childcare supply crunch opportunity",
     },
     {
-        "naics":       "531130",
+        "naics":         "531130",
         "industry_name": "Lessors of Miniwarehouses & Self-Storage Units",
-        "name":        "Self-Storage Employment Growth",
-        "category":    "self_storage",
-        "threshold":   0.04,
-        "moderate_at": 0.08,
-        "severe_at":   0.12,
-        "direction":   "up",
-        "description": "Self-storage employment grew {delta:.1%} YoY — migration-driven storage demand",
+        "name":          "Self-Storage Employment Growth",
+        "category":      "self_storage",
+        "threshold":     0.04,
+        "moderate_at":   0.08,
+        "severe_at":     0.12,
+        "direction":     "up",
+        "description":   "Self-storage employment grew {delta:.1%} YoY — migration-driven storage demand",
     },
 ]
 
-# Census rules use threshold comparisons against fields returned by CensusDataService.fetch_by_county()
-# Available fields: unemployment_rate, poverty_rate, median_rent, median_income, etc.
+# Census rules — use fields actually returned by CensusDataService.fetch_by_county()
+# and fetch_by_zipcode(): unemployment_rate, poverty_rate, median_rent, etc.
 CENSUS_RULES: List[Dict[str, Any]] = [
     {
         "metric":      "unemployment_rate",
         "name":        "High Local Unemployment",
         "category":    "labor_market",
-        "threshold":   6.0,      # > national avg ~3.7%
+        "threshold":   6.0,      # national avg ~3.7%
         "moderate_at": 9.0,
         "severe_at":   14.0,
         "direction":   "up",
@@ -177,7 +187,7 @@ CENSUS_RULES: List[Dict[str, Any]] = [
         "metric":      "poverty_rate",
         "name":        "High Poverty Rate",
         "category":    "affordability",
-        "threshold":   12.0,     # > national avg ~11.6%
+        "threshold":   12.0,     # national avg ~11.6%
         "moderate_at": 20.0,
         "severe_at":   30.0,
         "direction":   "up",
@@ -187,7 +197,7 @@ CENSUS_RULES: List[Dict[str, Any]] = [
         "metric":      "median_rent",
         "name":        "Rent Affordability Squeeze",
         "category":    "housing",
-        "threshold":   1500.0,   # > national median ~$1,200
+        "threshold":   1500.0,   # national median ~$1,200
         "moderate_at": 2000.0,
         "severe_at":   2800.0,
         "direction":   "up",
@@ -195,6 +205,7 @@ CENSUS_RULES: List[Dict[str, Any]] = [
     },
 ]
 
+# Keywords for SEC filing scans
 SEC_SUPPLY_KEYWORDS: List[str] = [
     "supply shortage", "supply constraint", "supply chain disruption",
     "capacity constraints", "unmet demand", "supply deficit",
@@ -230,18 +241,21 @@ SEC_RULES: List[Dict[str, Any]] = [
     },
 ]
 
-# Representative cross-industry tickers to scan for macro-level SEC signals
+# Representative cross-industry tickers scanned for macro-level SEC signals
 _SEC_SCAN_TICKERS: List[str] = [
-    "MCD", "SBUX", "CMG",            # food / restaurant
-    "PLNT", "XPOF",                  # fitness
-    "BFAM",                          # childcare
-    "PSA", "EXR",                    # self-storage
-    "HLT", "MAR",                    # hospitality
-    "CVS", "WBA",                    # pharmacy / healthcare
-    "KR", "ACI",                     # grocery
-    "CHWY",                          # pet
-    "AZO", "ORLY",                   # auto
+    "MCD", "SBUX", "CMG",        # food/restaurant
+    "PLNT", "XPOF",              # fitness
+    "BFAM",                      # childcare
+    "PSA", "EXR",                # self-storage
+    "HLT", "MAR",                # hospitality
+    "CVS", "WBA",                # pharmacy/healthcare
+    "KR", "ACI",                 # grocery
+    "CHWY",                      # pet
+    "AZO", "ORLY",               # auto
 ]
+
+# SEC form types to scan across
+_SEC_FORM_TYPES: List[str] = ["10-K", "10-Q", "8-K"]
 
 TRENDS_RULES: List[Dict[str, Any]] = [
     {
@@ -312,6 +326,13 @@ class MacroAnomaly:
     final_score: float = 0.0
     conf_tier:   str   = "weak_signal"
 
+    def external_id(self) -> str:
+        """Stable daily-granular dedup key for this anomaly."""
+        safe_rule = re.sub(r"[^a-z0-9_]", "_", self.rule_name.lower())
+        safe_geo  = re.sub(r"[^a-z0-9_]", "_", (self.geo or "national").lower())[:40]
+        date_tag  = datetime.utcnow().strftime("%Y%m%d")
+        return f"macro_{self.source}_{safe_rule}_{safe_geo}_{date_tag}"
+
     def to_signal_dict(self) -> Dict[str, Any]:
         return {
             "signal_score":      self.final_score,
@@ -357,12 +378,19 @@ class MacroSignalScanner:
                 self._zips = []
         return self._zips
 
+    def _sample_zips(self) -> List[Dict]:
+        """Return a spread sample of ZIPs from target_zips.json."""
+        zips = self._target_zips()
+        if not zips:
+            return []
+        step = max(1, len(zips) // _CENSUS_MAX_ZIPS)
+        return zips[::step][:_CENSUS_MAX_ZIPS]
+
     # ------------------------------------------------------------------
     # Severity helper
     # ------------------------------------------------------------------
 
     def _classify_severity(self, value: float, rule: Dict) -> Optional[str]:
-        """Return severity tier if value clears the base threshold, else None."""
         if abs(value) >= rule["severe_at"]:
             return "severe"
         if abs(value) >= rule["moderate_at"]:
@@ -379,11 +407,10 @@ class MacroSignalScanner:
         """
         Mutate anomaly with final_score and conf_tier after corroboration lookup.
 
-        Tier assignment (per spec):
+        Tier:
           goldmine    — corr_count >= 6 (macro × micro confirmation)
           validated   — corr_count >= 2 AND final_score >= 0.70
-          weak_signal — all lone macro anomalies (corr_count < 2)
-          noise       — score below threshold (filtered before emit; not set here)
+          weak_signal — lone macro anomaly (corr_count < 2)
         """
         boost = min(corr_count * CORR_BOOST_PER_SIGNAL, CORR_BOOST_CAP)
         anomaly.corr_count  = corr_count
@@ -407,10 +434,6 @@ class MacroSignalScanner:
         category: str,
         days: int = 60,
     ) -> int:
-        """
-        Count matching micro-signals in scraped_sources for the same geo+category
-        within the last `days` days.  Returns an int count.
-        """
         try:
             since = datetime.now(timezone.utc) - timedelta(days=days)
             q = text("""
@@ -441,17 +464,34 @@ class MacroSignalScanner:
             return 0
 
     # ------------------------------------------------------------------
+    # Idempotency check
+    # ------------------------------------------------------------------
+
+    def _already_emitted_today(self, db: Session, ext_id: str) -> bool:
+        """Return True if a row with this external_id already exists today."""
+        try:
+            result = db.execute(
+                text("SELECT 1 FROM scraped_sources WHERE external_id = :eid LIMIT 1"),
+                {"eid": ext_id},
+            ).scalar()
+            return bool(result)
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------
     # DB emit
     # ------------------------------------------------------------------
 
     def _emit_signal(self, db: Session, anomaly: MacroAnomaly) -> Optional[Any]:
-        """Write one ScrapedSource row. Skipped (logged only) in dry-run mode."""
+        """
+        Write one ScrapedSource row.
+        - In dry-run mode: logs only, returns None.
+        - Skips insert if same external_id was already written today.
+        - On per-row DB errors: logs and continues without rolling back the batch.
+        """
         from app.models.scraped_source import ScrapedSource
 
-        external_id = (
-            f"macro_{anomaly.source}_{anomaly.rule_name.lower().replace(' ', '_')}"
-            f"_{anomaly.geo or 'national'}_{datetime.utcnow().strftime('%Y%m%d')}"
-        )
+        ext_id = anomaly.external_id()
 
         payload: Dict[str, Any] = {
             "source":        anomaly.source,
@@ -475,24 +515,33 @@ class MacroSignalScanner:
             )
             return None
 
+        # Idempotency: skip if already written today
+        if self._already_emitted_today(db, ext_id):
+            logger.debug("[MacroScan] Skipping duplicate external_id=%s", ext_id)
+            return None
+
+        row = ScrapedSource(
+            external_id=ext_id,
+            source_type="macro_anomaly",
+            scrape_id=f"macro_scan_{datetime.utcnow().strftime('%Y%m%d_%H%M')}",
+            raw_data=payload,
+            processed=0,
+        )
         try:
-            row = ScrapedSource(
-                external_id=external_id,
-                source_type="macro_anomaly",
-                scrape_id=f"macro_scan_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-                raw_data=payload,
-                processed=0,
-            )
-            db.add(row)
-            db.flush()
+            # Use a SAVEPOINT so a per-row failure doesn't roll back sibling rows
+            with db.begin_nested():
+                db.add(row)
+                db.flush()
             logger.info(
-                "[MacroScan] Emitted id=%s rule=%s score=%.2f tier=%s geo=%s",
-                row.id, anomaly.rule_name, anomaly.final_score, anomaly.conf_tier, anomaly.geo,
+                "[MacroScan] Emitted rule=%s score=%.2f tier=%s geo=%s",
+                anomaly.rule_name, anomaly.final_score, anomaly.conf_tier, anomaly.geo,
             )
             return row
         except Exception as exc:
-            logger.error("[MacroScan] Failed to emit signal %s: %s", anomaly.rule_name, exc)
-            db.rollback()
+            logger.error(
+                "[MacroScan] Failed to emit signal %s (ext_id=%s): %s",
+                anomaly.rule_name, ext_id, exc,
+            )
             return None
 
     # ------------------------------------------------------------------
@@ -500,7 +549,6 @@ class MacroSignalScanner:
     # ------------------------------------------------------------------
 
     async def scan_all(self, db: Session) -> Dict[str, Any]:
-        """Run all five scanners. Returns stats dict."""
         stats: Dict[str, Any] = {
             "started_at":    datetime.utcnow().isoformat(),
             "dry_run":       DRY_RUN,
@@ -536,8 +584,12 @@ class MacroSignalScanner:
                 if row is not None or DRY_RUN:
                     emitted_count += 1
                     stats["emitted"] += 1
-                    stats["by_severity"][anomaly.severity] = stats["by_severity"].get(anomaly.severity, 0) + 1
-                    stats["by_tier"][anomaly.conf_tier]    = stats["by_tier"].get(anomaly.conf_tier, 0) + 1
+                    stats["by_severity"][anomaly.severity] = (
+                        stats["by_severity"].get(anomaly.severity, 0) + 1
+                    )
+                    stats["by_tier"][anomaly.conf_tier] = (
+                        stats["by_tier"].get(anomaly.conf_tier, 0) + 1
+                    )
                     stats["anomalies"].append({
                         "rule":     anomaly.rule_name,
                         "source":   anomaly.source,
@@ -556,7 +608,10 @@ class MacroSignalScanner:
                 db.commit()
             except Exception as exc:
                 logger.error("[MacroScan] Final commit failed: %s", exc)
-                db.rollback()
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
         stats["finished_at"] = datetime.utcnow().isoformat()
         logger.info(
@@ -577,7 +632,6 @@ class MacroSignalScanner:
             return []
 
         anomalies: List[MacroAnomaly] = []
-
         for rule in FRED_RULES:
             try:
                 data = await service.get_series(rule["series_id"])
@@ -620,7 +674,6 @@ class MacroSignalScanner:
                 ))
             except Exception as exc:
                 logger.warning("[MacroScan/FRED] Rule %s failed: %s", rule["name"], exc)
-
         return anomalies
 
     # ------------------------------------------------------------------
@@ -630,16 +683,14 @@ class MacroSignalScanner:
     async def _scan_bls(self, db: Session) -> List[MacroAnomaly]:
         from app.services.bls_service import BLSService
         service = BLSService()
-        # BLS_API_KEY check via internal _is_configured
         if not service._is_configured():
             logger.debug("[MacroScan/BLS] Not configured — skipping")
             return []
 
         anomalies: List[MacroAnomaly] = []
-
         for rule in BLS_RULES:
             try:
-                # get_industry_data is already async — await it directly
+                # get_industry_data is already async — await directly
                 data = await service.get_industry_data(
                     naics_code=rule["naics"],
                     industry_name=rule["industry_name"],
@@ -647,18 +698,18 @@ class MacroSignalScanner:
                 if data is None:
                     continue
 
-                # employment_change_yoy is the YoY fraction (e.g. 0.03 = +3%)
+                # employment_change_yoy is the YoY fractional change (e.g. 0.03 = +3%)
                 emp_change = getattr(data, "employment_change_yoy", None)
                 if emp_change is None:
                     continue
 
-                # Normalise to fraction if expressed as percentage points
+                # Normalise: if stored as percentage points (e.g. 3.0) → fraction
                 if abs(emp_change) > 1.0:
                     emp_change = emp_change / 100.0
 
                 delta = emp_change
                 if rule["direction"] == "down":
-                    delta = -emp_change  # test magnitude of contraction
+                    delta = -emp_change
 
                 severity = self._classify_severity(delta, rule)
                 if severity is None:
@@ -675,18 +726,17 @@ class MacroSignalScanner:
                     delta=      abs(emp_change),
                     description=description,
                     metadata={
-                        "naics":              rule["naics"],
-                        "industry_name":      getattr(data, "industry_name", ""),
-                        "total_employment":   getattr(data, "total_employment", None),
+                        "naics":               rule["naics"],
+                        "industry_name":       getattr(data, "industry_name", ""),
+                        "total_employment":    getattr(data, "total_employment", None),
                         "employment_change_yoy": emp_change,
-                        "avg_weekly_wage":    getattr(data, "avg_weekly_wage", None),
+                        "avg_weekly_wage":     getattr(data, "avg_weekly_wage", None),
                         "establishment_count": getattr(data, "establishment_count", None),
-                        "data_period":        getattr(data, "data_period", ""),
+                        "data_period":         getattr(data, "data_period", ""),
                     },
                 ))
             except Exception as exc:
                 logger.warning("[MacroScan/BLS] Rule %s failed: %s", rule["name"], exc)
-
         return anomalies
 
     # ------------------------------------------------------------------
@@ -701,85 +751,121 @@ class MacroSignalScanner:
             return []
 
         anomalies: List[MacroAnomaly] = []
-        metros = self._target_metros()
 
-        # Sample first 10 metros to avoid API saturation per run
-        for metro in metros[:10]:
+        # --- Metro (county) scan ---
+        metros = self._target_metros()[:_CENSUS_MAX_METROS]
+        for metro in metros:
             state_fips  = metro.get("state_fips", "")
             county_fips = metro.get("county_fips", "")
             label       = metro.get("label", metro.get("cbsa_code", "unknown"))
-
             if not state_fips or not county_fips:
                 continue
-
             try:
                 data = await service.fetch_by_county(state_fips, county_fips)
-                if not data:
-                    continue
-
-                for rule in CENSUS_RULES:
-                    metric = rule["metric"]
-                    value  = data.get(metric)
-                    if value is None:
-                        continue
-
-                    severity = self._classify_severity(abs(value), rule)
-                    if severity is None:
-                        continue
-
-                    description = rule["description"].format(delta=abs(value))
-                    anomalies.append(MacroAnomaly(
-                        source=     "census",
-                        rule_name=  rule["name"],
-                        category=   rule["category"],
-                        severity=   severity,
-                        base_score= SEVERITY_SCORES[severity],
-                        geo=        label,
-                        delta=      abs(value),
-                        description=description,
-                        metadata={
-                            "cbsa_label":   label,
-                            "state_fips":   state_fips,
-                            "county_fips":  county_fips,
-                            "metric":       metric,
-                            "metric_value": value,
-                        },
-                    ))
+                if data:
+                    self._apply_census_rules(anomalies, data, geo=label,
+                                              geo_meta={"cbsa_label": label,
+                                                         "state_fips": state_fips,
+                                                         "county_fips": county_fips})
             except Exception as exc:
                 logger.warning("[MacroScan/Census] Metro %s failed: %s", label, exc)
 
+        # --- ZIP scan (spread sample) ---
+        for entry in self._sample_zips():
+            zip_code = entry.get("zip", "")
+            city     = entry.get("city", "")
+            state    = entry.get("state", "")
+            if not zip_code:
+                continue
+            geo_label = f"{city}, {state}" if city and state else zip_code
+            try:
+                data = await service.fetch_by_zipcode(zip_code)
+                if data:
+                    self._apply_census_rules(anomalies, data, geo=geo_label,
+                                              geo_meta={"zip": zip_code,
+                                                         "city": city,
+                                                         "state": state})
+            except Exception as exc:
+                logger.warning("[MacroScan/Census] ZIP %s failed: %s", zip_code, exc)
+
         return anomalies
+
+    def _apply_census_rules(
+        self,
+        anomalies: List[MacroAnomaly],
+        data: Dict[str, Any],
+        geo: str,
+        geo_meta: Dict[str, Any],
+    ) -> None:
+        """Apply CENSUS_RULES to a data dict and append matching MacroAnomaly objects."""
+        for rule in CENSUS_RULES:
+            metric = rule["metric"]
+            value  = data.get(metric)
+            if value is None:
+                continue
+            severity = self._classify_severity(abs(value), rule)
+            if severity is None:
+                continue
+            description = rule["description"].format(delta=abs(value))
+            anomalies.append(MacroAnomaly(
+                source=     "census",
+                rule_name=  rule["name"],
+                category=   rule["category"],
+                severity=   severity,
+                base_score= SEVERITY_SCORES[severity],
+                geo=        geo,
+                delta=      abs(value),
+                description=description,
+                metadata={**geo_meta, "metric": metric, "metric_value": value},
+            ))
 
     # ------------------------------------------------------------------
     # SEC scanner
     # ------------------------------------------------------------------
 
     async def _scan_sec(self, db: Session) -> List[MacroAnomaly]:
-        from app.services.sec_api_service import SECAPIService
+        from app.services.sec_api_service import SECAPIService, SEC_API_BASE
         service = SECAPIService()
         if not service.is_configured:
             logger.debug("[MacroScan/SEC] Not configured — skipping")
             return []
 
-        anomalies: List[MacroAnomaly] = []
-
-        # Scan a cross-industry set of representative tickers for keyword signals
+        # Fetch filings across all three form types for cross-industry tickers
         filing_texts: List[str] = []
-        for ticker in _SEC_SCAN_TICKERS:
-            try:
-                filing = await service.get_latest_10k(ticker)
-                if not filing:
-                    continue
-                text_body = _extract_filing_text(filing)
-                if text_body:
-                    filing_texts.append(text_body)
-            except Exception as exc:
-                logger.debug("[MacroScan/SEC] Ticker %s failed: %s", ticker, exc)
+        filing_meta:  List[Dict] = []
+
+        for form_type in _SEC_FORM_TYPES:
+            for ticker in _SEC_SCAN_TICKERS:
+                try:
+                    filing = await self._fetch_filing_by_type(
+                        service.api_key, ticker, form_type
+                    )
+                    if not filing:
+                        continue
+                    # Build text from metadata fields
+                    text_body = _extract_filing_text(filing)
+                    # Attempt to fetch and append linked plain-text content (best-effort)
+                    linked_text = await _fetch_filing_link_text(filing)
+                    if linked_text:
+                        text_body = text_body + " " + linked_text
+                    if text_body.strip():
+                        filing_texts.append(text_body)
+                        filing_meta.append({
+                            "ticker":   ticker,
+                            "form":     form_type,
+                            "company":  filing.get("entityName") or filing.get("companyName", ""),
+                        })
+                except Exception as exc:
+                    logger.debug(
+                        "[MacroScan/SEC] %s %s failed: %s", form_type, ticker, exc
+                    )
 
         if not filing_texts:
+            logger.debug("[MacroScan/SEC] No filing texts retrieved — skipping rules")
             return []
 
         combined_text = " ".join(filing_texts)
+        anomalies: List[MacroAnomaly] = []
 
         for rule in SEC_RULES:
             try:
@@ -787,7 +873,6 @@ class MacroSignalScanner:
                     len(re.findall(re.escape(kw), combined_text, re.IGNORECASE))
                     for kw in rule["keywords"]
                 )
-
                 if total_hits == 0:
                     continue
 
@@ -795,11 +880,10 @@ class MacroSignalScanner:
                 if severity is None:
                     continue
 
-                # Record which keywords fired for transparency
                 keyword_hits = {
-                    kw: len(re.findall(re.escape(kw), combined_text, re.IGNORECASE))
+                    kw: cnt
                     for kw in rule["keywords"]
-                    if re.search(re.escape(kw), combined_text, re.IGNORECASE)
+                    if (cnt := len(re.findall(re.escape(kw), combined_text, re.IGNORECASE))) > 0
                 }
 
                 description = rule["description"].format(delta=total_hits)
@@ -813,16 +897,58 @@ class MacroSignalScanner:
                     delta=      float(total_hits),
                     description=description,
                     metadata={
-                        "total_keyword_hits": total_hits,
-                        "keyword_hits":       keyword_hits,
-                        "tickers_scanned":    _SEC_SCAN_TICKERS,
-                        "filings_found":      len(filing_texts),
+                        "total_keyword_hits":   total_hits,
+                        "keyword_hits":         keyword_hits,
+                        "tickers_scanned":      _SEC_SCAN_TICKERS,
+                        "form_types_scanned":   _SEC_FORM_TYPES,
+                        "filings_retrieved":    len(filing_texts),
+                        "sample_companies":     [m["company"] for m in filing_meta[:5]],
                     },
                 ))
             except Exception as exc:
                 logger.warning("[MacroScan/SEC] Rule %s failed: %s", rule["name"], exc)
 
         return anomalies
+
+    @staticmethod
+    async def _fetch_filing_by_type(
+        api_key: str, ticker: str, form_type: str
+    ) -> Optional[Dict]:
+        """
+        Fetch the most recent filing of a given form type for a ticker
+        using the sec-api.io full-text search endpoint.
+        Mirrors the pattern in SECAPIService.get_latest_10k().
+        """
+        from app.services.sec_api_service import SEC_API_BASE
+        query = {
+            "query": {
+                "query_string": {
+                    "query": f'ticker:{ticker} AND formType:"{form_type}"'
+                }
+            },
+            "from":  0,
+            "size":  1,
+            "sort":  [{"filedAt": {"order": "desc"}}],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    SEC_API_BASE,
+                    json=query,
+                    headers={"Authorization": api_key},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                filings = data.get("filings") or data.get("hits", {}).get("hits", [])
+                if not filings:
+                    return None
+                filing = filings[0]
+                if "_source" in filing:
+                    filing = filing["_source"]
+                return filing
+        except Exception as exc:
+            logger.debug("[MacroScan/SEC] %s %s fetch failed: %s", form_type, ticker, exc)
+            return None
 
     # ------------------------------------------------------------------
     # Google Trends scanner
@@ -836,10 +962,9 @@ class MacroSignalScanner:
             return []
 
         anomalies: List[MacroAnomaly] = []
-
         for rule in TRENDS_RULES:
             try:
-                # fetch_interest_over_time is synchronous (SerpAPI client); run in thread
+                # fetch_interest_over_time is synchronous (SerpAPI client)
                 trend = await _run_sync(
                     service.fetch_interest_over_time,
                     rule["keyword"],
@@ -848,18 +973,14 @@ class MacroSignalScanner:
                 )
                 if not trend:
                     continue
-
                 interest = trend.get("current_interest") or trend.get("average_interest") or 0
                 if not interest:
                     continue
-
                 severity = self._classify_severity(interest, rule)
                 if severity is None:
                     continue
-
                 description = rule["description"].format(
-                    keyword=rule["keyword"],
-                    delta=interest,
+                    keyword=rule["keyword"], delta=interest
                 )
                 anomalies.append(MacroAnomaly(
                     source=     "trends",
@@ -880,7 +1001,6 @@ class MacroSignalScanner:
                 ))
             except Exception as exc:
                 logger.warning("[MacroScan/Trends] Rule %s failed: %s", rule["name"], exc)
-
         return anomalies
 
 
@@ -896,28 +1016,39 @@ def _safe_float(val: Any) -> Optional[float]:
 
 
 def _extract_filing_text(filing: Dict) -> str:
-    """
-    Extract readable text from a sec-api.io filing dict.
-    Fields typically available: entityName, formType, periodOfReport, filedAt,
-    description, linkToHtml, linkToTxt.
-    """
+    """Extract readable text from sec-api.io filing metadata dict."""
     parts = []
-    text_fields = (
-        "entityName", "companyName", "formType", "periodOfReport",
-        "filedAt", "description",
-    )
-    for key in text_fields:
+    for key in ("entityName", "companyName", "formType", "periodOfReport",
+                "filedAt", "description", "items"):
         v = filing.get(key)
         if v and isinstance(v, str):
             parts.append(v)
-    # _source nesting used in some API responses
     src = filing.get("_source") or {}
     if isinstance(src, dict):
-        for k in text_fields:
-            v = src.get(k)
+        for key in ("entityName", "companyName", "periodOfReport",
+                    "description", "items"):
+            v = src.get(key)
             if v and isinstance(v, str):
                 parts.append(v)
     return " ".join(parts)
+
+
+async def _fetch_filing_link_text(filing: Dict, max_chars: int = 8000) -> Optional[str]:
+    """
+    Best-effort: download the first `max_chars` chars of a filing's plain-text
+    link (linkToTxt) so keyword scanning has real body content to work with.
+    Returns None on any failure.
+    """
+    link = filing.get("linkToTxt") or filing.get("link_to_txt")
+    if not link or not isinstance(link, str):
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(link)
+            resp.raise_for_status()
+            return resp.text[:max_chars]
+    except Exception:
+        return None
 
 
 async def _run_sync(fn, *args, **kwargs):

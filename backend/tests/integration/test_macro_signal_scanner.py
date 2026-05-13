@@ -339,6 +339,122 @@ class TestScanAllStatsShape:
 
 
 # ---------------------------------------------------------------------------
+# external_id dedup key
+# ---------------------------------------------------------------------------
+
+class TestExternalId:
+
+    def test_external_id_contains_source_and_rule(self):
+        anomaly = _make_anomaly("mild", geo="Austin, TX")
+        eid = anomaly.external_id()
+        assert "fred" in eid
+        assert "test_rule" in eid
+
+    def test_external_id_contains_date(self):
+        from datetime import datetime
+        anomaly = _make_anomaly("mild")
+        eid = anomaly.external_id()
+        today = datetime.utcnow().strftime("%Y%m%d")
+        assert today in eid
+
+    def test_external_id_national_when_no_geo(self):
+        anomaly = _make_anomaly("mild", geo=None)
+        eid = anomaly.external_id()
+        assert "national" in eid
+
+    def test_external_id_stable_within_same_day(self):
+        """Same anomaly called twice should produce the same external_id."""
+        anomaly = _make_anomaly("moderate", geo="Houston")
+        assert anomaly.external_id() == anomaly.external_id()
+
+
+# ---------------------------------------------------------------------------
+# _apply_census_rules helper
+# ---------------------------------------------------------------------------
+
+class TestApplyCensusRules:
+    scanner = MacroSignalScanner()
+
+    def test_high_unemployment_triggers_anomaly(self):
+        anomalies: list = []
+        data = {"unemployment_rate": 10.5, "poverty_rate": 5.0, "median_rent": 900.0}
+        self.scanner._apply_census_rules(
+            anomalies, data, geo="Detroit, MI", geo_meta={"zip": "48201"}
+        )
+        cats = [a.category for a in anomalies]
+        assert "labor_market" in cats
+
+    def test_high_rent_triggers_anomaly(self):
+        anomalies: list = []
+        data = {"unemployment_rate": 3.0, "poverty_rate": 5.0, "median_rent": 2500.0}
+        self.scanner._apply_census_rules(
+            anomalies, data, geo="San Francisco, CA", geo_meta={}
+        )
+        cats = [a.category for a in anomalies]
+        assert "housing" in cats
+
+    def test_below_threshold_no_anomaly(self):
+        anomalies: list = []
+        data = {"unemployment_rate": 2.0, "poverty_rate": 4.0, "median_rent": 800.0}
+        self.scanner._apply_census_rules(anomalies, data, geo="Suburbia", geo_meta={})
+        assert anomalies == []
+
+    def test_geo_propagated_to_anomaly(self):
+        anomalies: list = []
+        data = {"unemployment_rate": 12.0}
+        self.scanner._apply_census_rules(
+            anomalies, data, geo="Memphis, TN", geo_meta={}
+        )
+        assert any(a.geo == "Memphis, TN" for a in anomalies)
+
+
+# ---------------------------------------------------------------------------
+# _sample_zips — spread sampling
+# ---------------------------------------------------------------------------
+
+class TestSampleZips:
+    scanner = MacroSignalScanner()
+
+    def test_sample_count_bounded(self):
+        from app.services.macro_signal_scanner import _CENSUS_MAX_ZIPS
+        sample = self.scanner._sample_zips()
+        assert len(sample) <= _CENSUS_MAX_ZIPS
+
+    def test_sample_is_non_empty(self):
+        sample = self.scanner._sample_zips()
+        assert len(sample) > 0
+
+    def test_sample_zips_have_zip_key(self):
+        for z in self.scanner._sample_zips():
+            assert "zip" in z
+
+
+# ---------------------------------------------------------------------------
+# Idempotency — _already_emitted_today
+# ---------------------------------------------------------------------------
+
+class TestIdempotency:
+
+    def test_already_emitted_returns_false_when_not_found(self):
+        scanner = MacroSignalScanner()
+        db = MagicMock()
+        db.execute.return_value.scalar.return_value = None
+        assert scanner._already_emitted_today(db, "macro_fred_test_national_20260513") is False
+
+    def test_already_emitted_returns_true_when_found(self):
+        scanner = MacroSignalScanner()
+        db = MagicMock()
+        db.execute.return_value.scalar.return_value = 1
+        assert scanner._already_emitted_today(db, "macro_fred_test_national_20260513") is True
+
+    def test_already_emitted_returns_false_on_db_error(self):
+        scanner = MacroSignalScanner()
+        db = MagicMock()
+        db.execute.side_effect = Exception("DB error")
+        assert scanner._already_emitted_today(db, "any_ext_id") is False
+
+
+# ---------------------------------------------------------------------------
 # DB integration — skipped when DATABASE_URL absent
 # ---------------------------------------------------------------------------
 
