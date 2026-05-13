@@ -36,6 +36,7 @@ class Opportunity(Base):
     geographic_scope = Column(String(50), default="online")  # local, regional, national, international, online
     country = Column(String(100), nullable=True)  # Country name or code
     region = Column(String(100), nullable=True)  # State/Province/Region
+    state = Column(String(100), nullable=True)   # Two-letter state abbreviation
     city = Column(String(100), nullable=True)  # City name
     latitude = Column(Float, nullable=True)  # GPS latitude
     longitude = Column(Float, nullable=True)  # GPS longitude
