@@ -434,6 +434,19 @@ class MacroSignalScanner:
         category: str,
         days: int = 60,
     ) -> int:
+        """
+        Count matching micro-signals in scraped_sources for the same geo+category
+        within the last `days` days.
+
+        Checks both storage layouts used by micro-signal sources:
+          1. Top-level fields: raw_data->>'category_hint', raw_data->>'category'
+             (used by older or simple webhook payloads)
+          2. Nested _oppgrid_signal: raw_data->'_oppgrid_signal'->>'category_hint'
+             (used by webhook_gateway enriched signals — the primary production layout)
+
+        Geo matching similarly checks both top-level geo/state/location_hint fields
+        and the nested _oppgrid_signal.location_hint written by keyword-matrix scorers.
+        """
         try:
             since = datetime.now(timezone.utc) - timedelta(days=days)
             q = text("""
@@ -441,14 +454,20 @@ class MacroSignalScanner:
                 WHERE received_at >= :since
                   AND source_type != 'macro_anomaly'
                   AND (
+                    -- Top-level category fields (simple/legacy payloads)
                     raw_data->>'category_hint' ILIKE :category
-                    OR raw_data->>'category' ILIKE :category
+                    OR raw_data->>'category'   ILIKE :category
+                    -- Nested _oppgrid_signal.category_hint (webhook_gateway enriched signals)
+                    OR raw_data->'_oppgrid_signal'->>'category_hint' ILIKE :category
                   )
                   AND (
                     :geo IS NULL
-                    OR raw_data->>'geo' ILIKE :geo_like
-                    OR raw_data->>'state' ILIKE :geo_like
-                    OR raw_data->>'location_hint' ILIKE :geo_like
+                    -- Top-level geo fields
+                    OR raw_data->>'geo'            ILIKE :geo_like
+                    OR raw_data->>'state'          ILIKE :geo_like
+                    OR raw_data->>'location_hint'  ILIKE :geo_like
+                    -- Nested _oppgrid_signal.location_hint (keyword-matrix scorers)
+                    OR raw_data->'_oppgrid_signal'->>'location_hint' ILIKE :geo_like
                   )
             """)
             params = {

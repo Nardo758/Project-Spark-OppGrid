@@ -509,3 +509,115 @@ class TestDBIntegration:
 
         assert result is None
         assert before == after, "Dry-run must not insert rows into scraped_sources"
+
+    # ------------------------------------------------------------------
+    # Corroboration query correctness against real-shaped micro-signal rows
+    # ------------------------------------------------------------------
+
+    @pytest.fixture()
+    def seeded_micro_signals(self, db):
+        """
+        Seed representative scraped_sources rows that match the two storage
+        layouts used by real micro-signal sources, then clean up after the test.
+        """
+        from sqlalchemy import text as sa_text
+        import json
+
+        # Layout 1 — simple/top-level: raw_data has category_hint at top level
+        payload_top_level = json.dumps({
+            "category_hint": "childcare",
+            "location_hint": "TX",
+            "text": "Looking for childcare in Austin TX",
+        })
+
+        # Layout 2 — webhook_gateway enriched: raw_data has _oppgrid_signal nested
+        payload_nested = json.dumps({
+            "text": "No childcare available near me Austin",
+            "state": "TX",
+            "_oppgrid_signal": {
+                "signal_score": 0.80,
+                "validation_level": "validated",
+                "matched_patterns": ["childcare"],
+                "category_hint": "childcare",
+                "location_hint": "Austin, TX",
+                "raw_excerpt": "No childcare available",
+            },
+        })
+
+        # Layout 3 — unrelated (should NOT be counted for childcare+TX)
+        payload_unrelated = json.dumps({
+            "category_hint": "food_beverage",
+            "location_hint": "CA",
+            "_oppgrid_signal": {
+                "category_hint": "food_beverage",
+                "location_hint": "Los Angeles, CA",
+            },
+        })
+
+        inserted_ids = []
+        for payload, src_type in [
+            (payload_top_level, "yelp"),
+            (payload_nested,    "nextdoor"),
+            (payload_unrelated, "yelp"),
+        ]:
+            row = db.execute(
+                sa_text("""
+                    INSERT INTO scraped_sources
+                        (source_type, scrape_id, raw_data, processed, received_at)
+                    VALUES
+                        (:st, 'test_corr_seed', CAST(:rd AS jsonb), 0, NOW())
+                    RETURNING id
+                """),
+                {"st": src_type, "rd": payload},
+            ).scalar()
+            inserted_ids.append(row)
+        db.flush()
+
+        yield inserted_ids
+
+        # Cleanup — remove seeded rows so they don't affect other tests
+        db.execute(
+            sa_text("DELETE FROM scraped_sources WHERE id = ANY(:ids)"),
+            {"ids": inserted_ids},
+        )
+        db.flush()
+
+    def test_corroboration_finds_nested_oppgrid_signal(self, db, seeded_micro_signals):
+        """
+        Corroboration query must count micro-signals whose category/geo lives in
+        the nested _oppgrid_signal dict (the primary webhook_gateway layout).
+        """
+        scanner = MacroSignalScanner()
+        count = scanner._find_corroborating_signals(
+            db, geo="TX", category="childcare", days=1
+        )
+        # We seeded 2 matching rows (top-level + nested) and 1 unrelated
+        assert count >= 2, (
+            f"Expected >= 2 corroborating signals for childcare+TX, got {count}. "
+            "The query may not be checking raw_data->'_oppgrid_signal'->>'category_hint'."
+        )
+
+    def test_corroboration_excludes_unrelated_rows(self, db, seeded_micro_signals):
+        """Corroboration count for food_beverage+TX should be 0 (unrelated row is CA)."""
+        scanner = MacroSignalScanner()
+        count = scanner._find_corroborating_signals(
+            db, geo="TX", category="food_beverage", days=1
+        )
+        # The unrelated row is food_beverage but geo=CA, so TX search should not match it
+        assert count == 0, (
+            f"Expected 0 for food_beverage+TX, got {count}. "
+            "Geo filter may be too broad."
+        )
+
+    def test_corroboration_triggers_goldmine_tier(self, db, seeded_micro_signals):
+        """
+        When corr_count >= GOLDMINE_THRESHOLD, tier must be 'goldmine'.
+        Tested here with a mocked corroboration count against real tier logic.
+        """
+        scanner = MacroSignalScanner()
+        anomaly = _make_anomaly("moderate")
+        # Simulate 6+ matching micro-signals
+        scanner._compute_macro_signal_score(anomaly, GOLDMINE_THRESHOLD)
+        assert anomaly.conf_tier == "goldmine", (
+            f"Expected goldmine with corr={GOLDMINE_THRESHOLD}, got {anomaly.conf_tier}"
+        )
