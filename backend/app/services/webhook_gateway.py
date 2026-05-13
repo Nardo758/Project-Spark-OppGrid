@@ -167,6 +167,16 @@ class WebhookGateway:
             )
             return str(cl_id) if cl_id else None
 
+        if source == "greatschools":
+            # Prefer review-level id, fall back to a school+review composite.
+            school = data.get("school") or {}
+            school_id = str(school.get("id") or data.get("school_id") or "")
+            review = data.get("review") or {}
+            review_id = str(review.get("id") or data.get("review_id") or "")
+            if review_id:
+                return f"{school_id}:{review_id}" if school_id else review_id
+            return school_id or None
+
         id_fields = {
             "google_maps": "place_id",
             "yelp": "business_id",
@@ -175,6 +185,64 @@ class WebhookGateway:
         }
         field = id_fields.get(source, "id")
         return str(data.get(field, "")) if data.get(field) else None
+
+    def _enrich_item(self, source: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Apply per-source demand-signal scoring before storage (used by both single and batch paths)."""
+        try:
+            if source == "yelp":
+                from app.services.yelp_keyword_matrix import score_yelp_review
+                score = score_yelp_review(self._normalize_yelp_payload(data))
+                return {**data, "_oppgrid_signal": score}
+            if source == "nextdoor":
+                from app.services.nextdoor_keyword_matrix import score_nextdoor_post
+                score = score_nextdoor_post(self._normalize_nextdoor_payload(data))
+                return {**data, "_oppgrid_signal": score}
+            if source == "greatschools":
+                from app.services.greatschools_keyword_matrix import (
+                    score_greatschools_review,
+                    score_greatschools_school_stats,
+                )
+                score = (
+                    score_greatschools_review(data)
+                    if data.get("review")
+                    else score_greatschools_school_stats(data)
+                )
+                return {**data, "_oppgrid_signal": score}
+            if source == "twitter":
+                from app.services.twitter_keyword_matrix import score_tweet
+                score = score_tweet(self._normalize_twitter_payload(data))
+                return {**data, "_oppgrid_signal": score}
+            if source == "craigslist":
+                from app.services.craigslist_keyword_matrix import score_craigslist_post
+                post_text = " ".join(filter(None, [
+                    data.get("title", ""),
+                    data.get("body", data.get("description", data.get("text", ""))),
+                ]))
+                cl_section = data.get("category") or data.get("section") or data.get("subcategory", "")
+                score = score_craigslist_post(text=post_text, category=cl_section or None)
+                return {**data, "_oppgrid_signal": score}
+            if source == "reddit":
+                from app.services.reddit_keyword_matrix import score_reddit_post
+                post_text = " ".join(filter(None, [
+                    data.get("title", ""),
+                    data.get("body", data.get("selftext", data.get("text", ""))),
+                ]))
+                subreddit = (
+                    data.get("parsedCommunityName")
+                    or data.get("communityName", "").lstrip("r/")
+                    or data.get("subreddit", "")
+                )
+                score = score_reddit_post(
+                    text=post_text,
+                    subreddit=subreddit or None,
+                    upvotes=int(data.get("upVotes", data.get("score", 0)) or 0),
+                    num_comments=int(data.get("numberOfComments", data.get("numComments", 0)) or 0),
+                    flair=data.get("flair") or None,
+                )
+                return {**data, "_oppgrid_signal": score}
+        except Exception as _exc:
+            logger.warning("_enrich_item scoring failed for source=%s: %s", source, _exc)
+        return data
 
     @staticmethod
     def _normalize_yelp_payload(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -342,95 +410,9 @@ class WebhookGateway:
                     retry_after=60
                 )
             
-            # Enrich Yelp reviews with demand signal score before storage.
-            # Normalise flat webhook payload to the nested shape the scorer expects.
-            if source == "yelp":
-                try:
-                    from app.services.yelp_keyword_matrix import score_yelp_review
-                    yelp_score = score_yelp_review(self._normalize_yelp_payload(data))
-                    data = {**data, "_oppgrid_signal": yelp_score}
-                except Exception as _score_exc:
-                    logger.warning("Yelp scoring failed for item: %s", _score_exc)
-
-            # Enrich Nextdoor posts with demand signal score before storage.
-            if source == "nextdoor":
-                try:
-                    from app.services.nextdoor_keyword_matrix import score_nextdoor_post
-                    nextdoor_score = score_nextdoor_post(self._normalize_nextdoor_payload(data))
-                    data = {**data, "_oppgrid_signal": nextdoor_score}
-                except Exception as _score_exc:
-                    logger.warning("Nextdoor scoring failed for item: %s", _score_exc)
-
-            # Enrich GreatSchools payloads with demand signal score before storage.
-            if source == "greatschools":
-                try:
-                    from app.services.greatschools_keyword_matrix import (
-                        score_greatschools_review,
-                        score_greatschools_school_stats,
-                    )
-                    # Use review-mode when a review object is present, otherwise stats-mode.
-                    if data.get("review"):
-                        gs_score = score_greatschools_review(data)
-                    else:
-                        gs_score = score_greatschools_school_stats(data)
-                    data = {**data, "_oppgrid_signal": gs_score}
-                except Exception as _score_exc:
-                    logger.warning("GreatSchools scoring failed for item: %s", _score_exc)
-
-            # Enrich Twitter/X tweets with demand signal score before storage.
-            if source == "twitter":
-                try:
-                    from app.services.twitter_keyword_matrix import score_tweet
-                    twitter_score = score_tweet(self._normalize_twitter_payload(data))
-                    data = {**data, "_oppgrid_signal": twitter_score}
-                except Exception as _score_exc:
-                    logger.warning("Twitter scoring failed for item: %s", _score_exc)
-
-            # Enrich Craigslist items with demand signal score before storage so
-            # OpportunityProcessor has the full keyword analysis immediately.
-            if source == "craigslist":
-                try:
-                    from app.services.craigslist_keyword_matrix import score_craigslist_post
-                    post_text = " ".join(filter(None, [
-                        data.get("title", ""),
-                        data.get("body", data.get("description", data.get("text", ""))),
-                    ]))
-                    cl_section = (
-                        data.get("category")
-                        or data.get("section")
-                        or data.get("subcategory", "")
-                    )
-                    cl_score = score_craigslist_post(
-                        text=post_text,
-                        category=cl_section or None,
-                    )
-                    data = {**data, "_oppgrid_signal": cl_score}
-                except Exception as _score_exc:
-                    logger.warning("Craigslist scoring failed for item: %s", _score_exc)
-
-            # Enrich Reddit posts with demand signal score before storage.
-            if source == "reddit":
-                try:
-                    from app.services.reddit_keyword_matrix import score_reddit_post
-                    post_text = " ".join(filter(None, [
-                        data.get("title", ""),
-                        data.get("body", data.get("selftext", data.get("text", ""))),
-                    ]))
-                    subreddit = (
-                        data.get("parsedCommunityName")
-                        or data.get("communityName", "").lstrip("r/")
-                        or data.get("subreddit", "")
-                    )
-                    reddit_score = score_reddit_post(
-                        text=post_text,
-                        subreddit=subreddit or None,
-                        upvotes=int(data.get("upVotes", data.get("score", 0)) or 0),
-                        num_comments=int(data.get("numberOfComments", data.get("numComments", 0)) or 0),
-                        flair=data.get("flair") or None,
-                    )
-                    data = {**data, "_oppgrid_signal": reddit_score}
-                except Exception as _score_exc:
-                    logger.warning("Reddit scoring failed for item: %s", _score_exc)
+            # Enrich payload with demand-signal score before storage.
+            # All source-specific normalization/routing is handled by _enrich_item.
+            data = self._enrich_item(source, data)
 
             result = self.db.execute(insert_sql, {
                 "external_id": external_id,
@@ -591,11 +573,14 @@ class WebhookGateway:
                     })
                     continue
                 
+                # Mirror per-source enrichment from process_webhook for parity.
+                enriched_item = self._enrich_item(source, item)
+
                 result = self.db.execute(insert_sql, {
                     "external_id": external_id,
                     "source_type": source,
                     "scrape_id": scrape_id,
-                    "raw_data": json.dumps(item),
+                    "raw_data": json.dumps(enriched_item),
                     "received_at": now,
                 })
                 row = result.fetchone()
