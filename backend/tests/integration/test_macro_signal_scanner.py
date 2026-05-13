@@ -115,16 +115,24 @@ class TestCorroborationScoring:
         self.scanner._compute_macro_signal_score(anomaly, GOLDMINE_THRESHOLD)
         assert anomaly.conf_tier == "goldmine"
 
-    def test_goldmine_via_severe_score(self):
+    def test_severe_lone_is_weak_signal(self):
+        """Per spec: a lone macro anomaly (no corroboration) is always weak_signal."""
         anomaly = _make_anomaly("severe")
         self.scanner._compute_macro_signal_score(anomaly, 0)
-        assert anomaly.conf_tier == "goldmine"
+        assert anomaly.conf_tier == "weak_signal"
         assert anomaly.final_score == pytest.approx(SEVERITY_SCORES["severe"])
 
     def test_validated_tier(self):
+        """Moderate score + 2+ corroboration signals → validated."""
+        anomaly = _make_anomaly("moderate")
+        self.scanner._compute_macro_signal_score(anomaly, 2)
+        assert anomaly.conf_tier == "validated"
+
+    def test_moderate_lone_is_weak_signal(self):
+        """Per spec: lone macro anomaly — even moderate — is weak_signal."""
         anomaly = _make_anomaly("moderate")
         self.scanner._compute_macro_signal_score(anomaly, 0)
-        assert anomaly.conf_tier == "validated"
+        assert anomaly.conf_tier == "weak_signal"
 
     def test_weak_signal_tier(self):
         anomaly = _make_anomaly("mild")
