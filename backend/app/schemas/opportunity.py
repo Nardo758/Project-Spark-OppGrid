@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any
 from datetime import datetime
 
 
@@ -20,6 +20,7 @@ class OpportunityBase(BaseModel):
     country: Optional[str] = None
     region: Optional[str] = None
     city: Optional[str] = None
+    state: Optional[str] = None
 
 
 class OpportunityCreate(OpportunityBase):
@@ -83,6 +84,17 @@ class Opportunity(OpportunityBase):
     source_platform: Optional[str] = None
     source_url: Optional[str] = None
     raw_source_data: Optional[str] = None
+
+    # Card enrichment — Group 2 (Spec 1 / macro scanner)
+    confidence_tier: Optional[str] = Field(
+        None, description="GOLDMINE | VALIDATED | WEAK_SIGNAL (populated by SignalToOpportunity)"
+    )
+    contributing_sources: Optional[Dict[str, Any]] = Field(
+        None, description="Per-source signal counts: {reddit: 3, yelp: 1, total_sources: 2, total_signals: 4}"
+    )
+    macro_context: Optional[Dict[str, Any]] = Field(
+        None, description="Compact macro backdrop: {unemployment_delta_90d, population_5y_delta, median_income, trend_direction}"
+    )
 
     created_at: datetime
     updated_at: Optional[datetime] = None

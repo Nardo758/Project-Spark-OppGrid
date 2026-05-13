@@ -1,5 +1,19 @@
 // Opportunity types for the Discovery Feed
 
+export interface MacroContext {
+  unemployment_delta_90d?: number
+  population_5y_delta?:   number
+  median_income?:         number
+  trend_direction?:       'rising' | 'falling' | 'flat'
+  highlight?:             string
+}
+
+export interface ContributingSources {
+  total_sources?: number
+  total_signals?: number
+  [key: string]: number | undefined
+}
+
 export interface Opportunity {
   id: number
   title: string
@@ -7,6 +21,8 @@ export interface Opportunity {
   category?: string
   geographic_scope?: string
   country?: string
+  city?: string
+  state?: string
   feasibility_score: number
   validation_count: number
   growth_rate?: number
@@ -14,7 +30,20 @@ export interface Opportunity {
   status: string
   created_at: string
   updated_at: string
-  
+
+  // Enrichment — Group 1 (available immediately)
+  realm_type?: string
+  ai_pain_intensity?: number | null
+  ai_urgency_level?: string | null
+  ai_competition_level?: string | null
+  access_state?: 'unlocked' | 'locked' | 'preview'
+  user_saved?: boolean
+
+  // Enrichment — Group 2 (Spec 1, degrade gracefully when null)
+  confidence_tier?: string | null
+  contributing_sources?: ContributingSources | null
+  macro_context?: MacroContext | null
+
   // Personalization fields
   match_score?: number
   user_validated?: boolean

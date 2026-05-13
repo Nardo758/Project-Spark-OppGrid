@@ -1,20 +1,44 @@
 /**
- * OpportunityCard Component - Matches existing OppGrid card design
- * 
- * Now with optional 4 P's indicator for market intelligence preview
- * and JediRe market badges (Hot Market, Buy Window, etc.)
+ * OpportunityCard — Enriched
+ *
+ * Surfaces confidence tier, source mix, location, pain/urgency, and macro
+ * context in addition to existing fields. Brand-aligned to emerald/navy/slate.
+ *
+ * variant="standard" — discovery feed (default)
+ * variant="compact"  — sidebars, saved list (strips macro strip)
+ *
+ * All new fields are optional and degrade gracefully to null.
  */
-
 import { FileText, Bookmark } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import FourPsIndicator from '../FourPs/FourPsIndicator'
 import MarketBadges, { type MarketBadge, type CompositeMetrics } from './MarketBadges'
+import ConfidenceTierBadge, { getTierBorderClass, getTierHoverClass } from './ConfidenceTierBadge'
+import SourceMixIndicator from './SourceMixIndicator'
+import LocationLine from './LocationLine'
+import PainUrgencyRow from './PainUrgencyRow'
+import MacroContextStrip from './MacroContextStrip'
+import RealmTypeIcon from './RealmTypeIcon'
 
 interface FourPsScores {
-  product: number
-  price: number
-  place: number
+  product:   number
+  price:     number
+  place:     number
   promotion: number
+}
+
+interface MacroContext {
+  unemployment_delta_90d?: number
+  population_5y_delta?:   number
+  median_income?:         number
+  trend_direction?:       'rising' | 'falling' | 'flat'
+  highlight?:             string
+}
+
+interface ContributingSources {
+  total_sources?: number
+  total_signals?: number
+  [key: string]: number | undefined
 }
 
 interface OpportunityCardProps {
@@ -32,12 +56,21 @@ interface OpportunityCardProps {
     user_saved?: boolean
     ai_generated_title?: string
     ai_summary?: string
-    // Location for badge fetching
+    // Location
     city?: string
     state?: string
-    // Optional pre-loaded 4P's data
+    // Enrichment — Group 1 (available now)
+    realm_type?: string
+    geographic_scope?: string
+    ai_pain_intensity?: number
+    ai_urgency_level?: string
+    ai_competition_level?: string
+    // Enrichment — Group 2 (Spec 1, degrade gracefully when null)
+    confidence_tier?: string | null
+    contributing_sources?: ContributingSources | null
+    macro_context?: MacroContext | null
+    // Optional pre-loaded data
     four_ps_scores?: FourPsScores
-    // Optional pre-loaded market badges
     market_badges?: MarketBadge[]
     composite_metrics?: CompositeMetrics
   }
@@ -49,15 +82,12 @@ interface OpportunityCardProps {
   isValidated?: boolean
   isSaved?: boolean
   className?: string
-  /** Show 4 P's indicator bar */
+  /** standard (default) = full card; compact = sidebar/saved-list, no macro strip */
+  variant?: 'standard' | 'compact'
   showFourPs?: boolean
-  /** Pre-loaded 4P's scores (for batch loading) */
   fourPsScores?: FourPsScores
-  /** Show JediRe market badges */
   showMarketBadges?: boolean
-  /** Pre-loaded market badges */
   marketBadges?: MarketBadge[]
-  /** Pre-loaded composite metrics (badges computed locally) */
   compositeMetrics?: CompositeMetrics
 }
 
@@ -71,32 +101,39 @@ export default function OpportunityCard({
   isValidated: externalIsValidated,
   isSaved: externalIsSaved,
   className = '',
+  variant = 'standard',
   showFourPs = false,
   fourPsScores,
   showMarketBadges = true,
   marketBadges,
-  compositeMetrics
+  compositeMetrics,
 }: OpportunityCardProps) {
-  const [isValidated, setIsValidated] = useState(externalIsValidated || opportunity.user_validated || false)
-  const [isSaved, setIsSaved] = useState(externalIsSaved || opportunity.user_saved || false)
-  const [fourPs, setFourPs] = useState<FourPsScores | null>(fourPsScores || opportunity.four_ps_scores || null)
+  const [isValidated, setIsValidated] = useState(
+    externalIsValidated || opportunity.user_validated || false,
+  )
+  const [isSaved, setIsSaved] = useState(
+    externalIsSaved || opportunity.user_saved || false,
+  )
+  const [fourPs, setFourPs] = useState<FourPsScores | null>(
+    fourPsScores || opportunity.four_ps_scores || null,
+  )
   const [fourPsLoading, setFourPsLoading] = useState(false)
-  
-  // Market badges from props or opportunity
-  const badges = marketBadges || opportunity.market_badges
-  const metrics = compositeMetrics || opportunity.composite_metrics
 
-  // Fetch 4P's data if showFourPs is true and we don't have it
+  const badges  = marketBadges  || opportunity.market_badges
+  const metrics = compositeMetrics || opportunity.composite_metrics
+  const tier    = opportunity.confidence_tier ?? null
+
+  const borderClass = getTierBorderClass(tier)
+  const hoverClass  = getTierHoverClass(tier)
+
+  const isCompact = variant === 'compact'
+
   useEffect(() => {
     if (showFourPs && !fourPs && !fourPsLoading) {
       setFourPsLoading(true)
       fetch(`/api/v1/opportunities/${opportunity.id}/four-ps/mini`)
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          if (data?.scores) {
-            setFourPs(data.scores)
-          }
-        })
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => { if (data?.scores) setFourPs(data.scores) })
         .catch(() => {})
         .finally(() => setFourPsLoading(false))
     }
@@ -119,136 +156,155 @@ export default function OpportunityCard({
     onAnalyze?.(opportunity.id)
   }
 
-  // Get feasibility color
   const getFeasibilityColor = (score: number) => {
     if (score >= 75) return 'text-emerald-600 bg-emerald-50'
     if (score >= 50) return 'text-amber-600 bg-amber-50'
-    return 'text-gray-600 bg-gray-50'
+    return 'text-slate-600 bg-slate-100'
   }
 
-  // Format market size
-  const formatMarketSize = (size: string) => {
-    if (size.includes('$')) return size
-    return `~$${size}`
-  }
+  const formatMarketSize = (size: string) =>
+    size.includes('$') ? size : `~$${size}`
 
-  // Format growth rate
-  const formatGrowth = (rate: number) => {
-    return rate > 0 ? `+${rate}%` : `${rate}%`
-  }
+  const hasBadgeRow =
+    showMarketBadges &&
+    (badges || metrics || (opportunity.city && opportunity.state) || opportunity.contributing_sources)
 
   return (
     <div
-      className={`bg-white p-5 rounded-xl border-2 border-stone-200 hover:border-stone-900 transition-all cursor-pointer group ${className}`}
-      onClick={() => window.location.href = `/opportunity/${opportunity.id}`}
+      className={`bg-white p-5 rounded-xl border-2 ${borderClass} ${hoverClass} transition-all cursor-pointer group ${className}`}
+      onClick={() => (window.location.href = `/opportunity/${opportunity.id}`)}
     >
-      {/* Header - Category + Score */}
+      {/* ── Header ── */}
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-semibold text-stone-500 uppercase">
-            {opportunity.category}
-          </span>
-          {opportunity.access_state === 'unlocked' && (
-            <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-xs font-medium">
-              Unlocked
+        <div className="flex flex-col gap-1 flex-1 min-w-0 mr-3">
+
+          {/* Tier badge + realm icon + category + access badge */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {tier && <ConfidenceTierBadge tier={tier} />}
+            <span className="flex items-center gap-1 text-xs font-semibold text-slate-500 uppercase">
+              <RealmTypeIcon realmType={opportunity.realm_type} />
+              {opportunity.category}
             </span>
-          )}
-          {opportunity.access_state === 'locked' && (
-            <span className="flex items-center gap-1 bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full text-xs font-medium">
-              Upgrade for Premium
-            </span>
-          )}
+            {opportunity.access_state === 'unlocked' && (
+              <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                Unlocked
+              </span>
+            )}
+            {opportunity.access_state === 'locked' && (
+              <span className="flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-xs font-medium">
+                Upgrade for Premium
+              </span>
+            )}
+          </div>
+
+          {/* Location line */}
+          <LocationLine
+            city={opportunity.city}
+            state={opportunity.state}
+            geographicScope={opportunity.geographic_scope}
+          />
         </div>
 
         {/* Feasibility Score */}
-        <div className="bg-emerald-100 text-emerald-700 px-3 py-2 rounded-full flex-shrink-0">
-          <div className="text-2xl font-bold leading-none">{opportunity.feasibility_score || 0}</div>
+        <div
+          className={`px-3 py-2 rounded-full flex-shrink-0 ${getFeasibilityColor(opportunity.feasibility_score ?? 0)}`}
+        >
+          <div className="text-2xl font-bold leading-none">
+            {opportunity.feasibility_score ?? 0}
+          </div>
         </div>
       </div>
 
-      {/* JediRe Market Intelligence Badges */}
-      {showMarketBadges && (badges || metrics || (opportunity.city && opportunity.state)) && (
-        <div className="mb-3">
-          <MarketBadges
-            city={opportunity.city}
-            state={opportunity.state}
-            badges={badges}
-            metrics={metrics}
-            compact={false}
-            maxBadges={3}
-          />
+      {/* ── Market Badges + Source Mix ── */}
+      {hasBadgeRow && (
+        <div className="flex items-center justify-between mb-3 gap-2 min-w-0">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <MarketBadges
+              city={opportunity.city}
+              state={opportunity.state}
+              badges={badges}
+              metrics={metrics}
+              compact={false}
+              maxBadges={3}
+            />
+          </div>
+          {opportunity.contributing_sources && (
+            <SourceMixIndicator
+              contributingSources={opportunity.contributing_sources}
+              maxDisplay={6}
+            />
+          )}
         </div>
       )}
 
-      {/* Title */}
-      <h3 className="font-semibold text-stone-900 text-lg mb-1 group-hover:text-violet-600 transition-colors">
-        {opportunity.title}
+      {/* ── Title ── */}
+      <h3 className="font-semibold text-slate-900 text-lg mb-1 group-hover:text-emerald-700 transition-colors">
+        {opportunity.ai_generated_title || opportunity.title}
       </h3>
 
-      {/* Description */}
-      <p className="text-sm text-stone-500 mb-4 line-clamp-2">
-        {opportunity.description || opportunity.ai_summary || 'Analysis pending...'}
+      {/* ── Description ── */}
+      <p className="text-sm text-slate-500 mb-4 line-clamp-2">
+        {opportunity.description || opportunity.ai_summary || 'Analysis pending…'}
       </p>
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-stone-50 rounded-lg p-3">
-          <div className="text-xs text-stone-500 mb-1">Signals</div>
-          <div className="text-lg font-bold text-stone-900">
-            {opportunity.validation_count || 0}
-          </div>
-        </div>
-        <div className="bg-stone-50 rounded-lg p-3">
-          <div className="text-xs text-stone-500 mb-1">Market</div>
-          <div className="text-lg font-bold text-stone-900">
-            {formatMarketSize(opportunity.market_size || 'N/A')}
-          </div>
-        </div>
-        <div className="bg-stone-50 rounded-lg p-3">
-          <div className="text-xs text-stone-500 mb-1">Growth</div>
-          <div className="text-lg font-bold text-emerald-600">
-            {formatGrowth(opportunity.growth_rate || 0)}
-          </div>
-        </div>
+      {/* ── Pain × Urgency × Growth row ── */}
+      <div className="mb-4">
+        <PainUrgencyRow
+          painIntensity={opportunity.ai_pain_intensity}
+          urgencyLevel={opportunity.ai_urgency_level}
+          growthRate={opportunity.growth_rate}
+          trendDirection={opportunity.macro_context?.trend_direction}
+          validationCount={opportunity.validation_count}
+          marketSize={
+            opportunity.market_size
+              ? formatMarketSize(opportunity.market_size)
+              : undefined
+          }
+        />
       </div>
 
-      {/* 4 P's Indicator (optional) */}
+      {/* ── Macro Context Strip (standard variant only) ── */}
+      {!isCompact && opportunity.macro_context && (
+        <div className="mb-4">
+          <MacroContextStrip context={opportunity.macro_context} />
+        </div>
+      )}
+
+      {/* ── 4 P's Indicator (optional) ── */}
       {showFourPs && (
         <div className="mb-4 px-1">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-xs text-stone-500">Market Intelligence</span>
+            <span className="text-xs text-slate-500">Market Intelligence</span>
             {fourPsLoading && (
-              <span className="text-xs text-stone-400">Loading...</span>
+              <span className="text-xs text-slate-400">Loading…</span>
             )}
           </div>
           {fourPs ? (
             <FourPsIndicator scores={fourPs} size="md" />
           ) : !fourPsLoading ? (
-            <div className="h-2 bg-stone-100 rounded-full" />
+            <div className="h-2 bg-slate-100 rounded-full" />
           ) : null}
         </div>
       )}
 
-      {/* Actions Row */}
-      <div className="pt-4 border-t border-stone-200 flex items-center justify-between">
+      {/* ── Actions Row ── */}
+      <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Report Button */}
           <button
             onClick={handleAnalyze}
-            className="flex items-center gap-1 text-sm text-stone-600 hover:text-violet-600"
+            className="flex items-center gap-1 text-sm text-slate-600 hover:text-emerald-700 transition-colors"
             aria-label="View report"
           >
             <FileText className="w-4 h-4" />
             <span>Report</span>
           </button>
 
-          {/* Save Button */}
           <button
             onClick={handleSave}
-            className={`flex items-center gap-1 text-sm ${
+            className={`flex items-center gap-1 text-sm transition-colors ${
               isSaved
-                ? 'text-violet-600'
-                : 'text-stone-600 hover:text-violet-600'
+                ? 'text-emerald-700'
+                : 'text-slate-600 hover:text-emerald-700'
             }`}
             aria-label={isSaved ? 'Unsave' : 'Save'}
           >
@@ -257,11 +313,15 @@ export default function OpportunityCard({
           </button>
         </div>
 
-        {/* View Full Analysis Link */}
-        <div className="flex items-center gap-1 text-sm text-stone-600 group-hover:text-violet-600 transition-colors">
+        <div className="flex items-center gap-1 text-sm text-slate-600 group-hover:text-emerald-700 transition-colors">
           <span>View full analysis</span>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M9 5l7 7-7 7"
+            />
           </svg>
         </div>
       </div>
