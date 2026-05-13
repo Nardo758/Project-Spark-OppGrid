@@ -41,6 +41,7 @@ class WebhookGateway:
         "twitter": SourceType.twitter,
         "nextdoor": SourceType.nextdoor,
         "craigslist": SourceType.craigslist,
+        "greatschools": SourceType.greatschools,
         "custom": SourceType.custom,
     }
 
@@ -51,6 +52,7 @@ class WebhookGateway:
         "twitter": ["text"],  # tweet_id or tweetId accepted, text required
         "nextdoor": ["post_id", "neighborhood"],
         "craigslist": ["title"],  # Craigslist listings always have a title
+        "greatschools": ["school"],  # school object with id/name required
         "custom": ["id", "data"],
     }
 
@@ -259,6 +261,49 @@ class WebhookGateway:
                     retry_after=60
                 )
             
+            # Enrich Yelp reviews with demand signal score before storage.
+            if source == "yelp":
+                try:
+                    from app.services.yelp_keyword_matrix import score_yelp_review
+                    yelp_score = score_yelp_review(data)
+                    data = {**data, "_oppgrid_signal": yelp_score}
+                except Exception as _score_exc:
+                    logger.warning("Yelp scoring failed for item: %s", _score_exc)
+
+            # Enrich Nextdoor posts with demand signal score before storage.
+            if source == "nextdoor":
+                try:
+                    from app.services.nextdoor_keyword_matrix import score_nextdoor_post
+                    nextdoor_score = score_nextdoor_post(data)
+                    data = {**data, "_oppgrid_signal": nextdoor_score}
+                except Exception as _score_exc:
+                    logger.warning("Nextdoor scoring failed for item: %s", _score_exc)
+
+            # Enrich GreatSchools payloads with demand signal score before storage.
+            if source == "greatschools":
+                try:
+                    from app.services.greatschools_keyword_matrix import (
+                        score_greatschools_review,
+                        score_greatschools_school_stats,
+                    )
+                    # Use review-mode when a review object is present, otherwise stats-mode.
+                    if data.get("review"):
+                        gs_score = score_greatschools_review(data)
+                    else:
+                        gs_score = score_greatschools_school_stats(data)
+                    data = {**data, "_oppgrid_signal": gs_score}
+                except Exception as _score_exc:
+                    logger.warning("GreatSchools scoring failed for item: %s", _score_exc)
+
+            # Enrich Twitter/X tweets with demand signal score before storage.
+            if source == "twitter":
+                try:
+                    from app.services.twitter_keyword_matrix import score_tweet
+                    twitter_score = score_tweet(data)
+                    data = {**data, "_oppgrid_signal": twitter_score}
+                except Exception as _score_exc:
+                    logger.warning("Twitter scoring failed for item: %s", _score_exc)
+
             # Enrich Craigslist items with demand signal score before storage so
             # OpportunityProcessor has the full keyword analysis immediately.
             if source == "craigslist":

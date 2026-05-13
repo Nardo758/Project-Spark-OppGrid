@@ -13,6 +13,8 @@ class SourceType(str, enum.Enum):
     twitter = "twitter"
     nextdoor = "nextdoor"
     craigslist = "craigslist"
+    greatschools = "greatschools"
+    macro_anomaly = "macro_anomaly"
     custom = "custom"
 
 

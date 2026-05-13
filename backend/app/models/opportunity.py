@@ -90,6 +90,11 @@ class Opportunity(Base):
     search_trends = Column(JSONB, nullable=True)  # Google Trends data at DMA level
     demographics_fetched_at = Column(DateTime(timezone=True), nullable=True)  # When demographic data was last fetched
 
+    # Source Expansion — signal pipeline metadata
+    confidence_tier = Column(String(20), nullable=True, index=True)  # goldmine | validated | weak_signal | noise
+    contributing_sources = Column(JSONB, nullable=True)  # {"reddit": 3, "yelp": 1, "total_sources": 2}
+    macro_context = Column(JSONB, nullable=True)  # {"unemployment_delta_90d": 0.18, "trend_direction": "rising"}
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

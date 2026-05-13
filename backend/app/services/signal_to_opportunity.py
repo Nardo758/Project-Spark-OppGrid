@@ -32,6 +32,13 @@ from app.services.google_maps_keyword_matrix import (
     HEALTHCARE_PATTERNS,
     COMPETITIVE_PATTERNS,
 )
+from app.services.yelp_keyword_matrix import score_yelp_review
+from app.services.nextdoor_keyword_matrix import score_nextdoor_post
+from app.services.greatschools_keyword_matrix import (
+    score_greatschools_review,
+    score_greatschools_school_stats,
+)
+from app.services.twitter_keyword_matrix import score_tweet
 from app.models.opportunity import Opportunity
 
 logger = logging.getLogger(__name__)
@@ -279,15 +286,81 @@ class SignalToOpportunityProcessor:
         
         return signals
     
+    # ---------------------------------------------------------------------------
+    # PLATFORM_SCORERS — dispatch table for the 8 source platforms
+    # ---------------------------------------------------------------------------
+    # Each scorer accepts the raw signal dict (reconstructed payload) and
+    # returns the standard signal output dict:
+    #   {"signal_score", "validation_level", "matched_patterns",
+    #    "category_hint", "location_hint", "raw_excerpt", ...}
+    # ---------------------------------------------------------------------------
+
+    @staticmethod
+    def _passthrough_macro_score(signal: Dict) -> Dict:
+        """Macro anomaly signals arrive pre-scored in metadata._oppgrid_signal."""
+        stored = (signal.get('metadata') or {}).get('_oppgrid_signal', {})
+        return stored if stored else {"signal_score": 0.5, "validation_level": "weak_signal",
+                                      "matched_patterns": [], "category_hint": "other",
+                                      "location_hint": None, "raw_excerpt": ""}
+
     def _score_signals(self, signals: List[Dict]) -> List[Dict]:
-        """Apply pattern matching and scoring to signals"""
+        """Apply pattern matching and scoring to signals."""
+
+        # Build PLATFORM_SCORERS inside the method so it captures `self` only
+        # where needed (_passthrough_macro_score is static).
+        PLATFORM_SCORERS = {
+            'yelp':          score_yelp_review,
+            'nextdoor':      score_nextdoor_post,
+            'twitter':       score_tweet,
+            'greatschools':  score_greatschools_review,
+            'macro_anomaly': self._passthrough_macro_score,
+        }
+
         for signal in signals:
+            source = signal.get('source', '')
+
+            # ------------------------------------------------------------------
+            # Fast path: if the webhook gateway already scored this signal and
+            # stored the result in metadata._oppgrid_signal, reuse it directly.
+            # ------------------------------------------------------------------
+            pre_scored = (signal.get('metadata') or {}).get('_oppgrid_signal')
+            if pre_scored and isinstance(pre_scored, dict) and pre_scored.get('signal_score') is not None:
+                signal['signal_score'] = min(1.0, float(pre_scored.get('signal_score', 0.5)))
+                signal['patterns_matched'] = pre_scored.get('matched_patterns', [])
+                signal['detected_category'] = pre_scored.get('category_hint', 'retail')
+                signal['validation_level'] = pre_scored.get('validation_level', 'weak_signal')
+                signal['location_hint'] = pre_scored.get('location_hint')
+                continue
+
+            # ------------------------------------------------------------------
+            # Platform-specific scoring for sources not pre-enriched by the
+            # webhook gateway (e.g., loaded from scraped_data directly).
+            # ------------------------------------------------------------------
+            if source in PLATFORM_SCORERS:
+                try:
+                    scorer = PLATFORM_SCORERS[source]
+                    # Reconstruct a minimal payload the scorer can consume.
+                    # All scorers accept the raw dict shape they were designed for.
+                    result = scorer(signal)
+                    if result and result.get('signal_score') is not None:
+                        signal['signal_score'] = min(1.0, float(result['signal_score']))
+                        signal['patterns_matched'] = result.get('matched_patterns', [])
+                        signal['detected_category'] = result.get('category_hint', 'retail')
+                        signal['validation_level'] = result.get('validation_level', 'weak_signal')
+                        signal['location_hint'] = result.get('location_hint')
+                        continue
+                except Exception as _e:
+                    logger.debug("Platform scorer failed for source=%s: %s", source, _e)
+
+            # ------------------------------------------------------------------
+            # Default: Google Maps / generic pattern matching
+            # ------------------------------------------------------------------
             text = signal.get('text', '') + ' ' + signal.get('content', '')
             category = self._detect_category(text, signal.get('category', ''))
-            
+
             score = 0.5
             patterns_matched = []
-            
+
             all_patterns = {
                 'apartment': APARTMENT_PATTERNS,
                 'childcare': CHILDCARE_PATTERNS,
@@ -296,7 +369,7 @@ class SignalToOpportunityProcessor:
                 'healthcare': HEALTHCARE_PATTERNS,
                 'competitive': COMPETITIVE_PATTERNS,
             }
-            
+
             for pattern_category, patterns in all_patterns.items():
                 for pattern_name, pattern_data in patterns.items():
                     for pattern in pattern_data.get('patterns', []):
@@ -308,9 +381,9 @@ class SignalToOpportunityProcessor:
                                     'confidence': pattern_data.get('confidence', 0.5)
                                 })
                                 score = max(score, pattern_data.get('confidence', 0.5))
-                        except:
+                        except Exception:
                             continue
-            
+
             if signal.get('rating'):
                 try:
                     rating = float(signal['rating'])
@@ -320,20 +393,26 @@ class SignalToOpportunityProcessor:
                         score += 0.05
                 except (TypeError, ValueError):
                     pass
-            
+
             reviews_count = signal.get('reviews_count') or 0
             if reviews_count >= 100:
                 score += 0.10
             elif reviews_count >= 50:
                 score += 0.05
-            
+
             if signal.get('latitude') and signal.get('longitude'):
                 score += 0.05
-            
+
             signal['signal_score'] = min(1.0, score)
             signal['patterns_matched'] = patterns_matched
             signal['detected_category'] = category
-        
+            signal['validation_level'] = (
+                'goldmine' if score >= 0.85 else
+                'validated' if score >= 0.70 else
+                'weak_signal' if score >= 0.50 else
+                'noise'
+            )
+
         return signals
     
     def _detect_category(self, text: str, existing_category: str) -> str:
@@ -1373,6 +1452,16 @@ Consumer analysis across {signal_count} data points reveals a clear demand patte
         else:
             market_size_str = f"${annual_rev}"
         
+        # Build contributing_sources: count signals by source platform
+        source_counts: Dict[str, int] = {}
+        for s in cluster:
+            src = s.get('source', 'unknown')
+            source_counts[src] = source_counts.get(src, 0) + 1
+        contributing_sources = {
+            **source_counts,
+            'total_sources': len(source_counts),
+        }
+
         opportunity = Opportunity(
             title=title[:500],
             description=description[:5000],
@@ -1387,7 +1476,7 @@ Consumer analysis across {signal_count} data points reveals a clear demand patte
             latitude=location_data.get('centroid', {}).get('lat') if location_data.get('centroid') else None,
             longitude=location_data.get('centroid', {}).get('lng') if location_data.get('centroid') else None,
             source_id=','.join(source_ids[:5]),
-            source_platform='apify_google_maps',
+            source_platform=','.join(source_counts.keys()) if source_counts else 'unknown',
             validation_count=len(cluster),
             ai_analyzed=True,
             ai_analyzed_at=datetime.utcnow(),
@@ -1414,7 +1503,10 @@ Consumer analysis across {signal_count} data points reveals a clear demand patte
                 "Build MVP landing page"
             ]),
             ai_problem_statement=business_idea.get('problem_statement'),
-            status='active'
+            status='active',
+            # Source-expansion metadata
+            confidence_tier=validation.get('confidence_tier', 'WEAK_SIGNAL').upper(),
+            contributing_sources=contributing_sources,
         )
         
         self.db.add(opportunity)
