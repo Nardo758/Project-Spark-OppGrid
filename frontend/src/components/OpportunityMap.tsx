@@ -207,15 +207,27 @@ export default function OpportunityMap({
 
     mapboxgl.accessToken = accessToken;
 
+    if (!mapboxgl.supported()) {
+      setError('WebGL is not supported in this browser — map unavailable');
+      return;
+    }
+
     const { center } = mapData.metadata;
-    
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: [center.lng, center.lat],
-      zoom: initialZoom,
-      attributionControl: false
-    });
+
+    let mapInstance: mapboxgl.Map;
+    try {
+      mapInstance = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [center.lng, center.lat],
+        zoom: initialZoom,
+        attributionControl: false
+      });
+    } catch (webglErr) {
+      setError('Map could not be initialised — WebGL unavailable');
+      return;
+    }
+    map.current = mapInstance;
 
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
     map.current.addControl(new mapboxgl.AttributionControl({ compact: true }), 'bottom-right');
