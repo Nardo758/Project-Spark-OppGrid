@@ -39,6 +39,8 @@ from app.services.greatschools_keyword_matrix import (
     score_greatschools_school_stats,
 )
 from app.services.twitter_keyword_matrix import score_tweet
+from app.services.reddit_keyword_matrix import score_reddit_post
+from app.services.craigslist_keyword_matrix import score_craigslist_post
 from app.models.opportunity import Opportunity
 
 logger = logging.getLogger(__name__)
@@ -303,16 +305,129 @@ class SignalToOpportunityProcessor:
                                       "matched_patterns": [], "category_hint": "other",
                                       "location_hint": None, "raw_excerpt": ""}
 
-    def _score_signals(self, signals: List[Dict]) -> List[Dict]:
-        """Apply pattern matching and scoring to signals."""
+    @staticmethod
+    def _score_reddit_signal(signal: Dict) -> Dict:
+        """Adapter: reconstruct score_reddit_post kwargs from the signal dict."""
+        text = " ".join(filter(None, [
+            signal.get("title", ""),
+            signal.get("content", signal.get("text", "")),
+        ]))
+        metadata = signal.get("metadata") or {}
+        subreddit = (
+            metadata.get("parsedCommunityName")
+            or metadata.get("communityName", "").lstrip("r/")
+            or metadata.get("subreddit", "")
+            or signal.get("author", "")
+        )
+        upvotes = int(metadata.get("upVotes", metadata.get("score", 0)) or 0)
+        num_comments = int(metadata.get("numberOfComments", metadata.get("numComments", 0)) or 0)
+        flair = metadata.get("flair")
+        return score_reddit_post(
+            text=text,
+            subreddit=subreddit or None,
+            upvotes=upvotes,
+            num_comments=num_comments,
+            flair=flair or None,
+        )
 
-        # Build PLATFORM_SCORERS inside the method so it captures `self` only
-        # where needed (_passthrough_macro_score is static).
+    @staticmethod
+    def _score_craigslist_signal(signal: Dict) -> Dict:
+        """Adapter: reconstruct score_craigslist_post kwargs from the signal dict."""
+        text = " ".join(filter(None, [
+            signal.get("title", ""),
+            signal.get("content", signal.get("text", "")),
+        ]))
+        metadata = signal.get("metadata") or {}
+        category = (
+            metadata.get("category")
+            or metadata.get("section")
+            or metadata.get("subcategory")
+        )
+        return score_craigslist_post(text=text, category=category or None)
+
+    @staticmethod
+    def _score_google_maps_signal(signal: Dict) -> Dict:
+        """Adapter: run Google Maps pattern matching on the signal text."""
+        text = signal.get('text', '') + ' ' + signal.get('content', '')
+        patterns_matched = []
+        score = 0.5
+        all_patterns = {
+            'apartment': APARTMENT_PATTERNS,
+            'childcare': CHILDCARE_PATTERNS,
+            'restaurant': RESTAURANT_PATTERNS,
+            'home_services': HOME_SERVICES_PATTERNS,
+            'healthcare': HEALTHCARE_PATTERNS,
+            'competitive': COMPETITIVE_PATTERNS,
+        }
+        for pattern_category, patterns in all_patterns.items():
+            for pattern_name, pattern_data in patterns.items():
+                for pattern in pattern_data.get('patterns', []):
+                    try:
+                        if re.search(pattern, text, re.IGNORECASE):
+                            patterns_matched.append({
+                                'category': pattern_category,
+                                'pattern': pattern_name,
+                                'confidence': pattern_data.get('confidence', 0.5)
+                            })
+                            score = max(score, pattern_data.get('confidence', 0.5))
+                    except Exception:
+                        continue
+        if signal.get('rating'):
+            try:
+                rating = float(signal['rating'])
+                if rating <= 2.5:
+                    score += 0.15
+                elif rating <= 3.5:
+                    score += 0.05
+            except (TypeError, ValueError):
+                pass
+        reviews_count = signal.get('reviews_count') or 0
+        if reviews_count >= 100:
+            score += 0.10
+        elif reviews_count >= 50:
+            score += 0.05
+        if signal.get('latitude') and signal.get('longitude'):
+            score += 0.05
+        score = min(1.0, score)
+        # Derive primary category hint from top-matched pattern category
+        category_hint = (
+            patterns_matched[0]['category'] if patterns_matched else 'retail'
+        )
+        return {
+            "signal_score": score,
+            "validation_level": (
+                'goldmine' if score >= 0.85 else
+                'validated' if score >= 0.70 else
+                'weak_signal' if score >= 0.50 else
+                'noise'
+            ),
+            "matched_patterns": patterns_matched,
+            "category_hint": category_hint,
+            "location_hint": signal.get('city') or None,
+            "raw_excerpt": text[:200],
+        }
+
+    @staticmethod
+    def _score_greatschools_signal(signal: Dict) -> Dict:
+        """Adapter: route to review-mode or stats-mode based on payload shape."""
+        metadata = signal.get("metadata") or {}
+        has_review = signal.get("review") or metadata.get("review")
+        if has_review:
+            return score_greatschools_review(signal)
+        return score_greatschools_school_stats(signal)
+
+    def _score_signals(self, signals: List[Dict]) -> List[Dict]:
+        """Apply pattern matching and scoring to all 7 supported platforms."""
+
+        # Full platform dispatch — covers all 7 sources including pre-existing ones.
         PLATFORM_SCORERS = {
             'yelp':          score_yelp_review,
             'nextdoor':      score_nextdoor_post,
             'twitter':       score_tweet,
-            'greatschools':  score_greatschools_review,
+            'greatschools':  self._score_greatschools_signal,
+            'reddit':        self._score_reddit_signal,
+            'craigslist':    self._score_craigslist_signal,
+            'google_maps':   self._score_google_maps_signal,
             'macro_anomaly': self._passthrough_macro_score,
         }
 
@@ -353,65 +468,18 @@ class SignalToOpportunityProcessor:
                     logger.debug("Platform scorer failed for source=%s: %s", source, _e)
 
             # ------------------------------------------------------------------
-            # Default: Google Maps / generic pattern matching
+            # Default: fall back to Google Maps / generic pattern matching for
+            # any unknown source (reuses the same adapter to avoid duplication).
             # ------------------------------------------------------------------
-            text = signal.get('text', '') + ' ' + signal.get('content', '')
-            category = self._detect_category(text, signal.get('category', ''))
-
-            score = 0.5
-            patterns_matched = []
-
-            all_patterns = {
-                'apartment': APARTMENT_PATTERNS,
-                'childcare': CHILDCARE_PATTERNS,
-                'restaurant': RESTAURANT_PATTERNS,
-                'home_services': HOME_SERVICES_PATTERNS,
-                'healthcare': HEALTHCARE_PATTERNS,
-                'competitive': COMPETITIVE_PATTERNS,
-            }
-
-            for pattern_category, patterns in all_patterns.items():
-                for pattern_name, pattern_data in patterns.items():
-                    for pattern in pattern_data.get('patterns', []):
-                        try:
-                            if re.search(pattern, text, re.IGNORECASE):
-                                patterns_matched.append({
-                                    'category': pattern_category,
-                                    'pattern': pattern_name,
-                                    'confidence': pattern_data.get('confidence', 0.5)
-                                })
-                                score = max(score, pattern_data.get('confidence', 0.5))
-                        except Exception:
-                            continue
-
-            if signal.get('rating'):
-                try:
-                    rating = float(signal['rating'])
-                    if rating <= 2.5:
-                        score += 0.15
-                    elif rating <= 3.5:
-                        score += 0.05
-                except (TypeError, ValueError):
-                    pass
-
-            reviews_count = signal.get('reviews_count') or 0
-            if reviews_count >= 100:
-                score += 0.10
-            elif reviews_count >= 50:
-                score += 0.05
-
-            if signal.get('latitude') and signal.get('longitude'):
-                score += 0.05
-
-            signal['signal_score'] = min(1.0, score)
-            signal['patterns_matched'] = patterns_matched
-            signal['detected_category'] = category
-            signal['validation_level'] = (
-                'goldmine' if score >= 0.85 else
-                'validated' if score >= 0.70 else
-                'weak_signal' if score >= 0.50 else
-                'noise'
+            result = self._score_google_maps_signal(signal)
+            signal['signal_score'] = result['signal_score']
+            signal['patterns_matched'] = result['matched_patterns']
+            signal['detected_category'] = self._detect_category(
+                signal.get('text', '') + ' ' + signal.get('content', ''),
+                signal.get('category', ''),
             )
+            signal['validation_level'] = result['validation_level']
+            signal['location_hint'] = result.get('location_hint')
 
         return signals
     

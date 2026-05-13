@@ -103,7 +103,14 @@ class WebhookGateway:
         if not signature:
             return False
         
-        source_secret = os.getenv(f"WEBHOOK_SECRET_{source.upper()}", self.webhook_secret)
+        # Support both naming conventions: {SOURCE}_WEBHOOK_SECRET (preferred)
+        # and WEBHOOK_SECRET_{SOURCE} (legacy), falling back to the global secret.
+        source_upper = source.upper()
+        source_secret = (
+            os.getenv(f"{source_upper}_WEBHOOK_SECRET")
+            or os.getenv(f"WEBHOOK_SECRET_{source_upper}")
+            or self.webhook_secret
+        )
         expected_signature = hmac.new(
             source_secret.encode(),
             payload,
