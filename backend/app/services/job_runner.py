@@ -414,3 +414,11 @@ def start_background_jobs() -> None:
     except Exception as e:
         logger.warning(f"Failed to start webhook_delivery job: {e}")
 
+    # Macro signal scan — runs every 6 hours
+    try:
+        from app.services.macro_signal_scanner import run_macro_scan
+        loop.create_task(_loop("macro_signal_scan", 21600, run_macro_scan))
+        logger.info("Started job: macro_signal_scan")
+    except Exception as e:
+        logger.warning(f"Failed to start macro_signal_scan job: {e}")
+
