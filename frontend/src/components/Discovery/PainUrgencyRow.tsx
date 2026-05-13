@@ -10,22 +10,17 @@ interface Props {
 }
 
 const URGENCY_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  low:      { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Low' },
-  medium:   { bg: 'bg-amber-100',  text: 'text-amber-700',  label: 'Medium' },
-  high:     { bg: 'bg-orange-100', text: 'text-orange-700', label: 'High' },
   critical: { bg: 'bg-red-100',    text: 'text-red-700',    label: 'Critical' },
+  high:     { bg: 'bg-orange-100', text: 'text-orange-700', label: 'High' },
+  medium:   { bg: 'bg-amber-100',  text: 'text-amber-700',  label: 'Medium' },
+  low:      { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Low' },
 }
 
-function painColor(n: number): string {
-  if (n >= 7) return 'text-red-600'
-  if (n >= 4) return 'text-amber-600'
-  return 'text-slate-700'
-}
-
-function TrendIcon({ direction }: { direction?: string | null }) {
-  if (direction === 'rising')  return <TrendingUp  className="w-3.5 h-3.5 inline" />
-  if (direction === 'falling') return <TrendingDown className="w-3.5 h-3.5 inline" />
-  return <Minus className="w-3.5 h-3.5 inline" />
+/** Returns both text color AND background color for the pain cell */
+function painCellClass(pain: number): string {
+  if (pain >= 7) return 'text-red-600 bg-red-50'
+  if (pain >= 4) return 'text-amber-600 bg-amber-50'
+  return 'text-slate-700 bg-slate-50'
 }
 
 export default function PainUrgencyRow({
@@ -36,66 +31,51 @@ export default function PainUrgencyRow({
   validationCount,
   marketSize,
 }: Props) {
-  if (
-    painIntensity == null &&
-    urgencyLevel  == null &&
-    growthRate    == null &&
-    validationCount == null
-  ) return null
-
-  const showPain    = painIntensity != null
-  const showUrgency = urgencyLevel  != null
-  const showGrowth  = growthRate    != null
-
-  const formatGrowth = (r: number) => `${r > 0 ? '+' : ''}${r}%`
-  const growthColor  = (r: number) => r >= 0 ? 'text-emerald-600' : 'text-red-500'
+  const TrendIcon =
+    (trendDirection === 'rising'  || (growthRate ?? 0) > 0) ? TrendingUp  :
+    (trendDirection === 'falling' || (growthRate ?? 0) < 0) ? TrendingDown :
+    Minus
 
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {/* Pain / fallback: Signals */}
-      <div className="bg-slate-50 rounded-lg p-3">
-        <div className="text-xs text-slate-500 mb-1">{showPain ? 'Pain' : 'Signals'}</div>
-        {showPain ? (
-          <div className={`text-lg font-bold ${painColor(painIntensity!)}`}>
-            {painIntensity}/10
-          </div>
-        ) : (
-          <div className="text-lg font-bold text-slate-900">{validationCount ?? 0}</div>
-        )}
+    <div className="grid grid-cols-3 gap-3 mb-4">
+      {/* Cell 1: Pain (or Signals fallback) */}
+      <div className={`rounded-lg p-3 ${painIntensity ? painCellClass(painIntensity) : 'bg-slate-50'}`}>
+        <div className="text-xs text-slate-500 mb-1">
+          {painIntensity ? 'Pain' : 'Signals'}
+        </div>
+        <div className="text-lg font-bold">
+          {painIntensity ? `${painIntensity}/10` : (validationCount ?? 0)}
+        </div>
       </div>
 
-      {/* Urgency / fallback: Market */}
+      {/* Cell 2: Urgency (or Market fallback) */}
       <div className="bg-slate-50 rounded-lg p-3">
-        <div className="text-xs text-slate-500 mb-1">{showUrgency ? 'Urgency' : 'Market'}</div>
-        {showUrgency ? (
-          (() => {
-            const s = URGENCY_STYLES[urgencyLevel!] ?? URGENCY_STYLES.low
-            return (
-              <span
-                className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-tight ${s.bg} ${s.text}`}
-              >
-                {s.label.toUpperCase()}
-              </span>
-            )
-          })()
+        <div className="text-xs text-slate-500 mb-1">
+          {urgencyLevel ? 'Urgency' : 'Market'}
+        </div>
+        {urgencyLevel && URGENCY_STYLES[urgencyLevel] ? (
+          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold
+            ${URGENCY_STYLES[urgencyLevel].bg} ${URGENCY_STYLES[urgencyLevel].text}`}>
+            {URGENCY_STYLES[urgencyLevel].label}
+          </span>
         ) : (
-          <div className="text-lg font-bold text-slate-900 truncate text-sm leading-tight pt-0.5">
-            {marketSize || 'N/A'}
+          <div className="text-lg font-bold text-slate-900">
+            {marketSize ?? 'N/A'}
           </div>
         )}
       </div>
 
-      {/* Growth */}
+      {/* Cell 3: Growth (always shown) */}
       <div className="bg-slate-50 rounded-lg p-3">
         <div className="text-xs text-slate-500 mb-1">Growth</div>
-        {showGrowth ? (
-          <div className={`text-lg font-bold flex items-center gap-0.5 ${growthColor(growthRate!)}`}>
-            <TrendIcon direction={trendDirection} />
-            {formatGrowth(growthRate!)}
-          </div>
-        ) : (
-          <div className="text-lg font-bold text-slate-400">—</div>
-        )}
+        <div className="flex items-center gap-1 text-lg font-bold text-emerald-600">
+          {growthRate !== null && growthRate !== undefined ? (
+            <>
+              <TrendIcon className="w-4 h-4" />
+              {growthRate > 0 ? '+' : ''}{growthRate}%
+            </>
+          ) : <span className="text-slate-400">—</span>}
+        </div>
       </div>
     </div>
   )

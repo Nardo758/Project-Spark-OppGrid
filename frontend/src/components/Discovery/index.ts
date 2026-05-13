@@ -12,7 +12,7 @@ export { default as Pagination } from './Pagination';
 export { default as MarketBadges, computeBadges } from './MarketBadges';
 
 // Enrichment sub-components (Part B of card enrichment spec)
-export { default as ConfidenceTierBadge, getTierBorderClass, getTierHoverClass } from './ConfidenceTierBadge';
+export { default as ConfidenceTierBadge, getTierBorderClass } from './ConfidenceTierBadge';
 export { default as SourceMixIndicator } from './SourceMixIndicator';
 export { default as LocationLine } from './LocationLine';
 export { default as PainUrgencyRow } from './PainUrgencyRow';

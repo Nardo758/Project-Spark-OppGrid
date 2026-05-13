@@ -1,0 +1,1136 @@
+================================================================================
+OPPGRID OPPORTUNITY CARD ENRICHMENT SPECIFICATION v1.0
+================================================================================
+Author: Architectural spec for Replit agent handoff
+Status: Ready for implementation
+Estimated effort: 3-4 days
+Repo: github.com/Nardo758/Project-Spark-OppGrid
+Branch: feature/opportunity-card-enrichment
+Companion spec: OPPGRID SOURCE EXPANSION v1.0 (provides confidence_tier,
+                                                contributing_sources,
+                                                macro_context fields)
+
+--------------------------------------------------------------------------------
+GOAL
+--------------------------------------------------------------------------------
+The OpportunityCard surfaces ~7 fields today out of 30+ collected on the
+Opportunity model. The card is the user's first contact with an
+opportunity — it determines whether they click through, save, or move on.
+A card that says "Self-storage gap · GOLDMINE · Tampa FL · 4 sources ·
+Pain 9/10 · +18% search · Population +12% 5Y" converts very differently
+from one that says "Self-storage gap · 82 · 47 signals · ~$10M-$100M".
+
+This spec surfaces the existing intelligence — no new data is collected,
+only displayed. It also corrects current brand-palette drift (stone/violet
+in the current card → emerald/navy/slate per brand system).
+
+--------------------------------------------------------------------------------
+CURRENT STATE (audited from frontend/src/components/Discovery/OpportunityCard.tsx)
+--------------------------------------------------------------------------------
+SHOWN TODAY:
+  - category (uppercase, top-left)
+  - access_state badge (Unlocked / Upgrade for Premium)
+  - feasibility_score (large circle, top-right)
+  - JediRe market badges (optional, max 3)
+  - title (large)
+  - description OR ai_summary (line-clamp-2)
+  - validation_count (labeled "Signals")
+  - market_size
+  - growth_rate
+  - 4 P's indicator (optional)
+  - Report / Save buttons + View full analysis link
+
+COLLECTED BUT NOT SHOWN:
+  Available immediately (Spec 1 not required):
+    - realm_type            (physical | digital | both)
+    - city, state           (already passed as props for badge fetching,
+                             never displayed)
+    - geographic_scope      (local | regional | national | international | online)
+    - severity              (1-5)
+    - ai_urgency_level      (low | medium | high | critical)
+    - ai_competition_level  (low | medium | high)
+    - ai_target_audience
+    - ai_pain_intensity     (1-10)
+    - ai_competitive_advantages  (JSON array)
+    - ai_key_risks               (JSON array)
+    - ai_next_steps              (JSON array)
+    - demographics          (JSONB: population, income, age, education)
+    - search_trends         (JSONB: Google Trends WoW/YoY)
+
+  Available after Spec 1 ships:
+    - confidence_tier           (GOLDMINE | VALIDATED | WEAK_SIGNAL)
+    - contributing_sources      (JSON: per-source counts + total)
+    - macro_context             (JSON: unemployment_delta_90d,
+                                       population_5y_delta,
+                                       median_income, trend_direction)
+
+BRAND DRIFT TO CORRECT:
+  Current card uses stone-* (gray) borders/text and violet-* (purple)
+  accents. Brand system per replit.md / project history is emerald-500
+  (#10B981) primary + navy-900 (#0F172A) text + slate-* neutrals.
+  This spec replaces the stone/violet palette inline as part of the
+  rewrite — not a separate task.
+
+--------------------------------------------------------------------------------
+PART A — DESIGN PRINCIPLES
+--------------------------------------------------------------------------------
+1. NOT EVERY FIELD GETS ON THE CARD. Six new elements added, not all
+   thirteen. Detail page handles the rest.
+
+2. TIER DRIVES VISUAL STATE. A GOLDMINE card looks materially different
+   from a WEAK_SIGNAL card — accent border, tier badge color, optional
+   "★" mark. The user should be able to spot a high-conviction
+   opportunity from across the screen.
+
+3. INFORMATION HIERARCHY:
+     PRIMARY    — title, tier badge, feasibility score
+     SECONDARY  — location, source mix, market intelligence badges
+     TERTIARY   — pain, urgency, macro context strip
+     METADATA   — realm icon, category
+
+4. DEGRADE GRACEFULLY. Every new field is optional. If
+   `confidence_tier` is null (pre-Spec-1 opportunities) the tier badge
+   collapses and the layout reflows. Same for macro_context, demographics.
+
+5. TWO CARD VARIANTS, SAME COMPONENT:
+     `variant="standard"` — discovery feed, the primary card
+     `variant="compact"`  — sidebars, saved list, search results
+   Compact strips macro_context strip and pain/urgency row.
+
+--------------------------------------------------------------------------------
+PART B — THE SIX NEW CARD ELEMENTS
+--------------------------------------------------------------------------------
+Ranked by impact (highest first). Each element is a small extracted
+component for testability and reuse.
+
+================================================================================
+B.1  CONFIDENCE TIER BADGE
+================================================================================
+COMPONENT: frontend/src/components/Discovery/ConfidenceTierBadge.tsx
+
+VISUAL:
+  GOLDMINE      ★ emerald-600 bg + white text, slightly larger
+  VALIDATED    ✓ emerald-100 bg + emerald-800 text
+  WEAK_SIGNAL  · slate-100 bg + slate-700 text
+  (null)        — component returns null
+
+POSITIONING: Top-left of card header, BEFORE the category label.
+The category label stays but de-emphasizes (smaller, slate-500).
+
+ALSO DRIVES: card border color
+  GOLDMINE      → border-emerald-500 (2px, ring-emerald-100 on hover)
+  VALIDATED    → border-slate-300
+  WEAK_SIGNAL  → border-slate-200 (default)
+
+```typescript
+// ConfidenceTierBadge.tsx
+import { Star, Check } from 'lucide-react'
+
+type Tier = 'goldmine' | 'validated' | 'weak_signal'
+
+interface Props {
+  tier?: Tier | string | null
+  size?: 'sm' | 'md'
+  className?: string
+}
+
+const TIER_CONFIG: Record<Tier, {
+  label: string
+  bg: string
+  text: string
+  Icon: React.ComponentType<{ className?: string }>
+}> = {
+  goldmine: {
+    label: 'Goldmine',
+    bg: 'bg-emerald-600',
+    text: 'text-white',
+    Icon: Star,
+  },
+  validated: {
+    label: 'Validated',
+    bg: 'bg-emerald-100',
+    text: 'text-emerald-800',
+    Icon: Check,
+  },
+  weak_signal: {
+    label: 'Early Signal',
+    bg: 'bg-slate-100',
+    text: 'text-slate-700',
+    Icon: () => null,
+  },
+}
+
+export default function ConfidenceTierBadge({
+  tier, size = 'sm', className = ''
+}: Props) {
+  if (!tier || !(tier in TIER_CONFIG)) return null
+  const c = TIER_CONFIG[tier as Tier]
+  const pad = size === 'md' ? 'px-2.5 py-1' : 'px-2 py-0.5'
+  const iconSize = size === 'md' ? 'w-3.5 h-3.5' : 'w-3 h-3'
+
+  return (
+    <span className={`inline-flex items-center gap-1 ${pad} rounded-full
+      text-xs font-semibold uppercase tracking-wide ${c.bg} ${c.text}
+      ${className}`}>
+      <c.Icon className={iconSize} />
+      {c.label}
+    </span>
+  )
+}
+```
+
+================================================================================
+B.2  SOURCE MIX INDICATOR
+================================================================================
+COMPONENT: frontend/src/components/Discovery/SourceMixIndicator.tsx
+
+PURPOSE: Show at a glance how many distinct platforms validated this
+opportunity. Multi-source = much stronger signal than single-source. A
+small horizontal strip of platform icons + a count.
+
+VISUAL: Up to 6 small platform icons (16px), with overflow as "+N".
+Tooltip on hover shows source counts.
+
+POSITIONING: Right side of the badges row (next to JediRe market badges).
+
+INPUT SHAPE: `contributing_sources` JSON from Spec 1 migration:
+  {
+    "reddit": 12,
+    "google_maps": 5,
+    "yelp": 2,
+    "nextdoor": 1,
+    "macro_anomaly": 1,
+    "total_sources": 5,
+    "total_signals": 21
+  }
+
+```typescript
+// SourceMixIndicator.tsx
+import { useMemo } from 'react'
+
+interface Props {
+  contributingSources?: Record<string, number> & {
+    total_sources?: number
+    total_signals?: number
+  } | null
+  maxDisplay?: number
+}
+
+const SOURCE_META: Record<string, { label: string; color: string; emoji: string }> = {
+  reddit:         { label: 'Reddit',        color: 'bg-orange-500',   emoji: '🔴' },
+  google_maps:    { label: 'Google Maps',   color: 'bg-blue-500',     emoji: '🗺️' },
+  yelp:           { label: 'Yelp',          color: 'bg-red-600',      emoji: '★' },
+  nextdoor:       { label: 'Nextdoor',      color: 'bg-emerald-600',  emoji: '🏘️' },
+  twitter:        { label: 'Twitter/X',     color: 'bg-slate-900',    emoji: '𝕏' },
+  greatschools:   { label: 'GreatSchools',  color: 'bg-indigo-500',   emoji: '🎓' },
+  craigslist:     { label: 'Craigslist',    color: 'bg-purple-600',   emoji: 'C' },
+  macro_anomaly:  { label: 'Economic',      color: 'bg-amber-500',    emoji: '📈' },
+}
+
+export default function SourceMixIndicator({
+  contributingSources, maxDisplay = 5,
+}: Props) {
+  const { displayed, overflow, total } = useMemo(() => {
+    if (!contributingSources) return { displayed: [], overflow: 0, total: 0 }
+    const entries = Object.entries(contributingSources)
+      .filter(([k]) => k !== 'total_sources' && k !== 'total_signals')
+      .filter(([, v]) => v > 0)
+      .sort(([, a], [, b]) => b - a)
+    return {
+      displayed: entries.slice(0, maxDisplay),
+      overflow: Math.max(0, entries.length - maxDisplay),
+      total: contributingSources.total_sources ?? entries.length,
+    }
+  }, [contributingSources, maxDisplay])
+
+  if (total === 0) return null
+
+  return (
+    <div className="flex items-center gap-1.5" title={`${total} source${total === 1 ? '' : 's'}`}>
+      <div className="flex -space-x-1">
+        {displayed.map(([source, count]) => {
+          const meta = SOURCE_META[source]
+          if (!meta) return null
+          return (
+            <span
+              key={source}
+              className={`inline-flex items-center justify-center w-5 h-5
+                rounded-full text-[10px] text-white font-bold ring-2 ring-white
+                ${meta.color}`}
+              title={`${meta.label}: ${count} signal${count === 1 ? '' : 's'}`}
+            >
+              {meta.emoji}
+            </span>
+          )
+        })}
+        {overflow > 0 && (
+          <span className="inline-flex items-center justify-center w-5 h-5
+            rounded-full text-[10px] bg-slate-200 text-slate-700 font-bold
+            ring-2 ring-white">
+            +{overflow}
+          </span>
+        )}
+      </div>
+      <span className="text-xs text-slate-600 font-medium">
+        {total} source{total === 1 ? '' : 's'}
+      </span>
+    </div>
+  )
+}
+```
+
+================================================================================
+B.3  LOCATION LINE
+================================================================================
+COMPONENT: frontend/src/components/Discovery/LocationLine.tsx
+
+PURPOSE: Replace the implicit-location-via-badges pattern with an explicit
+line. Critical for users filtering by geography.
+
+VISUAL: Small pin icon + "City, ST · {scope}" in slate-600.
+  If geographic_scope=='online' → "Online · No geography"
+  If only state → "State, ST · {scope}"
+  If neither → null
+
+POSITIONING: Card header, right of category, BEFORE the feasibility
+score circle.
+
+```typescript
+// LocationLine.tsx
+import { MapPin, Globe } from 'lucide-react'
+
+interface Props {
+  city?: string | null
+  state?: string | null
+  geographicScope?: string | null  // local|regional|national|international|online
+  className?: string
+}
+
+const SCOPE_LABEL: Record<string, string> = {
+  local: 'Local',
+  regional: 'Regional',
+  national: 'National',
+  international: 'Global',
+  online: 'Online',
+}
+
+export default function LocationLine({
+  city, state, geographicScope, className = '',
+}: Props) {
+  if (geographicScope === 'online') {
+    return (
+      <span className={`inline-flex items-center gap-1 text-xs text-slate-600 ${className}`}>
+        <Globe className="w-3.5 h-3.5" />
+        Online · No geography
+      </span>
+    )
+  }
+
+  if (!city && !state) return null
+
+  const locationText = [city, state].filter(Boolean).join(', ')
+  const scopeText = geographicScope ? SCOPE_LABEL[geographicScope] : null
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs text-slate-600 ${className}`}>
+      <MapPin className="w-3.5 h-3.5" />
+      {locationText}
+      {scopeText && <span className="text-slate-400">· {scopeText}</span>}
+    </span>
+  )
+}
+```
+
+================================================================================
+B.4  PAIN × URGENCY ROW
+================================================================================
+COMPONENT: frontend/src/components/Discovery/PainUrgencyRow.tsx
+
+PURPOSE: Replace or augment the current 3-metric row (Signals / Market /
+Growth). The current "Signals" count is replaced by Pain Intensity which
+is a more meaningful early-stage indicator. Urgency badge surfaces
+ai_urgency_level. Growth is kept but enhanced with trend direction arrow
+from search_trends.
+
+NEW 3-METRIC ROW:
+  ┌─ Pain 9/10 ─┬─ Urgency HIGH ─┬─ Growth +18% ↗ ─┐
+
+VISUAL:
+  Pain:    Numeric "{value}/10" — color shifts by intensity
+           1-3 slate-700, 4-6 amber-600, 7-10 red-600 + slight bg
+  Urgency: Pill with color
+           low slate, medium amber, high orange, critical red
+  Growth:  Numeric % with arrow icon. Positive emerald, negative red.
+
+DEGRADATION: If pain or urgency is null, fall back to the original
+Signals/Market/Growth row for those cells.
+
+```typescript
+// PainUrgencyRow.tsx
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+
+interface Props {
+  painIntensity?: number | null      // 1-10
+  urgencyLevel?: string | null       // low|medium|high|critical
+  growthRate?: number | null         // percentage
+  trendDirection?: 'rising' | 'falling' | 'flat' | null
+  validationCount?: number | null    // fallback if pain null
+  marketSize?: string | null         // fallback if urgency null
+}
+
+const URGENCY_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  critical: { bg: 'bg-red-100',     text: 'text-red-700',     label: 'Critical' },
+  high:     { bg: 'bg-orange-100',  text: 'text-orange-700',  label: 'High' },
+  medium:   { bg: 'bg-amber-100',   text: 'text-amber-700',   label: 'Medium' },
+  low:      { bg: 'bg-slate-100',   text: 'text-slate-600',   label: 'Low' },
+}
+
+function painColor(pain: number): string {
+  if (pain >= 7) return 'text-red-600 bg-red-50'
+  if (pain >= 4) return 'text-amber-600 bg-amber-50'
+  return 'text-slate-700 bg-slate-50'
+}
+
+export default function PainUrgencyRow({
+  painIntensity, urgencyLevel, growthRate, trendDirection,
+  validationCount, marketSize,
+}: Props) {
+  const TrendIcon =
+    (trendDirection === 'rising' || (growthRate ?? 0) > 0) ? TrendingUp :
+    (trendDirection === 'falling' || (growthRate ?? 0) < 0) ? TrendingDown :
+    Minus
+
+  return (
+    <div className="grid grid-cols-3 gap-3 mb-4">
+      {/* Cell 1: Pain (or Signals fallback) */}
+      <div className={`rounded-lg p-3 ${painIntensity ? painColor(painIntensity) : 'bg-slate-50'}`}>
+        <div className="text-xs text-slate-500 mb-1">
+          {painIntensity ? 'Pain' : 'Signals'}
+        </div>
+        <div className="text-lg font-bold">
+          {painIntensity ? `${painIntensity}/10` : (validationCount ?? 0)}
+        </div>
+      </div>
+
+      {/* Cell 2: Urgency (or Market fallback) */}
+      <div className="bg-slate-50 rounded-lg p-3">
+        <div className="text-xs text-slate-500 mb-1">
+          {urgencyLevel ? 'Urgency' : 'Market'}
+        </div>
+        {urgencyLevel && URGENCY_STYLES[urgencyLevel] ? (
+          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold
+            ${URGENCY_STYLES[urgencyLevel].bg} ${URGENCY_STYLES[urgencyLevel].text}`}>
+            {URGENCY_STYLES[urgencyLevel].label}
+          </span>
+        ) : (
+          <div className="text-lg font-bold text-slate-900">
+            {marketSize ?? 'N/A'}
+          </div>
+        )}
+      </div>
+
+      {/* Cell 3: Growth (always shown) */}
+      <div className="bg-slate-50 rounded-lg p-3">
+        <div className="text-xs text-slate-500 mb-1">Growth</div>
+        <div className="flex items-center gap-1 text-lg font-bold text-emerald-600">
+          {growthRate !== null && growthRate !== undefined ? (
+            <>
+              <TrendIcon className="w-4 h-4" />
+              {growthRate > 0 ? '+' : ''}{growthRate}%
+            </>
+          ) : <span className="text-slate-400">—</span>}
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+================================================================================
+B.5  MACRO CONTEXT STRIP
+================================================================================
+COMPONENT: frontend/src/components/Discovery/MacroContextStrip.tsx
+
+PURPOSE: Surface a compact one-line summary of the macro signal backdrop:
+population trend, income, unemployment delta. Helps the user understand
+the environment WITHOUT clicking through.
+
+VISUAL: A thin horizontal strip with up to 3 facts, separated by middle
+dots. Slate-600 text, emerald arrows for positive trends.
+
+DATA: `macro_context` JSONB from Spec 1 migration. Example:
+  {
+    "unemployment_delta_90d": 0.18,
+    "population_5y_delta": 0.12,
+    "median_income": 72000,
+    "trend_direction": "rising",
+    "highlight": "population_5y_delta"  // which fact to lead with
+  }
+
+POSITIONING: BELOW the metrics row, BEFORE the actions row.
+
+DEGRADATION: If macro_context is null, the entire strip collapses.
+
+```typescript
+// MacroContextStrip.tsx
+import { TrendingUp, TrendingDown, DollarSign, Users } from 'lucide-react'
+
+interface MacroContext {
+  unemployment_delta_90d?: number
+  population_5y_delta?: number
+  median_income?: number
+  trend_direction?: 'rising' | 'falling' | 'flat'
+  highlight?: string
+}
+
+interface Props {
+  context?: MacroContext | null
+}
+
+function formatPct(n?: number): string {
+  if (n === undefined || n === null) return ''
+  return `${n > 0 ? '+' : ''}${(n * 100).toFixed(0)}%`
+}
+
+function formatIncome(n?: number): string {
+  if (!n) return ''
+  if (n >= 1000) return `$${(n / 1000).toFixed(0)}K`
+  return `$${n}`
+}
+
+export default function MacroContextStrip({ context }: Props) {
+  if (!context) return null
+
+  const items: { icon: React.ReactNode; label: string; value: string; positive?: boolean }[] = []
+
+  if (context.population_5y_delta !== undefined) {
+    items.push({
+      icon: <Users className="w-3.5 h-3.5" />,
+      label: 'Population 5Y',
+      value: formatPct(context.population_5y_delta),
+      positive: context.population_5y_delta > 0,
+    })
+  }
+  if (context.median_income !== undefined) {
+    items.push({
+      icon: <DollarSign className="w-3.5 h-3.5" />,
+      label: 'Median income',
+      value: formatIncome(context.median_income),
+    })
+  }
+  if (context.unemployment_delta_90d !== undefined) {
+    items.push({
+      icon: context.unemployment_delta_90d > 0
+        ? <TrendingUp className="w-3.5 h-3.5" />
+        : <TrendingDown className="w-3.5 h-3.5" />,
+      label: 'Unemployment 90D',
+      value: formatPct(context.unemployment_delta_90d),
+      positive: context.unemployment_delta_90d < 0, // lower unemployment = positive
+    })
+  }
+
+  if (items.length === 0) return null
+
+  return (
+    <div className="flex items-center gap-3 text-xs text-slate-600 px-1 py-2
+      border-t border-slate-100">
+      {items.slice(0, 3).map((item, i) => (
+        <span key={i} className="inline-flex items-center gap-1">
+          <span className={item.positive ? 'text-emerald-600' : 'text-slate-500'}>
+            {item.icon}
+          </span>
+          <span className="text-slate-500">{item.label}</span>
+          <span className={`font-semibold ${item.positive ? 'text-emerald-700' : 'text-slate-700'}`}>
+            {item.value}
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+}
+```
+
+================================================================================
+B.6  REALM TYPE ICON
+================================================================================
+COMPONENT: frontend/src/components/Discovery/RealmTypeIcon.tsx
+
+PURPOSE: Tiny icon (12x12px) in the card header indicating
+physical/digital/both. Mostly metadata, but useful at a glance when
+mixed feeds contain both kinds.
+
+VISUAL:
+  physical  🏪 (Store icon)
+  digital   💻 (Monitor icon)
+  both      ⚭  (Layers icon)
+
+POSITIONING: Next to category label, slate-400 default, slate-600 hover.
+
+```typescript
+// RealmTypeIcon.tsx
+import { Store, Monitor, Layers } from 'lucide-react'
+
+interface Props {
+  realmType?: string | null  // physical | digital | both
+  className?: string
+}
+
+export default function RealmTypeIcon({ realmType, className = '' }: Props) {
+  if (!realmType || realmType === 'both') {
+    return <Layers className={`w-3 h-3 text-slate-400 ${className}`}
+      aria-label="Both physical and digital" />
+  }
+  if (realmType === 'physical') {
+    return <Store className={`w-3 h-3 text-slate-400 ${className}`}
+      aria-label="Physical opportunity" />
+  }
+  if (realmType === 'digital') {
+    return <Monitor className={`w-3 h-3 text-slate-400 ${className}`}
+      aria-label="Digital opportunity" />
+  }
+  return null
+}
+```
+
+--------------------------------------------------------------------------------
+PART C — UPDATED OpportunityCard.tsx (FULL REWRITE)
+--------------------------------------------------------------------------------
+COMPONENT: frontend/src/components/Discovery/OpportunityCard.tsx
+
+VISUAL LAYOUT TARGET:
+
+  ┌────────────────────────────────────────────────────────────┐
+  │ [★ GOLDMINE] SELF-STORAGE 🏪 📍Tampa, FL · Local      [82] │
+  │                                                            │
+  │ [Hot Market] [Buy Window] [Capacity Gap]      🔴🗺️★🏘️📈 5 sources │
+  │                                                            │
+  │ Self-storage demand outpacing supply 3:1 in Tampa metro    │
+  │ Multiple platforms show repeated complaints about wait...  │
+  │                                                            │
+  │ ┌──────────┬─────────────┬───────────────┐                │
+  │ │ Pain 9/10│ Urgency HIGH│ Growth +18% ↗ │                │
+  │ └──────────┴─────────────┴───────────────┘                │
+  │                                                            │
+  │ ⌐ 👥 Population 5Y +12% · $ Median income $72K · 📉 Unemp 90D +18%┐│
+  │                                                            │
+  │ ─────────────────────────────────────────────────────────  │
+  │ 📄 Report  🔖 Save                  View full analysis →   │
+  └────────────────────────────────────────────────────────────┘
+
+GOLDMINE variant adds:
+  - emerald-500 2px border (vs slate-200 default)
+  - emerald-50 hover ring
+  - Tier badge with Star icon, emerald-600 background
+
+VALIDATED variant:
+  - slate-300 border
+  - Tier badge with Check icon, emerald-100 background
+
+WEAK_SIGNAL or null variant:
+  - slate-200 border (current default)
+  - No tier badge
+
+FULL REWRITE:
+
+```typescript
+/**
+ * OpportunityCard — Enriched
+ *
+ * Surfaces confidence tier, source mix, location, pain/urgency, and macro
+ * context in addition to existing fields. Brand-aligned to emerald/navy/slate.
+ */
+
+import { FileText, Bookmark } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import FourPsIndicator from '../FourPs/FourPsIndicator'
+import MarketBadges, { type MarketBadge, type CompositeMetrics } from './MarketBadges'
+import ConfidenceTierBadge from './ConfidenceTierBadge'
+import SourceMixIndicator from './SourceMixIndicator'
+import LocationLine from './LocationLine'
+import PainUrgencyRow from './PainUrgencyRow'
+import MacroContextStrip from './MacroContextStrip'
+import RealmTypeIcon from './RealmTypeIcon'
+
+interface FourPsScores {
+  product: number
+  price: number
+  place: number
+  promotion: number
+}
+
+interface ContributingSources {
+  [source: string]: number
+  total_sources?: number
+  total_signals?: number
+}
+
+interface MacroContext {
+  unemployment_delta_90d?: number
+  population_5y_delta?: number
+  median_income?: number
+  trend_direction?: 'rising' | 'falling' | 'flat'
+  highlight?: string
+}
+
+export interface OpportunityCardData {
+  id: number
+  title: string
+  description?: string
+  category?: string
+  feasibility_score?: number
+  validation_count?: number
+  market_size?: string
+  growth_rate?: number
+  access_state?: 'unlocked' | 'locked' | 'preview'
+  user_validated?: boolean
+  user_saved?: boolean
+  ai_generated_title?: string
+  ai_summary?: string
+  // Enrichment fields
+  confidence_tier?: 'goldmine' | 'validated' | 'weak_signal' | null
+  contributing_sources?: ContributingSources | null
+  macro_context?: MacroContext | null
+  realm_type?: 'physical' | 'digital' | 'both' | null
+  geographic_scope?: string | null
+  city?: string | null
+  state?: string | null
+  ai_pain_intensity?: number | null
+  ai_urgency_level?: string | null
+  ai_competition_level?: string | null
+  // Optional pre-loaded composite data
+  four_ps_scores?: FourPsScores
+  market_badges?: MarketBadge[]
+  composite_metrics?: CompositeMetrics
+}
+
+interface OpportunityCardProps {
+  opportunity: OpportunityCardData
+  variant?: 'standard' | 'compact'
+  userTier?: string
+  onValidate?: (id: number) => void
+  onSave?: (id: number) => void
+  onAnalyze?: (id: number) => void
+  onShare?: (id: number) => void
+  isValidated?: boolean
+  isSaved?: boolean
+  className?: string
+  showFourPs?: boolean
+  showMarketBadges?: boolean
+  fourPsScores?: FourPsScores
+  marketBadges?: MarketBadge[]
+  compositeMetrics?: CompositeMetrics
+}
+
+const TIER_BORDER: Record<string, string> = {
+  goldmine:    'border-emerald-500 hover:ring-4 hover:ring-emerald-100',
+  validated:   'border-slate-300 hover:border-slate-400',
+  weak_signal: 'border-slate-200 hover:border-slate-300',
+}
+
+export default function OpportunityCard({
+  opportunity,
+  variant = 'standard',
+  onValidate,
+  onSave,
+  onAnalyze,
+  isValidated: externalIsValidated,
+  isSaved: externalIsSaved,
+  className = '',
+  showFourPs = false,
+  fourPsScores,
+  showMarketBadges = true,
+  marketBadges,
+  compositeMetrics,
+}: OpportunityCardProps) {
+  const [isSaved, setIsSaved] = useState(externalIsSaved || opportunity.user_saved || false)
+  const [fourPs, setFourPs] = useState<FourPsScores | null>(
+    fourPsScores || opportunity.four_ps_scores || null
+  )
+  const [fourPsLoading, setFourPsLoading] = useState(false)
+
+  const badges = marketBadges || opportunity.market_badges
+  const metrics = compositeMetrics || opportunity.composite_metrics
+
+  const tier = opportunity.confidence_tier
+  const borderClass = TIER_BORDER[tier ?? 'weak_signal'] ?? TIER_BORDER.weak_signal
+  const isCompact = variant === 'compact'
+
+  // Fetch 4P's lazily (existing behavior)
+  useEffect(() => {
+    if (showFourPs && !fourPs && !fourPsLoading) {
+      setFourPsLoading(true)
+      fetch(`/api/v1/opportunities/${opportunity.id}/four-ps/mini`)
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => { if (data?.scores) setFourPs(data.scores) })
+        .catch(() => {})
+        .finally(() => setFourPsLoading(false))
+    }
+  }, [showFourPs, fourPs, fourPsLoading, opportunity.id])
+
+  const handleSave = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsSaved(!isSaved)
+    onSave?.(opportunity.id)
+  }
+
+  const handleAnalyze = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onAnalyze?.(opportunity.id)
+  }
+
+  return (
+    <div
+      className={`bg-white p-5 rounded-xl border-2 transition-all cursor-pointer
+        group ${borderClass} ${className}`}
+      onClick={() => (window.location.href = `/opportunity/${opportunity.id}`)}
+    >
+      {/* HEADER ROW: Tier · Category · Realm · Location · Score */}
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+          <ConfidenceTierBadge tier={tier ?? undefined} />
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            {opportunity.category}
+          </span>
+          <RealmTypeIcon realmType={opportunity.realm_type ?? undefined} />
+          <LocationLine
+            city={opportunity.city ?? undefined}
+            state={opportunity.state ?? undefined}
+            geographicScope={opportunity.geographic_scope ?? undefined}
+          />
+          {opportunity.access_state === 'unlocked' && (
+            <span className="inline-flex items-center gap-1 bg-emerald-100
+              text-emerald-700 px-2 py-0.5 rounded-full text-xs font-medium">
+              Unlocked
+            </span>
+          )}
+          {opportunity.access_state === 'locked' && (
+            <span className="inline-flex items-center gap-1 bg-slate-100
+              text-slate-700 px-2 py-0.5 rounded-full text-xs font-medium">
+              Upgrade for Premium
+            </span>
+          )}
+        </div>
+
+        <div className="bg-emerald-100 text-emerald-700 px-3 py-2 rounded-full flex-shrink-0">
+          <div className="text-2xl font-bold leading-none">
+            {opportunity.feasibility_score ?? 0}
+          </div>
+        </div>
+      </div>
+
+      {/* BADGES + SOURCE MIX ROW */}
+      {(showMarketBadges || opportunity.contributing_sources) && (
+        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+          {showMarketBadges && (badges || metrics || (opportunity.city && opportunity.state)) ? (
+            <MarketBadges
+              city={opportunity.city ?? undefined}
+              state={opportunity.state ?? undefined}
+              badges={badges}
+              metrics={metrics}
+              compact={false}
+              maxBadges={3}
+            />
+          ) : <span />}
+
+          <SourceMixIndicator
+            contributingSources={opportunity.contributing_sources}
+            maxDisplay={5}
+          />
+        </div>
+      )}
+
+      {/* TITLE */}
+      <h3 className="font-semibold text-slate-900 text-lg mb-1
+        group-hover:text-emerald-700 transition-colors">
+        {opportunity.title}
+      </h3>
+
+      {/* DESCRIPTION */}
+      <p className="text-sm text-slate-500 mb-4 line-clamp-2">
+        {opportunity.description || opportunity.ai_summary || 'Analysis pending...'}
+      </p>
+
+      {/* METRICS ROW (Pain × Urgency × Growth) */}
+      <PainUrgencyRow
+        painIntensity={opportunity.ai_pain_intensity ?? null}
+        urgencyLevel={opportunity.ai_urgency_level ?? null}
+        growthRate={opportunity.growth_rate ?? null}
+        trendDirection={opportunity.macro_context?.trend_direction ?? null}
+        validationCount={opportunity.validation_count ?? null}
+        marketSize={opportunity.market_size ?? null}
+      />
+
+      {/* 4P's (optional, unchanged) */}
+      {showFourPs && (
+        <div className="mb-4 px-1">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs text-slate-500">Market Intelligence</span>
+            {fourPsLoading && <span className="text-xs text-slate-400">Loading...</span>}
+          </div>
+          {fourPs ? (
+            <FourPsIndicator scores={fourPs} size="md" />
+          ) : !fourPsLoading ? (
+            <div className="h-2 bg-slate-100 rounded-full" />
+          ) : null}
+        </div>
+      )}
+
+      {/* MACRO CONTEXT STRIP (skip in compact) */}
+      {!isCompact && (
+        <MacroContextStrip context={opportunity.macro_context} />
+      )}
+
+      {/* ACTIONS ROW */}
+      <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleAnalyze}
+            className="flex items-center gap-1 text-sm text-slate-600 hover:text-emerald-700"
+            aria-label="View report"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Report</span>
+          </button>
+          <button
+            onClick={handleSave}
+            className={`flex items-center gap-1 text-sm ${
+              isSaved ? 'text-emerald-700' : 'text-slate-600 hover:text-emerald-700'
+            }`}
+            aria-label={isSaved ? 'Unsave' : 'Save'}
+          >
+            <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+            <span>Save</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1 text-sm text-slate-600
+          group-hover:text-emerald-700 transition-colors">
+          <span>View full analysis</span>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </div>
+  )
+}
+```
+
+--------------------------------------------------------------------------------
+PART D — BACKEND API CHANGES
+--------------------------------------------------------------------------------
+The card needs new fields delivered by the opportunities list endpoint.
+
+================================================================================
+D.1  Pydantic Schema Update
+================================================================================
+FILE: backend/app/schemas/opportunity.py
+
+Add a new schema OpportunityCardItem (or extend the existing list-item
+schema). Fields to ADD to whatever schema serves /api/v1/opportunities:
+
+```python
+from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field
+
+
+class OpportunityCardItem(BaseModel):
+    # Existing fields — keep as-is
+    id: int
+    title: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    feasibility_score: Optional[float] = None
+    validation_count: int = 0
+    market_size: Optional[str] = None
+    growth_rate: Optional[float] = None
+    ai_summary: Optional[str] = None
+    ai_generated_title: Optional[str] = None
+
+    # NEW — enrichment fields
+    confidence_tier: Optional[str] = Field(
+        None, description="GOLDMINE | VALIDATED | WEAK_SIGNAL (from Spec 1)"
+    )
+    contributing_sources: Optional[Dict[str, Any]] = Field(
+        None, description="Per-source signal counts (from Spec 1)"
+    )
+    macro_context: Optional[Dict[str, Any]] = Field(
+        None, description="Compact macro backdrop (from Spec 1)"
+    )
+    realm_type: Optional[str] = None
+    geographic_scope: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    ai_pain_intensity: Optional[int] = None
+    ai_urgency_level: Optional[str] = None
+    ai_competition_level: Optional[str] = None
+
+    class Config:
+        orm_mode = True  # SQLAlchemy auto-mapping
+```
+
+================================================================================
+D.2  Router Update
+================================================================================
+FILE: backend/app/routers/opportunities.py  (or wherever the list endpoint lives)
+
+The list query should explicitly select the new columns. If the current
+query uses `select(Opportunity)`, no change needed — all columns load by
+default. If it uses an explicit column list, append:
+  Opportunity.confidence_tier,
+  Opportunity.contributing_sources,
+  Opportunity.macro_context,
+  Opportunity.realm_type,
+  Opportunity.geographic_scope,
+  Opportunity.city,
+  Opportunity.state,
+  Opportunity.ai_pain_intensity,
+  Opportunity.ai_urgency_level,
+  Opportunity.ai_competition_level,
+
+================================================================================
+D.3  Frontend API Type
+================================================================================
+FILE: frontend/src/services/opportunityApi.ts
+
+Extend the type to match OpportunityCardData (Part C). Same field names,
+camel_case → snake_case at the JSON boundary. The card already accepts
+snake_case in props, so no transformation needed.
+
+--------------------------------------------------------------------------------
+PART E — PHASING (CAN SHIP BEFORE SPEC 1 LANDS)
+--------------------------------------------------------------------------------
+Spec 2 has TWO classes of new fields, with different prerequisites:
+
+GROUP 1 — Available immediately, no Spec 1 dependency:
+  realm_type, city, state, geographic_scope, ai_pain_intensity,
+  ai_urgency_level, ai_competition_level
+
+GROUP 2 — Require Spec 1 migration:
+  confidence_tier, contributing_sources, macro_context
+
+The new components (Part B) ALL degrade gracefully when their fields are
+null. So Spec 2 can ship in two phases:
+
+  PHASE 1 (independent of Spec 1):
+    - Build all 6 components from Part B
+    - Update OpportunityCard.tsx to new layout
+    - Surface Group 1 fields
+    - Brand-palette correction (stone/violet → slate/emerald)
+    - SHIPPABLE
+
+  PHASE 2 (after Spec 1 migration runs):
+    - Backend Pydantic + router updates (Part D)
+    - Card automatically lights up tier badge, source mix, macro strip
+    - NO frontend code changes needed — the components are already wired
+      to optional props that simply become non-null.
+
+This decoupling is intentional and important.
+
+--------------------------------------------------------------------------------
+FILE MAP — WHAT GETS CREATED OR TOUCHED
+--------------------------------------------------------------------------------
+NEW FILES:
+  frontend/src/components/Discovery/ConfidenceTierBadge.tsx         (~60 LOC)
+  frontend/src/components/Discovery/SourceMixIndicator.tsx          (~90 LOC)
+  frontend/src/components/Discovery/LocationLine.tsx                (~45 LOC)
+  frontend/src/components/Discovery/PainUrgencyRow.tsx              (~95 LOC)
+  frontend/src/components/Discovery/MacroContextStrip.tsx           (~85 LOC)
+  frontend/src/components/Discovery/RealmTypeIcon.tsx               (~30 LOC)
+  frontend/src/components/Discovery/__tests__/
+      ConfidenceTierBadge.test.tsx
+      SourceMixIndicator.test.tsx
+      LocationLine.test.tsx
+      PainUrgencyRow.test.tsx
+      MacroContextStrip.test.tsx
+      OpportunityCard.test.tsx                                      (snapshot)
+
+MODIFIED FILES:
+  frontend/src/components/Discovery/OpportunityCard.tsx
+      → full rewrite per Part C (palette migration + new sub-components)
+  frontend/src/components/Discovery/OpportunityCardSkeleton.tsx
+      → update to slate/emerald palette and match new layout regions
+  frontend/src/components/Discovery/OpportunityGrid.tsx
+      → ensure it passes through the new fields (likely already does
+         if it spreads opportunity prop)
+  frontend/src/services/opportunityApi.ts
+      → extend type definition
+  backend/app/schemas/opportunity.py
+      → add OpportunityCardItem fields per Part D.1
+  backend/app/routers/opportunities.py
+      → verify list endpoint serializes new fields (Part D.2)
+
+UNCHANGED:
+  All other Discovery components and the FourPs system.
+
+--------------------------------------------------------------------------------
+DESIGN TOKENS / TAILWIND USAGE
+--------------------------------------------------------------------------------
+The migration replaces stone-* with slate-*, and violet-* with emerald-*:
+
+  stone-50    → slate-50
+  stone-100   → slate-100
+  stone-200   → slate-200
+  stone-500   → slate-500
+  stone-600   → slate-600
+  stone-900   → slate-900     (body text)
+  violet-100  → emerald-100
+  violet-600  → emerald-700   (hovers, links)
+  violet-700  → emerald-800
+
+Brand reference: emerald-500 (#10B981) primary, slate-900 (#0F172A) text.
+Already aligned with brand system in replit.md.
+
+--------------------------------------------------------------------------------
+TEST COVERAGE TARGETS
+--------------------------------------------------------------------------------
+For each new component, write at minimum these snapshot tests:
+  1. Renders with all fields populated
+  2. Renders with all fields null (graceful degradation)
+  3. Renders with each tier (goldmine / validated / weak_signal)
+  4. Edge cases:
+     - SourceMixIndicator with 8+ sources (overflow "+N")
+     - MacroContextStrip with only median_income (1 fact)
+     - LocationLine with geographic_scope='online'
+
+OpportunityCard.tsx integration test:
+  - Standard variant renders tier badge AND macro strip
+  - Compact variant renders tier badge WITHOUT macro strip
+  - GOLDMINE tier renders emerald border (assert by className)
+
+--------------------------------------------------------------------------------
+ROLLOUT CHECKLIST
+--------------------------------------------------------------------------------
+PHASE 1 — Front-end first, ships independent of Spec 1
+  [ ] Build ConfidenceTierBadge.tsx + test
+  [ ] Build SourceMixIndicator.tsx + test
+  [ ] Build LocationLine.tsx + test
+  [ ] Build PainUrgencyRow.tsx + test
+  [ ] Build MacroContextStrip.tsx + test
+  [ ] Build RealmTypeIcon.tsx + test
+  [ ] Rewrite OpportunityCard.tsx per Part C
+  [ ] Update OpportunityCardSkeleton.tsx
+  [ ] Verify OpportunityGrid passes through props
+  [ ] Update frontend type definitions
+  [ ] Visual QA: render fixtures for goldmine / validated / weak_signal /
+      null-tier opportunities
+  [ ] Visual QA: render with macro_context null vs populated
+  [ ] Deploy to staging — card improvements visible for Group-1 fields
+
+PHASE 2 — Backend (after Spec 1 migration is live)
+  [ ] Update Pydantic schema (Part D.1)
+  [ ] Verify router serializes new fields (Part D.2)
+  [ ] Run integration test: GET /api/v1/opportunities returns
+      confidence_tier, contributing_sources, macro_context
+  [ ] Visual QA: card lights up tier badge, source mix, macro strip
+  [ ] Deploy to production
+
+SUCCESS METRICS
+  - Click-through rate from card to detail page (target: +15% vs baseline)
+  - % of cards displaying a tier badge (target: >80% after 2 weeks of Spec 1)
+  - % of cards displaying source mix with ≥2 sources (proxy for signal quality)
+  - User feedback: qualitative — "I can scan opportunities faster"
+
+================================================================================
+END OF SPECIFICATION
+================================================================================

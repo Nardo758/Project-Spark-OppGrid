@@ -11,58 +11,61 @@ interface Props {
   maxDisplay?: number
 }
 
-const SOURCE_META: Record<string, { label: string; bg: string; abbr: string }> = {
-  reddit:        { label: 'Reddit',       bg: 'bg-orange-500',  abbr: 'R' },
-  google_maps:   { label: 'Google Maps',  bg: 'bg-blue-500',    abbr: 'G' },
-  yelp:          { label: 'Yelp',         bg: 'bg-red-500',     abbr: 'Y' },
-  nextdoor:      { label: 'Nextdoor',     bg: 'bg-green-600',   abbr: 'N' },
-  twitter:       { label: 'Twitter/X',    bg: 'bg-sky-500',     abbr: 'X' },
-  facebook:      { label: 'Facebook',     bg: 'bg-blue-600',    abbr: 'F' },
-  macro_anomaly: { label: 'Macro Data',   bg: 'bg-purple-500',  abbr: 'M' },
-  craigslist:    { label: 'Craigslist',   bg: 'bg-violet-500',  abbr: 'C' },
-  linkedin:      { label: 'LinkedIn',     bg: 'bg-blue-700',    abbr: 'L' },
-  greatschools:  { label: 'GreatSchools', bg: 'bg-teal-500',    abbr: 'S' },
+const SOURCE_META: Record<string, { label: string; color: string; emoji: string }> = {
+  reddit:        { label: 'Reddit',       color: 'bg-orange-500',  emoji: '🔴' },
+  google_maps:   { label: 'Google Maps',  color: 'bg-blue-500',    emoji: '🗺️' },
+  yelp:          { label: 'Yelp',         color: 'bg-red-600',     emoji: '★' },
+  nextdoor:      { label: 'Nextdoor',     color: 'bg-emerald-600', emoji: '🏘️' },
+  twitter:       { label: 'Twitter/X',    color: 'bg-slate-900',   emoji: '𝕏' },
+  greatschools:  { label: 'GreatSchools', color: 'bg-indigo-500',  emoji: '🎓' },
+  craigslist:    { label: 'Craigslist',   color: 'bg-purple-600',  emoji: 'C' },
+  macro_anomaly: { label: 'Economic',     color: 'bg-amber-500',   emoji: '📈' },
+  facebook:      { label: 'Facebook',     color: 'bg-blue-600',    emoji: 'F' },
+  linkedin:      { label: 'LinkedIn',     color: 'bg-blue-700',    emoji: 'in' },
 }
 
-export default function SourceMixIndicator({ contributingSources, maxDisplay = 6 }: Props) {
-  const sources = useMemo(() => {
-    if (!contributingSources) return []
-    return Object.entries(contributingSources)
-      .filter(([key]) => !['total_sources', 'total_signals'].includes(key))
-      .filter(([, count]) => typeof count === 'number' && count > 0)
-      .sort(([, a], [, b]) => (b as number) - (a as number))
-  }, [contributingSources])
+export default function SourceMixIndicator({ contributingSources, maxDisplay = 5 }: Props) {
+  const { displayed, overflow, total } = useMemo(() => {
+    if (!contributingSources) return { displayed: [], overflow: 0, total: 0 }
+    const entries = Object.entries(contributingSources)
+      .filter(([k]) => k !== 'total_sources' && k !== 'total_signals')
+      .filter(([, v]) => (v ?? 0) > 0)
+      .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+    return {
+      displayed: entries.slice(0, maxDisplay),
+      overflow: Math.max(0, entries.length - maxDisplay),
+      total: contributingSources.total_sources ?? entries.length,
+    }
+  }, [contributingSources, maxDisplay])
 
-  if (!sources.length) return null
-
-  const displayed   = sources.slice(0, maxDisplay)
-  const overflow    = sources.length - maxDisplay
-  const totalSignals = contributingSources?.total_signals
-    ?? sources.reduce((sum, [, c]) => sum + (c as number), 0)
-  const totalSources = contributingSources?.total_sources ?? sources.length
+  if (total === 0) return null
 
   return (
-    <div
-      className="flex items-center gap-1"
-      title={`${totalSources} source${totalSources !== 1 ? 's' : ''} · ${totalSignals} signal${totalSignals !== 1 ? 's' : ''}`}
-    >
-      {displayed.map(([key]) => {
-        const meta = SOURCE_META[key] ?? { label: key, bg: 'bg-slate-400', abbr: '?' }
-        return (
-          <span
-            key={key}
-            className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white ${meta.bg} flex-shrink-0`}
-            title={`${meta.label}: ${contributingSources?.[key]} signals`}
-          >
-            {meta.abbr}
+    <div className="flex items-center gap-1.5" title={`${total} source${total === 1 ? '' : 's'}`}>
+      <div className="flex -space-x-1">
+        {displayed.map(([source, count]) => {
+          const meta = SOURCE_META[source]
+          if (!meta) return null
+          return (
+            <span
+              key={source}
+              className={`inline-flex items-center justify-center w-5 h-5 rounded-full
+                text-[10px] text-white font-bold ring-2 ring-white ${meta.color}`}
+              title={`${meta.label}: ${count} signal${count === 1 ? '' : 's'}`}
+            >
+              {meta.emoji}
+            </span>
+          )
+        })}
+        {overflow > 0 && (
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded-full
+            text-[10px] bg-slate-200 text-slate-700 font-bold ring-2 ring-white">
+            +{overflow}
           </span>
-        )
-      })}
-      {overflow > 0 && (
-        <span className="text-xs text-slate-500 font-medium">+{overflow}</span>
-      )}
-      <span className="text-xs text-slate-400 ml-0.5">
-        {totalSources} src
+        )}
+      </div>
+      <span className="text-xs text-slate-600 font-medium">
+        {total} source{total === 1 ? '' : 's'}
       </span>
     </div>
   )

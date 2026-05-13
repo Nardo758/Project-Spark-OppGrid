@@ -27,37 +27,32 @@ const TIER_CONFIG: Record<Tier, {
     Icon: Check,
   },
   weak_signal: {
-    label: 'Weak Signal',
+    label: 'Early Signal',
     bg: 'bg-slate-100',
     text: 'text-slate-700',
-    Icon: ({ className }) => <span className={className}>·</span>,
+    Icon: () => null,
   },
 }
 
 export default function ConfidenceTierBadge({ tier, size = 'sm', className = '' }: Props) {
   if (!tier || !(tier in TIER_CONFIG)) return null
-  const config = TIER_CONFIG[tier as Tier]
-  const { Icon } = config
-  const iconSize  = size === 'md' ? 'w-3.5 h-3.5' : 'w-3 h-3'
-  const padding   = size === 'md' ? 'px-2.5 py-1' : 'px-2 py-0.5'
+  const c = TIER_CONFIG[tier as Tier]
+  const pad      = size === 'md' ? 'px-2.5 py-1' : 'px-2 py-0.5'
+  const iconSize = size === 'md' ? 'w-3.5 h-3.5' : 'w-3 h-3'
 
   return (
     <span
-      className={`inline-flex items-center gap-1 ${padding} rounded-full font-semibold text-xs ${config.bg} ${config.text} ${className}`}
+      className={`inline-flex items-center gap-1 ${pad} rounded-full text-xs font-semibold uppercase tracking-wide ${c.bg} ${c.text} ${className}`}
     >
-      <Icon className={iconSize} />
-      {config.label}
+      <c.Icon className={iconSize} />
+      {c.label}
     </span>
   )
 }
 
+/** Single combined className for the card border + hover ring */
 export function getTierBorderClass(tier?: string | null): string {
-  if (tier === 'goldmine')   return 'border-emerald-500'
-  if (tier === 'validated')  return 'border-slate-300'
-  return 'border-slate-200'
-}
-
-export function getTierHoverClass(tier?: string | null): string {
-  if (tier === 'goldmine') return 'hover:border-emerald-400 hover:ring-2 hover:ring-emerald-100'
-  return 'hover:border-slate-400'
+  if (tier === 'goldmine')  return 'border-emerald-500 hover:ring-4 hover:ring-emerald-100'
+  if (tier === 'validated') return 'border-slate-300 hover:border-slate-400'
+  return 'border-slate-200 hover:border-slate-300'
 }
