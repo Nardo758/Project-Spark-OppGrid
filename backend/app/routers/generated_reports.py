@@ -180,14 +180,14 @@ def get_report_stats(
         func.count(GeneratedReport.id)
     ).group_by(GeneratedReport.report_type).all()
     
-    by_type = {r[0].value if r[0] else "unknown": r[1] for r in by_type_results}
+    by_type = {(r[0].value if hasattr(r[0], 'value') else str(r[0])) if r[0] else "unknown": r[1] for r in by_type_results}
     
     by_status_results = db.query(
         GeneratedReport.status,
         func.count(GeneratedReport.id)
     ).group_by(GeneratedReport.status).all()
     
-    by_status = {r[0].value if r[0] else "unknown": r[1] for r in by_status_results}
+    by_status = {(r[0].value if hasattr(r[0], 'value') else str(r[0])) if r[0] else "unknown": r[1] for r in by_status_results}
     
     avg_time = db.query(func.avg(GeneratedReport.generation_time_ms)).filter(
         GeneratedReport.generation_time_ms.isnot(None)
@@ -206,6 +206,60 @@ def get_report_stats(
         "by_status": by_status,
         "avg_generation_time_ms": float(avg_time) if avg_time else None,
         "avg_confidence_score": float(avg_confidence) if avg_confidence else None,
+    }
+
+
+@router.get("/admin/list")
+def admin_list_reports(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    status: Optional[str] = Query(None),
+    user_id: Optional[int] = Query(None),
+    admin_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """Admin: list all generated reports across all users, including error details."""
+    query = db.query(GeneratedReport)
+
+    if status:
+        try:
+            query = query.filter(GeneratedReport.status == ReportStatus(status))
+        except ValueError:
+            pass
+
+    if user_id:
+        query = query.filter(GeneratedReport.user_id == user_id)
+
+    total = query.count()
+    reports = (
+        query.order_by(desc(GeneratedReport.created_at))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "reports": [
+            {
+                "id": r.id,
+                "user_id": r.user_id,
+                "opportunity_id": r.opportunity_id,
+                "report_type": r.report_type.value if hasattr(r.report_type, "value") else str(r.report_type),
+                "status": r.status.value if hasattr(r.status, "value") else str(r.status),
+                "title": r.title,
+                "error_type": r.error_type,
+                "error_message": r.error_message,
+                "confidence_score": r.confidence_score,
+                "generation_time_ms": r.generation_time_ms,
+                "tokens_used": r.tokens_used,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+            }
+            for r in reports
+        ],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
     }
 
 

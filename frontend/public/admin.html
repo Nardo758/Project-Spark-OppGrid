@@ -858,6 +858,14 @@
                         Consultant Studio
                     </a>
                 </li>
+                <li>
+                    <a href="#generated-reports" data-section="generated-reports">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        Generated Reports
+                    </a>
+                </li>
             </ul>
         </aside>
 
@@ -884,6 +892,10 @@
                     <div class="stat-card">
                         <div class="stat-label">Banned Users</div>
                         <div class="stat-value" id="stat-banned">--</div>
+                    </div>
+                    <div class="stat-card" style="cursor:pointer;" onclick="navigateTo('generated-reports', 'status=failed')">
+                        <div class="stat-label">Failed Reports</div>
+                        <div class="stat-value" id="stat-failed-reports" style="color: var(--red-500);">--</div>
                     </div>
                 </div>
             </section>
@@ -2177,6 +2189,90 @@
                     </div>
                 </div>
             </section>
+            <!-- Generated Reports Section -->
+            <section id="section-generated-reports" class="hidden">
+                <div class="page-header">
+                    <h1 class="spektral">Generated Reports</h1>
+                    <p>All AI-generated reports across the platform, including failed ones with error details</p>
+                </div>
+
+                <div class="stats-grid" id="gen-reports-stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Reports</div>
+                        <div class="stat-value" id="gr-stat-total">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Completed</div>
+                        <div class="stat-value" id="gr-stat-completed" style="color: var(--green-500);">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Failed</div>
+                        <div class="stat-value" id="gr-stat-failed" style="color: var(--red-500);">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pending / Generating</div>
+                        <div class="stat-value" id="gr-stat-in-progress">--</div>
+                    </div>
+                </div>
+
+                <div class="content-section" style="margin-top: 24px;">
+                    <div class="section-header">
+                        <h2>Report List</h2>
+                        <div class="section-actions">
+                            <select class="filter-select" id="gr-status-filter">
+                                <option value="">All statuses</option>
+                                <option value="failed">Failed</option>
+                                <option value="completed">Completed</option>
+                                <option value="generating">Generating</option>
+                                <option value="pending">Pending</option>
+                            </select>
+                            <button class="btn-sm btn-primary" onclick="loadGeneratedReports()">Refresh</button>
+                        </div>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>User</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Title</th>
+                                <th>Created</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gr-table-body">
+                            <tr><td colspan="7" class="loading">Loading reports...</td></tr>
+                        </tbody>
+                    </table>
+                    <div id="gr-pagination" style="padding: 16px; text-align: center; color: var(--stone-400); font-size: 13px;"></div>
+                </div>
+
+                <!-- Error detail panel (shown inline below the table) -->
+                <div id="gr-error-panel" class="content-section" style="margin-top: 24px; display: none; border-left: 3px solid var(--red-500);">
+                    <div class="section-header">
+                        <h2>Error Details — Report <span id="gr-error-report-id"></span></h2>
+                        <div class="section-actions">
+                            <button class="btn-sm" onclick="document.getElementById('gr-error-panel').style.display='none'">Close</button>
+                        </div>
+                    </div>
+                    <div style="padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div>
+                            <div style="font-size: 12px; color: var(--stone-400); margin-bottom: 4px;">Error Type</div>
+                            <div id="gr-error-type" style="font-weight: 600; color: var(--red-400);"></div>
+                        </div>
+                        <div>
+                            <div style="font-size: 12px; color: var(--stone-400); margin-bottom: 4px;">Report Type</div>
+                            <div id="gr-error-report-type" style="font-weight: 600;"></div>
+                        </div>
+                        <div style="grid-column: 1 / -1;">
+                            <div style="font-size: 12px; color: var(--stone-400); margin-bottom: 4px;">Error Message</div>
+                            <pre id="gr-error-message" style="background: var(--stone-900); border-radius: 6px; padding: 12px; font-size: 12px; color: var(--red-300); white-space: pre-wrap; word-break: break-word; margin: 0;"></pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </main>
     </div>
 
@@ -2300,6 +2396,7 @@
             document.getElementById('tracking-event-filter')?.addEventListener('change', () => loadTrackingEvents());
             document.getElementById('tracking-days')?.addEventListener('change', () => loadTracking());
 
+            document.getElementById('gr-status-filter')?.addEventListener('change', () => loadGeneratedReports());
             document.getElementById('jobruns-name')?.addEventListener('input', debounce(() => loadJobRuns(), 300));
             document.getElementById('jobruns-status')?.addEventListener('change', () => loadJobRuns());
             document.getElementById('audit-action')?.addEventListener('input', debounce(() => loadAuditLogs(), 300));
@@ -2323,7 +2420,27 @@
                 case 'command-center': loadCommandCenter(); break;
                 case 'google-scraping': loadGoogleScraping(); break;
                 case 'consultant-analytics': loadConsultantAnalytics(); break;
+                case 'generated-reports': loadGeneratedReports(); loadGeneratedReportStats(); break;
             }
+        }
+
+        function navigateTo(section, query) {
+            const navLinks = document.querySelectorAll('.sidebar-nav a');
+            navLinks.forEach(l => l.classList.remove('active'));
+            const link = document.querySelector(`.sidebar-nav a[data-section="${section}"]`);
+            if (link) link.classList.add('active');
+            document.querySelectorAll('[id^="section-"]').forEach(s => s.classList.add('hidden'));
+            const sectionEl = document.getElementById(`section-${section}`);
+            if (sectionEl) sectionEl.classList.remove('hidden');
+            if (query) {
+                const params = new URLSearchParams(query);
+                const status = params.get('status');
+                if (status) {
+                    const sel = document.getElementById('gr-status-filter');
+                    if (sel) sel.value = status;
+                }
+            }
+            loadSection(section);
         }
 
         async function loadDashboard() {
@@ -2337,6 +2454,15 @@
                 document.getElementById('stat-banned').textContent = stats.banned_users;
             } catch (error) {
                 console.error('Failed to load dashboard:', error);
+            }
+
+            try {
+                const statsResp = await fetchWithAuth('/api/v1/generated-reports/stats');
+                const grStats = await statsResp.json();
+                const failedCount = (grStats.by_status && grStats.by_status.failed) || 0;
+                document.getElementById('stat-failed-reports').textContent = failedCount;
+            } catch (e) {
+                document.getElementById('stat-failed-reports').textContent = '—';
             }
         }
 
@@ -5813,6 +5939,77 @@
 
         document.getElementById('cs-days-filter')?.addEventListener('change', () => loadConsultantAnalytics());
         // ===== END CONSULTANT STUDIO ANALYTICS =====
+
+        // ===== GENERATED REPORTS =====
+        async function loadGeneratedReportStats() {
+            try {
+                const resp = await fetchWithAuth('/api/v1/generated-reports/stats');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const by = data.by_status || {};
+                document.getElementById('gr-stat-total').textContent = data.total_reports || 0;
+                document.getElementById('gr-stat-completed').textContent = by.completed || 0;
+                document.getElementById('gr-stat-failed').textContent = by.failed || 0;
+                document.getElementById('gr-stat-in-progress').textContent = (by.pending || 0) + (by.generating || 0);
+            } catch (e) {
+                console.error('Failed to load generated report stats:', e);
+            }
+        }
+
+        async function loadGeneratedReports() {
+            const tbody = document.getElementById('gr-table-body');
+            const pagination = document.getElementById('gr-pagination');
+            tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading reports...</td></tr>';
+
+            const status = document.getElementById('gr-status-filter')?.value || '';
+            let url = '/api/v1/generated-reports/admin/list?page_size=50';
+            if (status) url += `&status=${encodeURIComponent(status)}`;
+
+            try {
+                const resp = await fetchWithAuth(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const reports = data.reports || [];
+
+                if (reports.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No reports found</td></tr>';
+                    pagination.textContent = '';
+                    return;
+                }
+
+                tbody.innerHTML = reports.map(r => {
+                    const statusBadge = `<span class="badge badge-${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>`;
+                    const detailBtn = r.status === 'failed'
+                        ? `<button class="btn-sm" style="background:var(--red-600);color:#fff;" onclick="showReportError(${r.id}, '${escapeHtml(r.error_type || '')}', '${escapeHtml(r.report_type || '')}', \`${escapeHtml((r.error_message || 'No error detail recorded').replace(/`/g, "'"))}\`)">View Error</button>`
+                        : '—';
+                    return `<tr>
+                        <td>${r.id}</td>
+                        <td style="font-size:12px;color:var(--stone-400);">User #${r.user_id}</td>
+                        <td style="font-size:12px;">${escapeHtml(r.report_type || '—')}</td>
+                        <td>${statusBadge}</td>
+                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.title || '—')}</td>
+                        <td style="font-size:12px;">${r.created_at ? formatDate(r.created_at) : '—'}</td>
+                        <td>${detailBtn}</td>
+                    </tr>`;
+                }).join('');
+
+                pagination.textContent = `Showing ${reports.length} of ${data.total} reports`;
+            } catch (e) {
+                console.error('Failed to load generated reports:', e);
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state">Failed to load reports</td></tr>';
+            }
+        }
+
+        function showReportError(reportId, errorType, reportType, errorMessage) {
+            const panel = document.getElementById('gr-error-panel');
+            document.getElementById('gr-error-report-id').textContent = reportId;
+            document.getElementById('gr-error-type').textContent = errorType || 'unknown';
+            document.getElementById('gr-error-report-type').textContent = reportType || '—';
+            document.getElementById('gr-error-message').textContent = errorMessage || 'No error detail recorded';
+            panel.style.display = 'block';
+            panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        // ===== END GENERATED REPORTS =====
 
         init();
     </script>
