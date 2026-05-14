@@ -927,7 +927,7 @@ async def trigger_report_generation(
     
     report_context = report_metadata.get("report_context", {})
     guest_email = report_metadata.get("guest_email")
-    report_type = str(pending_report.report_type)
+    report_type = pending_report.report_type.value if hasattr(pending_report.report_type, 'value') else str(pending_report.report_type)
     
     # Determine recipient email
     recipient_email = guest_email

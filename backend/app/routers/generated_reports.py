@@ -1144,19 +1144,20 @@ async def backfill_economic_snapshots(
                 db.refresh(report)
                 filled.append({
                     "report_id": report.id,
-                    "report_type": str(report.report_type),
+                    "report_type": report.report_type.value if hasattr(report.report_type, 'value') else str(report.report_type),
                     "opportunity_id": report.opportunity_id,
                     "business_type": business_type,
                     "sources": list(economic_snapshot.keys()),
                 })
+                _rt = report.report_type.value if hasattr(report.report_type, 'value') else str(report.report_type)
                 logger.info(
                     f"[Backfill] Saved economic snapshot for report {report.id} "
-                    f"({str(report.report_type)}, opp={report.opportunity_id})"
+                    f"({_rt}, opp={report.opportunity_id})"
                 )
             else:
                 skipped.append({
                     "report_id": report.id,
-                    "report_type": str(report.report_type),
+                    "report_type": report.report_type.value if hasattr(report.report_type, 'value') else str(report.report_type),
                     "reason": "no_economic_data_available",
                 })
                 logger.info(f"[Backfill] No economic data for report {report.id} — skipped")
@@ -1165,7 +1166,7 @@ async def backfill_economic_snapshots(
             db.rollback()
             failed.append({
                 "report_id": report.id,
-                "report_type": str(report.report_type),
+                "report_type": report.report_type.value if hasattr(report.report_type, 'value') else str(report.report_type),
                 "error": str(exc),
             })
             logger.error(f"[Backfill] Failed to backfill report {report.id}: {exc}")
