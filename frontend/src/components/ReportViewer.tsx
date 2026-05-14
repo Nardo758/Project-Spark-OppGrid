@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { X, Download, FileText, Lock, Loader2, CheckCircle, Printer, Mail, FileDown } from 'lucide-react'
+import { X, Download, FileText, Lock, Loader2, CheckCircle, Printer, Mail, FileDown, AlertCircle, RefreshCw } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import EconomicIntelPanel, { EconomicSnapshot } from './EconomicIntelPanel'
 
@@ -13,6 +13,9 @@ type GeneratedReport = {
   content?: string | null
   created_at: string
   economic_snapshot?: EconomicSnapshot | null
+  status?: string | null
+  error_type?: string | null
+  error_message?: string | null
 }
 
 type ReportViewerProps = {
@@ -133,7 +136,19 @@ export default function ReportViewer({
       })
       if (!res.ok) return null
       const data = await res.json()
-      return data.reports?.length > 0 ? data.reports[0] : null
+      if (!data.reports?.length) return null
+      const report = data.reports[0]
+      return {
+        id: report.id,
+        opportunity_id: opportunityId,
+        report_type: reportTypeMap[selectedLayer],
+        content: report.content ?? null,
+        created_at: report.created_at,
+        economic_snapshot: report.economic_snapshot ?? null,
+        status: report.status ?? null,
+        error_type: report.error_type ?? null,
+        error_message: report.error_message ?? null,
+      } as GeneratedReport
     },
   })
 
@@ -165,7 +180,7 @@ export default function ReportViewer({
     },
   })
 
-  const displayReportForEffect = generatedReport || existingReportQuery.data
+  const displayReportForEffect = generatedReport || (existingReportQuery.data?.status !== 'failed' ? existingReportQuery.data : null)
   const displayReportId = displayReportForEffect?.id
   const displayReportHasSnapshot = !!displayReportForEffect?.economic_snapshot
   const isLayerReport =
@@ -444,7 +459,8 @@ export default function ReportViewer({
   const config = layerConfig[selectedLayer]
   const hasAccess = canAccessLayer(selectedLayer)
   const existingReport = existingReportQuery.data
-  const displayReport = generatedReport || existingReport
+  const failedReport = !generatedReport && existingReport?.status === 'failed' ? existingReport : null
+  const displayReport = generatedReport || (existingReport?.status !== 'failed' ? existingReport : null)
   const isLoadingExisting = existingReportQuery.isLoading && !generatedReport
 
   return (
@@ -506,6 +522,39 @@ export default function ReportViewer({
             <div className="flex items-center justify-center py-20 gap-3 text-stone-500">
               <Loader2 className="w-6 h-6 animate-spin" />
               <span className="text-sm font-medium">Loading report…</span>
+            </div>
+          ) : failedReport ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold text-stone-900 mb-2">Generation Failed</h3>
+              <p className="text-stone-500 mb-4 text-sm">
+                {error || failedReport.error_message || 'An error occurred while generating this report. Please try again.'}
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 max-w-md mx-auto text-left">
+                <p className="text-red-700 text-sm font-medium">What happened?</p>
+                <p className="text-red-600 text-sm mt-1">
+                  {error || failedReport.error_message || 'The AI service encountered an unexpected error.'}
+                </p>
+              </div>
+              <button
+                onClick={handleGenerate}
+                disabled={generateMutation.isPending}
+                className={`inline-flex items-center gap-2 bg-${config.color}-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-${config.color}-700 disabled:opacity-50`}
+              >
+                {generateMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-5 h-5" />
+                    Try Again
+                  </>
+                )}
+              </button>
             </div>
           ) : displayReport ? (
             <div>
