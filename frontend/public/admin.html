@@ -5941,6 +5941,8 @@
         // ===== END CONSULTANT STUDIO ANALYTICS =====
 
         // ===== GENERATED REPORTS =====
+        let _grReportsCache = {};
+
         async function loadGeneratedReportStats() {
             try {
                 const resp = await fetchWithAuth('/api/v1/generated-reports/stats');
@@ -5960,6 +5962,7 @@
             const tbody = document.getElementById('gr-table-body');
             const pagination = document.getElementById('gr-pagination');
             tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading reports...</td></tr>';
+            document.getElementById('gr-error-panel').style.display = 'none';
 
             const status = document.getElementById('gr-status-filter')?.value || '';
             let url = '/api/v1/generated-reports/admin/list?page_size=50';
@@ -5971,27 +5974,65 @@
                 const data = await resp.json();
                 const reports = data.reports || [];
 
+                _grReportsCache = {};
+                reports.forEach(r => { _grReportsCache[r.id] = r; });
+
                 if (reports.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="7" class="empty-state">No reports found</td></tr>';
                     pagination.textContent = '';
                     return;
                 }
 
-                tbody.innerHTML = reports.map(r => {
-                    const statusBadge = `<span class="badge badge-${escapeHtml(r.status)}">${escapeHtml(r.status)}</span>`;
-                    const detailBtn = r.status === 'failed'
-                        ? `<button class="btn-sm" style="background:var(--red-600);color:#fff;" onclick="showReportError(${r.id}, '${escapeHtml(r.error_type || '')}', '${escapeHtml(r.report_type || '')}', \`${escapeHtml((r.error_message || 'No error detail recorded').replace(/`/g, "'"))}\`)">View Error</button>`
-                        : '—';
-                    return `<tr>
-                        <td>${r.id}</td>
-                        <td style="font-size:12px;color:var(--stone-400);">User #${r.user_id}</td>
-                        <td style="font-size:12px;">${escapeHtml(r.report_type || '—')}</td>
-                        <td>${statusBadge}</td>
-                        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.title || '—')}</td>
-                        <td style="font-size:12px;">${r.created_at ? formatDate(r.created_at) : '—'}</td>
-                        <td>${detailBtn}</td>
-                    </tr>`;
-                }).join('');
+                tbody.innerHTML = '';
+                reports.forEach(r => {
+                    const tr = document.createElement('tr');
+
+                    const cells = [
+                        String(r.id),
+                        null,
+                        r.report_type || '—',
+                        null,
+                        r.title || '—',
+                        r.created_at ? formatDate(r.created_at) : '—',
+                        null,
+                    ];
+
+                    cells.forEach((text, i) => {
+                        const td = document.createElement('td');
+                        if (i === 1) {
+                            td.style.cssText = 'font-size:12px;color:var(--stone-400)';
+                            td.textContent = `User #${r.user_id}`;
+                        } else if (i === 2) {
+                            td.style.fontSize = '12px';
+                            td.textContent = text;
+                        } else if (i === 3) {
+                            const badge = document.createElement('span');
+                            badge.className = `badge badge-${r.status}`;
+                            badge.textContent = r.status;
+                            td.appendChild(badge);
+                        } else if (i === 4) {
+                            td.style.cssText = 'max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+                            td.textContent = text;
+                        } else if (i === 6) {
+                            if (r.status === 'failed') {
+                                const btn = document.createElement('button');
+                                btn.className = 'btn-sm';
+                                btn.style.cssText = 'background:var(--red-600);color:#fff';
+                                btn.textContent = 'View Error';
+                                btn.dataset.reportId = r.id;
+                                td.appendChild(btn);
+                            } else {
+                                td.textContent = '—';
+                            }
+                        } else {
+                            td.style.fontSize = '12px';
+                            td.textContent = text;
+                        }
+                        tr.appendChild(td);
+                    });
+
+                    tbody.appendChild(tr);
+                });
 
                 pagination.textContent = `Showing ${reports.length} of ${data.total} reports`;
             } catch (e) {
@@ -6000,15 +6041,19 @@
             }
         }
 
-        function showReportError(reportId, errorType, reportType, errorMessage) {
+        document.getElementById('gr-table-body').addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-report-id]');
+            if (!btn) return;
+            const report = _grReportsCache[btn.dataset.reportId];
+            if (!report) return;
             const panel = document.getElementById('gr-error-panel');
-            document.getElementById('gr-error-report-id').textContent = reportId;
-            document.getElementById('gr-error-type').textContent = errorType || 'unknown';
-            document.getElementById('gr-error-report-type').textContent = reportType || '—';
-            document.getElementById('gr-error-message').textContent = errorMessage || 'No error detail recorded';
+            document.getElementById('gr-error-report-id').textContent = report.id;
+            document.getElementById('gr-error-type').textContent = report.error_type || 'unknown';
+            document.getElementById('gr-error-report-type').textContent = report.report_type || '—';
+            document.getElementById('gr-error-message').textContent = report.error_message || 'No error detail recorded';
             panel.style.display = 'block';
             panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        });
         // ===== END GENERATED REPORTS =====
 
         init();
