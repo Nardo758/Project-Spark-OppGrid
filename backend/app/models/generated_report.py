@@ -2,7 +2,7 @@
 Generated Report Model - Storage of generated reports (text and PDF)
 """
 
-from sqlalchemy import Column, Integer, String, Text, LargeBinary, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Text, LargeBinary, ForeignKey, DateTime, Boolean, Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -60,7 +60,7 @@ class GeneratedReport(Base):
 
     # Report metadata
     report_type = Column(String(50), nullable=False, index=True)
-    status = Column(String(20), nullable=False, default="pending", index=True)
+    status = Column(SAEnum(ReportStatus, native_enum=False, create_constraint=False, values_callable=lambda x: [e.value for e in x]), nullable=False, default=ReportStatus.PENDING, index=True)
 
     # Text-based report content (legacy / Consultant Studio)
     title = Column(Text, nullable=True)

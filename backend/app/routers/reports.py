@@ -722,8 +722,8 @@ async def generate_report(
 
     return GeneratedReportResponse(
         id=generated_report.id,
-        report_type=generated_report.report_type.value,
-        status=generated_report.status.value,
+        report_type=str(generated_report.report_type),
+        status=generated_report.status.value if hasattr(generated_report.status, 'value') else str(generated_report.status),
         title=generated_report.title,
         summary=generated_report.summary,
         content=generated_report.content,
@@ -759,8 +759,8 @@ async def get_my_reports(
 
     return [GeneratedReportResponse(
         id=r.id,
-        report_type=r.report_type.value,
-        status=r.status.value,
+        report_type=str(r.report_type),
+        status=r.status.value if hasattr(r.status, 'value') else str(r.status),
         title=r.title,
         summary=r.summary,
         content=r.content,
@@ -907,8 +907,8 @@ async def get_public_report(
     return {
         "id": report.id,
         "title": report.title,
-        "report_type": report.report_type.value if report.report_type else None,
-        "status": report.status.value if report.status else None,
+        "report_type": str(report.report_type) if report.report_type else None,
+        "status": (report.status.value if hasattr(report.status, 'value') else str(report.status)) if report.status else None,
         "content": report.content,
         "confidence_score": report.confidence_score,
         "created_at": report.created_at.isoformat() if report.created_at else None,
