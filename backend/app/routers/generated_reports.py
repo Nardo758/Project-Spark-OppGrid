@@ -1206,15 +1206,15 @@ def get_report_status(
     
     response = {
         "id": report.id,
-        "status": report.status.value,
-        "progress": 100 if report.status == ReportStatus.COMPLETED else (50 if report.status == ReportStatus.GENERATING else 0),
+        "status": report.status.value if hasattr(report.status, 'value') else report.status,
+        "progress": 100 if report.status in (ReportStatus.COMPLETED, ReportStatus.COMPLETED.value) else (50 if report.status in (ReportStatus.GENERATING, ReportStatus.GENERATING.value) else 0),
     }
     
-    if report.status == ReportStatus.FAILED:
+    if report.status in (ReportStatus.FAILED, ReportStatus.FAILED.value):
         response["error_type"] = report.error_type
         response["error_message"] = report.error_message
     
-    if report.status == ReportStatus.COMPLETED:
+    if report.status in (ReportStatus.COMPLETED, ReportStatus.COMPLETED.value):
         response["completed_at"] = report.completed_at.isoformat() if report.completed_at else None
         response["generation_time_ms"] = report.generation_time_ms
     

@@ -758,8 +758,9 @@ class ReportGenerator:
         confidence_class = "high" if score >= 80 else "medium" if score >= 60 else "low"
         
         source_types = []
-        if opp.source_type:
-            source_types.append(opp.source_type)
+        _source_type = getattr(opp, 'source_type', None)
+        if _source_type:
+            source_types.append(_source_type)
         else:
             source_types = ["Market Analysis", "Consumer Feedback"]
         

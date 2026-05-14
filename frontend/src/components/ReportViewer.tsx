@@ -84,7 +84,7 @@ export default function ReportViewer({
 
   const generateMutation = useMutation({
     mutationFn: async (layer: ReportLayer) => {
-      const res = await fetch(`/api/v1/reports/opportunity/${opportunityId}/${layer}`, {
+      const res = await fetch(`/api/v1/generated-reports/opportunity/${opportunityId}/${layer}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -94,6 +94,9 @@ export default function ReportViewer({
       const data = await res.json()
       if (!res.ok) {
         throw new Error(data.detail?.message || data.detail || 'Failed to generate report')
+      }
+      if (data.requires_payment) {
+        throw new Error(data.message || 'Payment required to generate this report')
       }
       const report = data.report
       return {
@@ -121,11 +124,11 @@ export default function ReportViewer({
     enabled: isOpen && canAccessLayer(selectedLayer),
     queryFn: async () => {
       const reportTypeMap: Record<ReportLayer, string> = {
-        layer1: 'LAYER_1_OVERVIEW',
-        layer2: 'LAYER_2_DEEP_DIVE',
-        layer3: 'LAYER_3_EXECUTION',
+        layer1: 'layer_1_overview',
+        layer2: 'layer_2_deep_dive',
+        layer3: 'layer_3_execution',
       }
-      const res = await fetch(`/api/v1/reports/?opportunity_id=${opportunityId}&report_type=${reportTypeMap[selectedLayer]}`, {
+      const res = await fetch(`/api/v1/generated-reports/?opportunity_id=${opportunityId}&report_type=${reportTypeMap[selectedLayer]}`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) return null
