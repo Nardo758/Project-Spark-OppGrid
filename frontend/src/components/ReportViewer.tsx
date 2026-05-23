@@ -125,6 +125,10 @@ export default function ReportViewer({
   const existingReportQuery = useQuery({
     queryKey: ['report', opportunityId, selectedLayer],
     enabled: isOpen && canAccessLayer(selectedLayer),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === 'generating' || status === 'pending' ? 4000 : false
+    },
     queryFn: async () => {
       const reportTypeMap: Record<ReportLayer, string> = {
         layer1: 'layer_1_overview',
@@ -180,7 +184,7 @@ export default function ReportViewer({
     },
   })
 
-  const displayReportForEffect = generatedReport || (existingReportQuery.data?.status !== 'failed' ? existingReportQuery.data : null)
+  const displayReportForEffect = generatedReport || (existingReportQuery.data?.status === 'completed' ? existingReportQuery.data : null)
   const displayReportId = displayReportForEffect?.id
   const displayReportHasSnapshot = !!displayReportForEffect?.economic_snapshot
   const isLayerReport =
@@ -460,7 +464,8 @@ export default function ReportViewer({
   const hasAccess = canAccessLayer(selectedLayer)
   const existingReport = existingReportQuery.data
   const failedReport = !generatedReport && existingReport?.status === 'failed' ? existingReport : null
-  const displayReport = generatedReport || (existingReport?.status !== 'failed' ? existingReport : null)
+  const generatingReport = !generatedReport && (existingReport?.status === 'generating' || existingReport?.status === 'pending') ? existingReport : null
+  const displayReport = generatedReport || (existingReport?.status === 'completed' ? existingReport : null)
   const isLoadingExisting = existingReportQuery.isLoading && !generatedReport
 
   return (
@@ -522,6 +527,16 @@ export default function ReportViewer({
             <div className="flex items-center justify-center py-20 gap-3 text-stone-500">
               <Loader2 className="w-6 h-6 animate-spin" />
               <span className="text-sm font-medium">Loading report…</span>
+            </div>
+          ) : generatingReport ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 rounded-full bg-violet-100 flex items-center justify-center mx-auto mb-4">
+                <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+              </div>
+              <h3 className="text-xl font-bold text-stone-900 mb-2">Report is being generated…</h3>
+              <p className="text-stone-500 text-sm max-w-sm mx-auto">
+                This usually takes 30–60 seconds. The page will update automatically when your report is ready.
+              </p>
             </div>
           ) : failedReport ? (
             <div className="text-center py-12">
