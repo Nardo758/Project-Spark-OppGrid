@@ -1105,6 +1105,120 @@ async def _run_sync(fn, *args, **kwargs):
 # ---------------------------------------------------------------------------
 
 async def run_macro_scan(db: Session) -> Dict[str, Any]:
-    """Public entry point called by job_runner every 6 hours."""
+    """Public entry point — runs all sources (kept for backward compatibility)."""
     scanner = MacroSignalScanner()
     return await scanner.scan_all(db)
+
+
+async def _run_sources(db: Session, sources: List[str]) -> Dict[str, Any]:
+    """
+    Internal helper: runs scan_all but only for the named sources.
+    Patches the scanner list so the orchestrator skips everything else.
+    """
+    scanner = MacroSignalScanner()
+
+    _all_scanners = {
+        "fred":   scanner._scan_fred,
+        "bls":    scanner._scan_bls,
+        "census": scanner._scan_census,
+        "sec":    scanner._scan_sec,
+        "trends": scanner._scan_trends,
+    }
+
+    stats: Dict[str, Any] = {
+        "started_at":  datetime.utcnow().isoformat(),
+        "dry_run":     _is_dry_run(),
+        "sources":     sources,
+        "anomalies":   [],
+        "emitted":     0,
+        "skipped":     0,
+        "by_source":   {},
+        "by_severity": {"mild": 0, "moderate": 0, "severe": 0},
+        "by_tier":     {"goldmine": 0, "validated": 0, "weak_signal": 0, "noise": 0},
+    }
+
+    for source_name in sources:
+        scanner_fn = _all_scanners.get(source_name)
+        if scanner_fn is None:
+            logger.warning("[MacroScan] Unknown source '%s' — skipping", source_name)
+            continue
+        try:
+            anomalies: List[MacroAnomaly] = await scanner_fn(db)
+        except Exception as exc:
+            logger.error("[MacroScan] Scanner %s failed: %s", source_name, exc)
+            anomalies = []
+
+        emitted_count = 0
+        for anomaly in anomalies:
+            corr = scanner._find_corroborating_signals(db, anomaly.geo, anomaly.category)
+            scanner._compute_macro_signal_score(anomaly, corr)
+
+            row = scanner._emit_signal(db, anomaly)
+            if row is not None or _is_dry_run():
+                emitted_count += 1
+                stats["emitted"] += 1
+                stats["by_severity"][anomaly.severity] = (
+                    stats["by_severity"].get(anomaly.severity, 0) + 1
+                )
+                stats["by_tier"][anomaly.conf_tier] = (
+                    stats["by_tier"].get(anomaly.conf_tier, 0) + 1
+                )
+                stats["anomalies"].append({
+                    "rule":     anomaly.rule_name,
+                    "source":   anomaly.source,
+                    "geo":      anomaly.geo,
+                    "severity": anomaly.severity,
+                    "score":    anomaly.final_score,
+                    "tier":     anomaly.conf_tier,
+                })
+            else:
+                stats["skipped"] += 1
+
+        stats["by_source"][source_name] = emitted_count
+
+    if not _is_dry_run():
+        try:
+            db.commit()
+        except Exception as exc:
+            logger.error("[MacroScan] Final commit failed: %s", exc)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
+    stats["finished_at"] = datetime.utcnow().isoformat()
+    logger.info(
+        "[MacroScan/%s] Complete — emitted=%d skipped=%d",
+        "+".join(sources), stats["emitted"], stats["skipped"],
+    )
+    return stats
+
+
+async def run_macro_scan_daily(db: Session) -> Dict[str, Any]:
+    """
+    Daily scan: SEC filings (8-K/10-Q/10-K drop any day) and Google Trends
+    (updates daily, spikes fast during news cycles).
+    Interval: 86 400 s (once per day).
+    """
+    return await _run_sources(db, ["sec", "trends"])
+
+
+async def run_macro_scan_weekly(db: Session) -> Dict[str, Any]:
+    """
+    Weekly scan: FRED series.
+    - MORTGAGE30US updates every Thursday.
+    - UNRATE, CPIAUCSL, UMCSENT update monthly but weekly cadence gives
+      same-week detection of any early-release revisions.
+    Interval: 604 800 s (once per week).
+    """
+    return await _run_sources(db, ["fred"])
+
+
+async def run_macro_scan_monthly(db: Session) -> Dict[str, Any]:
+    """
+    Monthly scan: BLS (monthly QCEW employment releases) and Census
+    (ACS 5-year, annual release — monthly is still overkill but provides
+    margin for new geo queries against stale cached data).
+    Interval: 2 592 000 s (once per 30 days).
+    """
+    return await _run_sources(db, ["bls", "census"])

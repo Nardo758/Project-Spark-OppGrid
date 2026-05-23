@@ -414,11 +414,28 @@ def start_background_jobs() -> None:
     except Exception as e:
         logger.warning(f"Failed to start webhook_delivery job: {e}")
 
-    # Macro signal scan — runs every 6 hours
+    # Macro signal scans — split by data-update cadence to avoid redundant API calls
+    # SEC (8-Ks drop any day) + Google Trends (daily updates) → once per day
     try:
-        from app.services.macro_signal_scanner import run_macro_scan
-        loop.create_task(_loop("macro_signal_scan", 21600, run_macro_scan))
-        logger.info("Started job: macro_signal_scan")
+        from app.services.macro_signal_scanner import run_macro_scan_daily
+        loop.create_task(_loop("macro_scan_daily", 86400, run_macro_scan_daily))
+        logger.info("Started job: macro_scan_daily (SEC + Trends, 24h)")
     except Exception as e:
-        logger.warning(f"Failed to start macro_signal_scan job: {e}")
+        logger.warning(f"Failed to start macro_scan_daily job: {e}")
+
+    # FRED (mortgage weekly, others monthly) → once per week
+    try:
+        from app.services.macro_signal_scanner import run_macro_scan_weekly
+        loop.create_task(_loop("macro_scan_weekly", 604800, run_macro_scan_weekly))
+        logger.info("Started job: macro_scan_weekly (FRED, 7d)")
+    except Exception as e:
+        logger.warning(f"Failed to start macro_scan_weekly job: {e}")
+
+    # BLS (monthly QCEW) + Census (annual ACS) → once per 30 days
+    try:
+        from app.services.macro_signal_scanner import run_macro_scan_monthly
+        loop.create_task(_loop("macro_scan_monthly", 2592000, run_macro_scan_monthly))
+        logger.info("Started job: macro_scan_monthly (BLS + Census, 30d)")
+    except Exception as e:
+        logger.warning(f"Failed to start macro_scan_monthly job: {e}")
 
