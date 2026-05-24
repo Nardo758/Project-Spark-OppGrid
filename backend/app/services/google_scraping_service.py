@@ -237,10 +237,40 @@ class GoogleScrapingService:
             all_results = []
             
             if job.source_type == "google_maps_reviews":
-                for keyword in keywords[:5]:
+                # Build ll (lat/lng) coordinate string for Google Maps engine — this is
+                # required for local_results to be returned; text location alone is not
+                # sufficient for the google_maps SerpAPI engine.
+                ll: Optional[str] = None
+                if location and location.latitude and location.longitude:
+                    ll = f"@{location.latitude},{location.longitude},14z"
+
+                # Skip demand-signal phrases (GS: groups) that return nothing on Maps.
+                # Only keep short, place-type terms (≤5 words, no question fragments).
+                _bad_fragments = (
+                    "need a", "looking for", "anyone know", "urgently need",
+                    "where to find", "never showed", "terrible service",
+                    "overcharged", "cancelled last", "so frustrated", "sick of",
+                    "fed up", "can't believe", "ridiculous that", "every time",
+                    "apartment nightmare", "landlord", "lease problem",
+                    "hidden fees", "maintenance nightmare",
+                )
+
+                def _is_maps_friendly(kw: str) -> bool:
+                    kw_lower = kw.lower()
+                    return not any(frag in kw_lower for frag in _bad_fragments)
+
+                maps_keywords = [k for k in keywords if _is_maps_friendly(k)]
+                if not maps_keywords:
+                    maps_keywords = keywords  # fall back to all if nothing passes
+
+                for keyword in maps_keywords[:5]:
                     search_query = f"{keyword} {location_query}"
-                    places_result = self.serpapi.google_maps_search(query=search_query, location=location_query)
-                    
+                    places_result = self.serpapi.google_maps_search(
+                        query=search_query,
+                        location=location_query,
+                        ll=ll,
+                    )
+
                     local_results = places_result.get("local_results", [])
                     if local_results:
                         for place in local_results[:3]:
@@ -254,7 +284,7 @@ class GoogleScrapingService:
                                     })
                                     self._cache_business(place, location.id if location else None)
                                 except Exception as e:
-                                    print(f"Error fetching reviews: {e}")
+                                    logger.warning("Error fetching reviews for %s: %s", place.get("data_id"), e)
             
             elif job.source_type == "google_search":
                 for keyword in keywords[:10]:

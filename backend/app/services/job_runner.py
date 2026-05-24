@@ -357,6 +357,74 @@ async def _economic_snapshot_backfill_job(db: Session) -> dict:
     }
 
 
+async def _foot_traffic_backfill_job(db: Session) -> dict:
+    """
+    Processes up to 20 places per run from scraped_data that have a valid
+    source_id (Google Maps place_id / data_id) but no corresponding row in
+    the foot_traffic table yet.  Calls FootTrafficCollector.get_place_traffic()
+    for each and persists results via save_traffic_data().
+
+    Cadence: every 6 hours (21600 s).  At 20 places/run and 4 runs/day that's
+    ~80 new places/day — enough to fill the table gradually without burning
+    through SerpAPI credits.
+    """
+    from sqlalchemy import text as _text
+
+    try:
+        from app.services.foot_traffic_collector import FootTrafficCollector
+    except Exception as exc:
+        logger.warning("[FootTrafficBackfill] Cannot import collector: %s", exc)
+        return {"processed": 0, "stored": 0, "error": str(exc)}
+
+    collector = FootTrafficCollector(db)
+    if not collector.api_key:
+        logger.debug("[FootTrafficBackfill] SERPAPI_KEY not configured — skipping")
+        return {"processed": 0, "stored": 0, "skipped": "no_api_key"}
+
+    # Fetch place_ids from scraped_data that aren't in foot_traffic yet.
+    # Both apify_google_maps and serpapi_google_maps use Google place IDs as
+    # source_id, so they're compatible with get_place_traffic().
+    rows = db.execute(_text("""
+        SELECT DISTINCT sd.source_id
+        FROM scraped_data sd
+        WHERE sd.source IN ('apify_google_maps', 'serpapi_google_maps')
+          AND sd.source_id IS NOT NULL
+          AND sd.source_id <> ''
+          AND NOT EXISTS (
+              SELECT 1 FROM foot_traffic ft WHERE ft.place_id = sd.source_id
+          )
+        LIMIT 20
+    """)).fetchall()
+
+    place_ids = [r[0] for r in rows]
+    if not place_ids:
+        logger.debug("[FootTrafficBackfill] No new places to process")
+        return {"processed": 0, "stored": 0}
+
+    logger.info("[FootTrafficBackfill] Processing %d place(s)", len(place_ids))
+    traffic_batch = []
+    for place_id in place_ids:
+        try:
+            data = collector.get_place_traffic(place_id)
+            if data and data.get("popular_times"):
+                traffic_batch.append(data)
+        except Exception as exc:
+            logger.warning("[FootTrafficBackfill] place %s failed: %s", place_id, exc)
+
+    stored = 0
+    if traffic_batch:
+        try:
+            stored = collector.save_traffic_data(traffic_batch)
+        except Exception as exc:
+            logger.error("[FootTrafficBackfill] save_traffic_data failed: %s", exc)
+
+    logger.info(
+        "[FootTrafficBackfill] Done — checked=%d with_popular_times=%d stored=%d",
+        len(place_ids), len(traffic_batch), stored,
+    )
+    return {"processed": len(place_ids), "with_popular_times": len(traffic_batch), "stored": stored}
+
+
 async def _loop(job_name: str, interval_seconds: int, fn: Callable[[Session], Awaitable[dict]]) -> None:
     # Stagger initial run slightly so startup can settle.
     await asyncio.sleep(3)
@@ -438,4 +506,13 @@ def start_background_jobs() -> None:
         logger.info("Started job: macro_scan_monthly (BLS + Census, 30d)")
     except Exception as e:
         logger.warning(f"Failed to start macro_scan_monthly job: {e}")
+
+    # Foot traffic backfill — processes up to 20 places/run from scraped_data
+    # that don't yet have popular-times data in the foot_traffic table.
+    # Runs every 6 hours so the table gradually fills without hammering SerpAPI.
+    try:
+        loop.create_task(_loop("foot_traffic_backfill", 21600, _foot_traffic_backfill_job))
+        logger.info("Started job: foot_traffic_backfill (20 places/run, 6h)")
+    except Exception as e:
+        logger.warning(f"Failed to start foot_traffic_backfill job: {e}")
 
