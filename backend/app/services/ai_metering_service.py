@@ -368,8 +368,8 @@ class AITeringService:
         remaining = max(0, limit - used)
         percentage = (used / limit * 100) if limit > 0 else 0
         
-        # Check overage setting
-        allow_overage = True
+        # Check overage setting — default hard stop when no quota record exists
+        allow_overage = False
         if quota:
             allow_overage = quota.allow_overage == 1
         

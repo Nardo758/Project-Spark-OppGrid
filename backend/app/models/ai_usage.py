@@ -139,7 +139,7 @@ class AIUsageQuota(Base):
     current_period_tokens = Column(Integer, nullable=False, default=0)
     
     # Overage handling
-    allow_overage = Column(Integer, default=1)  # 1 = yes, 0 = hard stop
+    allow_overage = Column(Integer, default=0)  # 0 = hard stop (default), 1 = yes
     overage_rate_per_1k = Column(Float, default=0.01)  # $/1K tokens for overage
     
     # Rate limiting

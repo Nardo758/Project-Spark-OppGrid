@@ -12,6 +12,8 @@ import stripe
 
 from app.db.database import get_db
 from app.models.dataset import Dataset, DatasetPurchase, DatasetType
+from app.models.user import User
+from app.core.dependencies import get_current_user
 from app.services.dataset_delivery_service import get_delivery_service
 
 logger = logging.getLogger(__name__)
@@ -62,34 +64,6 @@ class PurchaseListResponse(BaseModel):
 # Helper Functions
 # ============================================================================
 
-def _get_user_id_from_token(authorization: Optional[str] = Header(None)) -> str:
-    """
-    Extract user ID from JWT token.
-    
-    For now, we use a simple extraction. In production, this would validate
-    the JWT token properly.
-    """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid Authorization header",
-        )
-    
-    # In production, parse JWT token to extract user_id
-    # For development, use a test user ID
-    token = authorization[7:]  # Remove "Bearer " prefix
-    
-    # Simple mock: if token is valid format, extract user_id from it
-    # In production, use JWT.decode() to validate
-    if len(token) < 10:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token format",
-        )
-    
-    # For testing: use token as simple identifier
-    user_id = token[:36] if len(token) >= 36 else f"user-{token[:8]}"
-    return user_id
 
 
 def _create_stripe_payment_intent(
@@ -277,12 +251,11 @@ def get_dataset(
         )
 
 
-@router.post("/purchase", response_model=PurchaseResponse)
+@router.post("/purchase")
 def purchase_dataset(
     request: PurchaseRequest,
-    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
-) -> PurchaseResponse:
+):
     """
     Initiate dataset purchase with Stripe payment.
     
@@ -306,83 +279,15 @@ def purchase_dataset(
         "currency": "usd"
     }
     """
-    try:
-        # 1. Authenticate user
-        user_id = _get_user_id_from_token(authorization)
-        logger.info(f"Purchase initiated by user {user_id} for dataset {request.dataset_id}")
-        
-        # 2. Get dataset details
-        dataset = db.query(Dataset).filter(
-            Dataset.id == request.dataset_id,
-            Dataset.is_active == True
-        ).first()
-        
-        if not dataset:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Dataset not found or not available for purchase",
-            )
-        
-        # Check if user already has access to this dataset (optional)
-        existing_purchase = db.query(DatasetPurchase).filter(
-            DatasetPurchase.user_id == user_id,
-            DatasetPurchase.dataset_id == request.dataset_id,
-            DatasetPurchase.status == "completed",
-            DatasetPurchase.expires_at > datetime.utcnow()
-        ).first()
-        
-        if existing_purchase:
-            logger.warning(f"User {user_id} already has access to dataset {request.dataset_id}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="You already have access to this dataset",
-            )
-        
-        # 3. Create Stripe PaymentIntent
-        payment_details = _create_stripe_payment_intent(
-            amount_cents=dataset.price_cents,
-            dataset_id=request.dataset_id,
-            user_id=user_id,
-        )
-        
-        # 4. Create purchase record (status: pending)
-        purchase_id = str(uuid.uuid4())
-        purchase = DatasetPurchase(
-            id=purchase_id,
-            dataset_id=request.dataset_id,
-            user_id=user_id,
-            price_cents=dataset.price_cents,
-            payment_method="stripe",
-            stripe_invoice_id=payment_details["payment_intent_id"],
-            status="pending",
-            expires_at=datetime.utcnow() + timedelta(hours=24),  # Expires in 24 hours
-        )
-        db.add(purchase)
-        db.commit()
-        
-        logger.info(f"Created pending purchase {purchase_id} with Stripe intent {payment_details['payment_intent_id']}")
-        
-        return PurchaseResponse(
-            purchase_id=purchase_id,
-            stripe_payment_intent_id=payment_details["payment_intent_id"],
-            client_secret=payment_details["client_secret"],
-            amount_cents=dataset.price_cents,
-            currency="usd",
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error initiating purchase: {e}")
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="Dataset marketplace is temporarily unavailable for maintenance.",
+    )
 
 
 @router.get("/my-purchases", response_model=PurchaseListResponse)
 def list_purchases(
-    authorization: Optional[str] = Header(None),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PurchaseListResponse:
     """
@@ -406,8 +311,7 @@ def list_purchases(
     }
     """
     try:
-        # Authenticate user
-        user_id = _get_user_id_from_token(authorization)
+        user_id = current_user.id
         
         # Get user's purchases
         purchases = db.query(DatasetPurchase).filter(
@@ -453,7 +357,7 @@ def list_purchases(
 def download_dataset(
     purchase_id: str = Path(..., description="Purchase ID"),
     token: Optional[str] = Query(None),
-    authorization: Optional[str] = Header(None),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -467,8 +371,7 @@ def download_dataset(
     - CSV file with proper headers
     """
     try:
-        # Authenticate user
-        user_id = _get_user_id_from_token(authorization)
+        user_id = current_user.id
         
         # Verify purchase exists and belongs to user
         purchase = db.query(DatasetPurchase).filter(

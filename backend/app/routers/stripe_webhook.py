@@ -39,12 +39,6 @@ def get_webhook_secret():
     return os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
 
-def is_stripe_dev_mode():
-    """Check if Stripe dev mode is enabled (skips signature verification in development only)."""
-    dev_mode = os.getenv("STRIPE_DEV_MODE", "0") == "1"
-    is_development = os.getenv("REPLIT_DEPLOYMENT", "") != "1"
-    return dev_mode and is_development
-
 
 @router.post("")
 async def stripe_webhook(
@@ -75,25 +69,11 @@ async def stripe_webhook(
     livemode = False
     
     if not webhook_secret:
-        if is_stripe_dev_mode():
-            logger.warning("STRIPE_DEV_MODE enabled - skipping signature verification (development only)")
-            try:
-                event_data = json.loads(payload)
-                event_id = event_data.get("id")
-                event_type = event_data.get("type")
-                event_object = event_data.get("data", {}).get("object", {})
-                livemode = bool(event_data.get("livemode", False))
-                created_raw = event_data.get("created")
-                if isinstance(created_raw, (int, float)):
-                    event_created = datetime.fromtimestamp(created_raw, tz=timezone.utc)
-            except Exception as e:
-                raise HTTPException(status_code=400, detail=f"Invalid payload: {str(e)}")
-        else:
-            logger.error("STRIPE_WEBHOOK_SECRET not configured - rejecting webhook in production")
-            raise HTTPException(
-                status_code=500, 
-                detail="Stripe webhook secret not configured. This is a server configuration error."
-            )
+        logger.error("STRIPE_WEBHOOK_SECRET not configured - rejecting webhook")
+        raise HTTPException(
+            status_code=500,
+            detail="Stripe webhook secret not configured. This is a server configuration error."
+        )
     else:
         try:
             stripe = get_stripe_client()
