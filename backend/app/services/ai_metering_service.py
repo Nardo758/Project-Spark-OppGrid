@@ -19,6 +19,8 @@ import json
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from app.services.ai_pricing_service import get_model_cost, calculate_cost as calculate_cost_breakdown
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,12 +124,10 @@ class AITeringService:
         input_tokens: int,
         output_tokens: int
     ) -> float:
-        """Calculate cost in USD for token usage."""
-        costs = MODEL_COSTS.get(model_name, {"input": 3.0, "output": 15.0})
-        
-        input_cost = (input_tokens / 1_000_000) * costs["input"]
-        output_cost = (output_tokens / 1_000_000) * costs["output"]
-        
+        """Calculate cost in USD for token usage (uses unified AI pricing service)."""
+        pricing = get_model_cost(getattr(self, 'db', None), model_name)
+        input_cost = (input_tokens / 1_000_000) * pricing["input"]
+        output_cost = (output_tokens / 1_000_000) * pricing["output"]
         return round(input_cost + output_cost, 6)
     
     def get_user_markup(self, user_id: int) -> float:

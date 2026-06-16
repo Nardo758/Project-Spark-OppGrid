@@ -160,6 +160,18 @@ class StripeTokenBilling:
         if total_tokens <= 0:
             return None
         
+        # Calculate cost-weighted tokens for fair billing
+        from app.services.ai_pricing_service import get_model_cost
+        pricing = get_model_cost(None, model)
+        input_cost_rate = pricing["input"]
+        output_cost_rate = pricing["output"]
+        weight = 1.0
+        if input_cost_rate > 0:
+            weight = output_cost_rate / input_cost_rate
+        weighted_tokens = int(input_tokens + (output_tokens * weight))
+        if weighted_tokens <= 0:
+            weighted_tokens = total_tokens
+
         event_name = self.get_meter_event_name(model)
         identifier = request_id or f"{customer_id}_{model}_{uuid.uuid4().hex[:12]}"
         
@@ -169,7 +181,7 @@ class StripeTokenBilling:
                 event_name=event_name,
                 payload={
                     "stripe_customer_id": customer_id,
-                    "value": str(total_tokens),
+                    "value": str(weighted_tokens),
                     # Additional metadata
                     "model": model,
                     "input_tokens": str(input_tokens),
@@ -630,6 +642,37 @@ class StripeTokenBilling:
             "created": sum(1 for r in results if r["success"]),
             "failed": sum(1 for r in results if not r["success"]),
             "meters": results
+        }
+
+    def calculate_estimated_cost(
+        self,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        db=None,
+        apply_markup: bool = True
+    ) -> Dict[str, Any]:
+        """Calculate estimated cost for a given model and token count."""
+        from app.services.ai_pricing_service import calculate_cost as calculate_cost_breakdown
+        result = calculate_cost_breakdown(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model=model,
+            db_session=db,
+            apply_markup=apply_markup
+        )
+        return {
+            "model": result["model"],
+            "input_tokens": result["input_tokens"],
+            "output_tokens": result["output_tokens"],
+            "cost_per_million_input_usd": result["cost_per_million_input_usd"],
+            "cost_per_million_output_usd": result["cost_per_million_output_usd"],
+            "input_cost_usd": result["input_cost_usd"],
+            "output_cost_usd": result["output_cost_usd"],
+            "base_cost_usd": result["base_cost_usd"],
+            "markup_percent": result["markup_percent"],
+            "total_cost_usd": result["total_cost_usd"],
+            "source": result.get("source", "unknown"),
         }
 
 

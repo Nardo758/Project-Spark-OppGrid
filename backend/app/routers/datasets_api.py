@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, status, Depends, Path, Query, Header
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import uuid
@@ -420,7 +420,12 @@ def download_dataset(
         
         logger.info(f"User {user_id} downloaded dataset {dataset.id} (purchase {purchase_id})")
         
-        # Return file
+        # If file is in cloud storage, redirect to signed URL
+        if delivery_service.is_cloud_storage_path(file_path):
+            signed_url = delivery_service.generate_download_url(purchase, file_path)
+            return RedirectResponse(url=signed_url)
+        
+        # Return local file
         return FileResponse(
             file_path,
             media_type="text/csv",

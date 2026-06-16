@@ -33,7 +33,7 @@ def get_categories(db: Session = Depends(get_db)):
 
 
 @router.get("/recommended")
-async def get_recommended_opportunities(
+def get_recommended_opportunities(
     limit: int = Query(10, ge=1, le=50),
     current_user: User | None = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
@@ -256,7 +256,7 @@ def create_opportunity(
 
 
 @router.get("/")
-async def get_opportunities(
+def get_opportunities(
     skip: int = Query(0, ge=0, alias="offset"),
     limit: int = Query(20, ge=1, le=100),
     category: Optional[str] = None,

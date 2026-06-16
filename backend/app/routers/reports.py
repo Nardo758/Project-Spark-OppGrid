@@ -4,6 +4,7 @@ from sqlalchemy import func
 from typing import List, Optional, Tuple, Any
 from pydantic import BaseModel
 from datetime import datetime, timezone
+import asyncio
 import logging
 import re
 import time
@@ -355,7 +356,7 @@ async def get_public_report_templates(
 
 
 @router.post("/generate", response_model=GeneratedReportResponse)
-async def generate_report(
+def generate_report(
     request: GenerateReportRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -619,7 +620,7 @@ async def generate_report(
             from app.services.report_orchestrator import ReportOrchestrator
             _orchestrator = ReportOrchestrator()
             _safe_business_type = str(business_type or "Business Opportunity").strip().strip('"').strip("'") or "Business Opportunity"
-            _gen_result = await _orchestrator.generate(
+            _gen_result = asyncio.run(_orchestrator.generate(
                 report_type=template.slug,
                 business_type=_safe_business_type,
                 city=city or "",
@@ -629,7 +630,7 @@ async def generate_report(
                 category=_safe_business_type,
                 target_audience=None,
                 opportunity_id=request.opportunity_id,
-            )
+            ))
             content = _gen_result["content"]
             _econ_snap = _gen_result.get("economic_snapshot")
             if not content:
@@ -648,7 +649,7 @@ async def generate_report(
 {AIReportGenerator.INSTITUTIONAL_STYLE_INSTRUCTIONS}
 
 {prompt}"""
-            result = await llm_ai_engine_service.generate_response(full_prompt, model="claude")
+            result = asyncio.run(llm_ai_engine_service.generate_response(full_prompt, model="claude"))
 
             if result.get("error"):
                 logger.error(f"AI service error: {result.get('error_message', result.get('error'))}")
