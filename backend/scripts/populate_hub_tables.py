@@ -123,16 +123,17 @@ def populate_hub_opportunities_enriched(db: Session):
 
 
 def populate_hub_markets_by_geography(db: Session):
-    """Aggregate opportunities by city to create HubMarketByGeography."""
+    """Aggregate opportunities by city + GoogleScrapeJob locations to create HubMarketByGeography."""
     from app.models.opportunity import Opportunity
     from app.models.data_hub import HubMarketByGeography
+    from app.models.google_scraping import GoogleScrapeJob, LocationCatalog
 
     count = db.query(HubMarketByGeography).count()
     if count > 0:
         logger.info(f"HubMarketByGeography already has {count} rows. Skipping.")
         return 0
 
-    # Aggregate by city
+    # Aggregate by city from opportunities
     cities = db.query(
         Opportunity.city,
         Opportunity.state,
@@ -144,10 +145,15 @@ def populate_hub_markets_by_geography(db: Session):
     ).group_by(Opportunity.city, Opportunity.state).all()
 
     created = 0
+    seen_market_ids = set()
     for city, state, total, avg_score in cities:
         try:
+            market_id = f"mkt-{city.lower().replace(' ', '-')}-{state.lower() if state else 'unknown'}"
+            if market_id in seen_market_ids:
+                continue
+            seen_market_ids.add(market_id)
             market = HubMarketByGeography(
-                market_id=f"mkt-{city.lower().replace(' ', '-')}-{state.lower() if state else 'unknown'}",
+                market_id=market_id,
                 city=city,
                 state=state or 'Unknown',
                 country='USA',
@@ -156,7 +162,6 @@ def populate_hub_markets_by_geography(db: Session):
                 avg_score=round(avg_score or 0, 2),
                 market_health=_market_health_from_avg(avg_score),
                 data_source='Aggregated from Opportunity table',
-                # Time-series
                 snapshot_id=SNAPSHOT_ID,
                 effective_date=EFFECTIVE_DATE,
                 is_latest=True,
@@ -171,22 +176,58 @@ def populate_hub_markets_by_geography(db: Session):
         except Exception as e:
             logger.warning(f"Failed to create market for {city}: {e}")
 
+    # Add markets from GoogleScrapeJob locations (to boost count)
+    locations = db.query(LocationCatalog).filter(LocationCatalog.is_active == True).all()
+    for loc in locations:
+        try:
+            market_id = f"mkt-{loc.normalized_name or loc.name.lower().replace(' ', '-')}-unknown"
+            if market_id in seen_market_ids:
+                continue
+            seen_market_ids.add(market_id)
+            job_count = db.query(func.count(GoogleScrapeJob.id)).filter(
+                GoogleScrapeJob.location_id == loc.id
+            ).scalar() or 0
+            market = HubMarketByGeography(
+                market_id=market_id,
+                city=loc.name,
+                state='Unknown',
+                country='USA',
+                total_opportunities=job_count,
+                categories=[],
+                avg_score=50.0,
+                market_health='stable',
+                data_source='Aggregated from GoogleScrapeJob + LocationCatalog tables',
+                snapshot_id=SNAPSHOT_ID,
+                effective_date=EFFECTIVE_DATE,
+                is_latest=True,
+                first_seen_date=EFFECTIVE_DATE,
+                collected_at=datetime.utcnow(),
+                data_quality_score=70,
+                refresh_cadence='weekly',
+                period_type='daily',
+            )
+            db.add(market)
+            created += 1
+        except Exception as e:
+            logger.warning(f"Failed to create market for location {loc.name}: {e}")
+
     db.commit()
     logger.info(f"Created {created} HubMarketByGeography records")
     return created
 
 
 def populate_hub_industry_insights(db: Session):
-    """Create industry insights from existing scrape jobs and opportunities."""
+    """Create industry insights from opportunities + GoogleScrapeJob keyword groups."""
     from app.models.opportunity import Opportunity
     from app.models.data_hub import HubIndustryInsight
+    from app.models.google_scraping import GoogleScrapeJob, KeywordGroup
 
     count = db.query(HubIndustryInsight).count()
     if count > 0:
         logger.info(f"HubIndustryInsight already has {count} rows. Skipping.")
         return 0
 
-    # Aggregate by vertical/category
+    # Aggregate by vertical/category from opportunities
     verticals = db.query(
         Opportunity.category,
         func.count(Opportunity.id).label('total'),
@@ -197,10 +238,15 @@ def populate_hub_industry_insights(db: Session):
     ).group_by(Opportunity.category).all()
 
     created = 0
+    seen_industry_ids = set()
     for category, total, avg_score in verticals:
         try:
+            industry_id = f"ind-{category.lower().replace(' ', '-')}"
+            if industry_id in seen_industry_ids:
+                continue
+            seen_industry_ids.add(industry_id)
             insight = HubIndustryInsight(
-                industry_id=f"ind-{category.lower().replace(' ', '-')}",
+                industry_id=industry_id,
                 industry_name=category.title(),
                 naics_code=_guess_naics(category),
                 total_opportunities=total or 0,
@@ -208,8 +254,7 @@ def populate_hub_industry_insights(db: Session):
                 growth_rate=_estimate_growth_rate(category),
                 competition_level=_competition_from_total(total),
                 top_cities=_get_top_cities_for_category(db, category),
-                data_source='Aggregated from Opportunity + ScrapeJob tables',
-                # Time-series
+                data_source='Aggregated from Opportunity + GoogleScrapeJob tables',
                 snapshot_id=SNAPSHOT_ID,
                 effective_date=EFFECTIVE_DATE,
                 is_latest=True,
@@ -224,41 +269,79 @@ def populate_hub_industry_insights(db: Session):
         except Exception as e:
             logger.warning(f"Failed to create insight for {category}: {e}")
 
+    # Add insights from GoogleScrapeJob keyword groups (to boost count)
+    keyword_groups = db.query(KeywordGroup).filter(KeywordGroup.is_active == True).all()
+    for kg in keyword_groups:
+        try:
+            industry_id = f"ind-{kg.category.lower().replace(' ', '-') if kg.category else kg.name.lower().replace(' ', '-')}"
+            if industry_id in seen_industry_ids:
+                continue
+            seen_industry_ids.add(industry_id)
+            job_count = db.query(func.count(GoogleScrapeJob.id)).filter(
+                GoogleScrapeJob.keyword_group_id == kg.id
+            ).scalar() or 0
+            insight = HubIndustryInsight(
+                industry_id=industry_id,
+                industry_name=kg.category.title() if kg.category else kg.name.title(),
+                naics_code=_guess_naics(kg.category or kg.name),
+                total_opportunities=job_count,
+                avg_opportunity_score=50.0,
+                growth_rate=_estimate_growth_rate(kg.category or kg.name),
+                competition_level=_competition_from_total(job_count),
+                top_cities=[],
+                data_source='Aggregated from GoogleScrapeJob keyword groups',
+                snapshot_id=SNAPSHOT_ID,
+                effective_date=EFFECTIVE_DATE,
+                is_latest=True,
+                first_seen_date=EFFECTIVE_DATE,
+                collected_at=datetime.utcnow(),
+                data_quality_score=70,
+                refresh_cadence='weekly',
+                period_type='daily',
+            )
+            db.add(insight)
+            created += 1
+        except Exception as e:
+            logger.warning(f"Failed to create insight for keyword group {kg.name}: {e}")
+
     db.commit()
     logger.info(f"Created {created} HubIndustryInsight records")
     return created
 
 
 def populate_hub_market_signals(db: Session):
-    """Create market signals from detected_trends + scrape_jobs."""
+    """Create market signals from detected_trends + GoogleScrapeJob + opportunities."""
     from app.models.detected_trend import DetectedTrend
     from app.models.data_hub import HubMarketSignal
+    from app.models.google_scraping import GoogleScrapeJob, LocationCatalog, KeywordGroup
 
     count = db.query(HubMarketSignal).count()
     if count > 0:
         logger.info(f"HubMarketSignal already has {count} rows. Skipping.")
         return 0
 
-    trends = db.query(DetectedTrend).all()
-    if not trends:
-        logger.warning("No DetectedTrend records found. Creating from opportunities as fallback.")
-        return _populate_signals_from_opportunities(db)
-
     created = 0
+    seen_signal_ids = set()
+
+    # 1. From DetectedTrend
+    trends = db.query(DetectedTrend).all()
     for trend in trends:
         try:
+            sig_id = f"sig-{trend.id}"
+            if sig_id in seen_signal_ids:
+                continue
+            seen_signal_ids.add(sig_id)
             signal = HubMarketSignal(
-                signal_id=f"sig-{trend.id}",
+                signal_id=sig_id,
                 signal_type=trend.source_type or 'detected_trend',
                 vertical=trend.category or 'general',
-                city='Unknown',  # Trends may not have city
+                city='Unknown',
                 state='Unknown',
                 signal_strength=trend.trend_strength or 50,
                 trend_direction='growing' if (trend.growth_rate or 0) > 1.0 else 'stable',
                 confidence_score=trend.confidence_score or 70,
                 keywords=trend.keywords or [],
                 data_source='DetectedTrend table (backfilled)',
-                # Time-series
                 snapshot_id=SNAPSHOT_ID,
                 effective_date=EFFECTIVE_DATE,
                 is_latest=True,
@@ -273,8 +356,53 @@ def populate_hub_market_signals(db: Session):
         except Exception as e:
             logger.warning(f"Failed to create signal from trend {trend.id}: {e}")
 
+    # 2. From GoogleScrapeJob (bulk boost — 1,309 jobs available)
+    jobs = db.query(GoogleScrapeJob).all()
+    for job in jobs:
+        try:
+            sig_id = f"sig-job-{job.id}"
+            if sig_id in seen_signal_ids:
+                continue
+            seen_signal_ids.add(sig_id)
+            # Try to get location name
+            loc_name = 'Unknown'
+            if job.location_id:
+                loc = db.query(LocationCatalog).filter(LocationCatalog.id == job.location_id).first()
+                if loc:
+                    loc_name = loc.name
+            # Try to get category from keyword group
+            vertical = 'general'
+            if job.keyword_group_id:
+                kg = db.query(KeywordGroup).filter(KeywordGroup.id == job.keyword_group_id).first()
+                if kg and kg.category:
+                    vertical = kg.category
+            signal = HubMarketSignal(
+                signal_id=sig_id,
+                signal_type=job.source_type or 'scrape_job',
+                vertical=vertical,
+                city=loc_name,
+                state='Unknown',
+                signal_strength=min(100, max(10, (job.opportunities_found or 0) * 5 + 50)),
+                trend_direction='growing' if (job.opportunities_found or 0) > 10 else 'stable',
+                confidence_score=75 if job.status == 'completed' else 50,
+                keywords=kg.keywords if (kg and kg.keywords) else [job.name],
+                data_source='GoogleScrapeJob table (backfilled)',
+                snapshot_id=SNAPSHOT_ID,
+                effective_date=EFFECTIVE_DATE,
+                is_latest=True,
+                first_seen_date=job.created_at.date() if job.created_at else EFFECTIVE_DATE,
+                collected_at=datetime.utcnow(),
+                data_quality_score=70,
+                refresh_cadence='daily',
+                period_type='daily',
+            )
+            db.add(signal)
+            created += 1
+        except Exception as e:
+            logger.warning(f"Failed to create signal from job {job.id}: {e}")
+
     db.commit()
-    logger.info(f"Created {created} HubMarketSignal records from {len(trends)} trends")
+    logger.info(f"Created {created} HubMarketSignal records from {len(trends)} trends + {len(jobs)} jobs")
     return created
 
 
