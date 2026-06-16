@@ -28,7 +28,7 @@ def log(section: str, message: str, level: str = "info"):
 def check_env_vars():
     log("ENV", "Checking API keys and environment variables", "header")
     keys = {
-        "SERPAPI_KEY": "SerpAPI Google scraper",
+        "SERPAPI_API_KEY": "SerpAPI Google scraper",
         "APIFY_API_KEY": "Apify Reddit scraper",
         "FRED_API_KEY": "FRED economic data",
         "BLS_API_KEY": "BLS labor data",
@@ -38,6 +38,7 @@ def check_env_vars():
         "ANTHROPIC_API_KEY": "Anthropic AI generation",
         "GOOGLE_MAPS_API_KEY": "Google Maps / Places",
         "DEEPSEEK_API_KEY": "DeepSeek AI",
+        "RESEND_API_KEY": "Resend email",
     }
     for key, description in keys.items():
         value = os.getenv(key)
