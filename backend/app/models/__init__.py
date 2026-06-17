@@ -14,6 +14,7 @@ from .stripe_event import StripeWebhookEvent, StripeWebhookEventStatus, PayPerUn
 from .idea_validation import IdeaValidation, IdeaValidationStatus
 from .success_pattern import SuccessPattern
 from .report import Report, ModerationReportStatus
+from .user_report_quota import UserReportQuota, ReportPurchaseLog
 from .user import User
 from .oauth import OAuthToken
 from .agreement import SuccessFeeAgreement, AgreementType, AgreementStatus, TriggerType
@@ -213,6 +214,8 @@ __all__ = [
     "TeamRole",
     "InviteStatus",
     "MonthlyReportUsage",
+    "UserReportQuota",
+    "ReportPurchaseLog",
     "UserAIUsage",
     "UserAIUsageSummary",
     "AIUsageQuota",
