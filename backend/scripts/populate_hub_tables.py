@@ -59,7 +59,7 @@ def populate_hub_opportunities_enriched(db: Session):
                 description=opp.description or '',
                 category=opp.category or 'general',
                 subcategory=opp.subcategory,
-                source_platform=opp.source or 'craigslist',
+                source_platform=opp.source_platform or 'craigslist',
                 city=opp.city,
                 state=opp.state,
                 region=opp.region,
@@ -68,9 +68,9 @@ def populate_hub_opportunities_enriched(db: Session):
                 ai_opportunity_score=ai_score,
                 market_tier=_market_tier_from_score(ai_score),
                 trend_momentum=opp.growth_rate or 0.0,
-                competition_density=opp.competition_level or 'moderate',
-                difficulty_score=opp.difficulty_score or 50,
-                market_readiness_score=opp.market_readiness or 50,
+                competition_density=opp.ai_competition_level or 'moderate',
+                difficulty_score=opp.feasibility_score or 50,
+                market_readiness_score=opp.feasibility_score or 50,
                 estimated_market_size_usd=market_size,
                 target_market_size_usd=int(market_size * 0.5),
                 tam_saw_som={
@@ -406,7 +406,7 @@ def populate_hub_market_signals(db: Session):
         try:
             signal = HubMarketSignal(
                 signal_type=trend.source_type or 'detected_trend',
-                signal_name=trend.name or 'Unknown',
+                signal_name=trend.trend_name or 'Unknown',
                 category=trend.category or 'general',
                 signal_date=now.date(),
                 signal_strength=trend.trend_strength or 50.0,
