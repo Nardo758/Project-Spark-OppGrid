@@ -71,12 +71,16 @@ def check_table_counts(db: Session):
             status = "ok" if count > 0 else "warn"
             log("DB", f"{name}: {count} rows", status)
         except Exception as e:
+            db.rollback()
             log("DB", f"{name}: ERROR — {e}", "error")
 
 def check_data_freshness(db: Session):
     log("DB", "Checking data freshness (most recent records)", "header")
     checks = [
-        ("HubOpportunityEnriched", "app.models.data_hub", "HubOpportunityEnriched", "created_at"),
+        ("HubOpportunityEnriched", "app.models.data_hub", "HubOpportunityEnriched", "aggregated_at"),
+        ("HubMarketByGeography", "app.models.data_hub", "HubMarketByGeography", "aggregated_at"),
+        ("HubIndustryInsight", "app.models.data_hub", "HubIndustryInsight", "last_update"),
+        ("HubMarketSignal", "app.models.data_hub", "HubMarketSignal", "discovered_at"),
         ("DetectedTrend", "app.models.detected_trend", "DetectedTrend", "detected_at"),
         ("ScrapeJob", "app.models.data_source", "ScrapeJob", "completed_at"),
         ("Opportunity", "app.models.opportunity", "Opportunity", "created_at"),
@@ -101,6 +105,7 @@ def check_data_freshness(db: Session):
             else:
                 log("DB", f"{name}: No records with date", "warn")
         except Exception as e:
+            db.rollback()
             log("DB", f"{name}: ERROR — {e}", "error")
 
 def check_scraper_jobs(db: Session):
@@ -135,6 +140,7 @@ def check_scraper_jobs(db: Session):
                 level = "error"
             log("JOBS", f"{job_type}: latest={latest_dt}, status={status}, items={total_items}, accepted={total_accepted}, errors={error_count}", level)
     except Exception as e:
+        db.rollback()
         log("JOBS", f"ERROR checking scraper jobs: {e}", "error")
 
 def check_api_connectivity():
@@ -194,25 +200,36 @@ def check_dataset_definitions(db: Session):
             status = "ok" if ds.is_active else "warn"
             log("DATASETS", f"{ds.name} ({ds.id}): type={ds.dataset_type}, active={ds.is_active}, records={ds.record_count or 0}, price=${ds.price_cents or 0}", status)
     except Exception as e:
+        db.rollback()
         log("DATASETS", f"ERROR checking datasets: {e}", "error")
 
 def generate_summary(db: Session):
     log("SUMMARY", "--- Diagnostic Summary ---", "header")
     try:
-        from app.models.data_hub import HubOpportunityEnriched
-        from app.models.detected_trend import DetectedTrend
-        from app.models.data_source import ScrapeJob
+        from app.models.data_hub import (
+            HubOpportunityEnriched, HubMarketByGeography,
+            HubIndustryInsight, HubMarketSignal
+        )
+        from app.models.google_scraping import GoogleScrapeJob
         opp_count = db.query(HubOpportunityEnriched).count()
-        trend_count = db.query(DetectedTrend).count()
-        job_count = db.query(ScrapeJob).count()
+        market_count = db.query(HubMarketByGeography).count()
+        insight_count = db.query(HubIndustryInsight).count()
+        signal_count = db.query(HubMarketSignal).count()
+        job_count = db.query(GoogleScrapeJob).count()
         log("SUMMARY", f"HubOpportunityEnriched: {opp_count} rows", "ok" if opp_count > 100 else "warn")
-        log("SUMMARY", f"DetectedTrend: {trend_count} rows", "ok" if trend_count > 100 else "warn")
-        log("SUMMARY", f"ScrapeJob: {job_count} rows", "ok" if job_count > 10 else "warn")
-        if opp_count > 100 and trend_count > 100 and job_count > 10:
+        log("SUMMARY", f"HubMarketByGeography: {market_count} rows", "ok" if market_count > 100 else "warn")
+        log("SUMMARY", f"HubIndustryInsight: {insight_count} rows", "ok" if insight_count > 50 else "warn")
+        log("SUMMARY", f"HubMarketSignal: {signal_count} rows", "ok" if signal_count > 100 else "warn")
+        log("SUMMARY", f"GoogleScrapeJob: {job_count} rows", "ok" if job_count > 10 else "warn")
+        if all([
+            opp_count > 100, market_count > 100, insight_count > 50,
+            signal_count > 100, job_count > 10
+        ]):
             log("SUMMARY", "MARKETPLACE CAN BE RE-ENABLED — sufficient real data exists", "ok")
         else:
             log("SUMMARY", "MARKETPLACE MUST STAY DISABLED — need more real data before relaunch", "error")
     except Exception as e:
+        db.rollback()
         log("SUMMARY", f"ERROR generating summary: {e}", "error")
 
 def main():
