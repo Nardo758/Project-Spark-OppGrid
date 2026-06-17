@@ -94,7 +94,8 @@ def check_data_freshness(db: Session):
             latest = db.query(col).order_by(col.desc()).first()
             if latest and latest[0]:
                 latest_dt = latest[0]
-                age_hours = (datetime.utcnow() - latest_dt).total_seconds() / 3600
+                latest_dt_naive = latest_dt.replace(tzinfo=None) if latest_dt.tzinfo else latest_dt
+                age_hours = (datetime.utcnow() - latest_dt_naive).total_seconds() / 3600
                 if age_hours < 24:
                     status = "ok"
                 elif age_hours < 168:
