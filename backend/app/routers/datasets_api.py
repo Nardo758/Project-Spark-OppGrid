@@ -279,9 +279,57 @@ def purchase_dataset(
         "currency": "usd"
     }
     """
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Dataset marketplace is temporarily unavailable for maintenance.",
+    # 1. Get dataset
+    dataset = db.query(Dataset).filter(Dataset.id == request.dataset_id, Dataset.is_active == True).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found or inactive")
+
+    # 2. Create a pending purchase record
+    purchase_id = str(uuid.uuid4())
+    purchase = DatasetPurchase(
+        id=purchase_id,
+        dataset_id=dataset.id,
+        user_id=None,  # Guest checkout; will be updated after payment
+        price_cents=dataset.price_cents,
+        payment_method="stripe",
+        status="pending",
+        download_url=None,
+        expires_at=None,
+        created_at=datetime.utcnow(),
+        accessed_at=None,
+    )
+    db.add(purchase)
+    db.commit()
+
+    # 3. Create Stripe PaymentIntent
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=dataset.price_cents,
+            currency="usd",
+            metadata={
+                "purchase_id": purchase_id,
+                "dataset_id": dataset.id,
+                "dataset_name": dataset.name,
+            },
+            automatic_payment_methods={"enabled": True},
+        )
+    except Exception as e:
+        logger.error(f"Stripe PaymentIntent creation failed: {e}")
+        purchase.status = "failed"
+        purchase.download_url = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Payment processing failed: {e}")
+
+    # 4. Update purchase with Stripe intent
+    purchase.stripe_invoice_id = intent.id
+    db.commit()
+
+    return PurchaseResponse(
+        purchase_id=purchase_id,
+        stripe_payment_intent_id=intent.id,
+        client_secret=intent.client_secret,
+        amount_cents=dataset.price_cents,
+        currency="usd",
     )
 
 

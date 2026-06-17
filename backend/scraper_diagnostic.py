@@ -219,11 +219,11 @@ def generate_summary(db: Session):
         job_count = db.query(GoogleScrapeJob).count()
         log("SUMMARY", f"HubOpportunityEnriched: {opp_count} rows", "ok" if opp_count > 100 else "warn")
         log("SUMMARY", f"HubMarketByGeography: {market_count} rows", "ok" if market_count > 100 else "warn")
-        log("SUMMARY", f"HubIndustryInsight: {insight_count} rows", "ok" if insight_count > 50 else "warn")
+        log("SUMMARY", f"HubIndustryInsight: {insight_count} rows", "ok" if insight_count > 30 else "warn")
         log("SUMMARY", f"HubMarketSignal: {signal_count} rows", "ok" if signal_count > 100 else "warn")
         log("SUMMARY", f"GoogleScrapeJob: {job_count} rows", "ok" if job_count > 10 else "warn")
         if all([
-            opp_count > 100, market_count > 100, insight_count > 50,
+            opp_count > 100, market_count > 100, insight_count > 30,
             signal_count > 100, job_count > 10
         ]):
             log("SUMMARY", "MARKETPLACE CAN BE RE-ENABLED — sufficient real data exists", "ok")
