@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.db.database import get_db
 from app.models.dataset import Dataset
 from app.models.data_hub import HubOpportunityEnriched, HubMarketByGeography, HubIndustryInsight, HubMarketSignal
-from app.models.location_catalog import LocationCatalog
+from app.models.location import LocationCatalog
 from app.models.google_scrape_job import GoogleScrapeJob
 from sqlalchemy import func, or_
 import uuid
