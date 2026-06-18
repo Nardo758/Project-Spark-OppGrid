@@ -100,6 +100,7 @@ def seed_city_datasets(db: Session) -> tuple[list[Dataset], list[str]]:
         .filter(
             LocationCatalog.location_type.in_(["city"]),
             LocationCatalog.is_active == True,
+            LocationCatalog.parent_location_id.is_(None),  # Only parent-level cities, not neighborhoods
         )
         .order_by(LocationCatalog.name)
         .all()
