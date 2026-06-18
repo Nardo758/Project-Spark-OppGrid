@@ -107,8 +107,12 @@ def seed_city_datasets(db: Session) -> tuple[list[Dataset], list[str]]:
     created: list[Dataset] = []
     skipped: list[str] = []
 
+    BAD_CITY_NAMES = {"not specified", "n/a", "variable", "unknown", "remote", "", "null", "na", "none"}
     for category, city, cnt in combos:
         if not category or not city:
+            continue
+        if city.lower().strip() in BAD_CITY_NAMES:
+            logger.info(f"Skipping bad city name '{city}' for {category}")
             continue
 
         display = _vertical_display(category)
