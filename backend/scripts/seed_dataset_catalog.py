@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.db.database import get_db
 from app.models.data_hub import HubOpportunityEnriched
 from app.models.dataset import Dataset
+from app.models.google_scraping import LocationCatalog, GoogleScrapeJob
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -90,46 +91,65 @@ def _create_dataset(
 
 
 def seed_city_datasets(db: Session) -> tuple[list[Dataset], list[str]]:
-    """Create city-specific datasets for every (category, city) with >= 3 records."""
-    combos = (
-        db.query(
-            HubOpportunityEnriched.category,
-            HubOpportunityEnriched.city,
-            func.count(HubOpportunityEnriched.opportunity_id).label("cnt"),
+    """Create city-specific datasets using LocationCatalog real city names."""
+    from app.models.google_scraping import LocationCatalog, GoogleScrapeJob
+
+    # Get top-level cities from LocationCatalog (not zip codes or neighborhoods)
+    cities = (
+        db.query(LocationCatalog)
+        .filter(
+            LocationCatalog.location_type.in_(["city"]),
+            LocationCatalog.is_active == True,
         )
-        .filter(HubOpportunityEnriched.city.isnot(None))
-        .group_by(HubOpportunityEnriched.category, HubOpportunityEnriched.city)
-        .having(func.count(HubOpportunityEnriched.opportunity_id) >= 3)
-        .order_by(func.count(HubOpportunityEnriched.opportunity_id).desc())
+        .order_by(LocationCatalog.name)
         .all()
     )
 
     created: list[Dataset] = []
     skipped: list[str] = []
 
-    BAD_CITY_NAMES = {"not specified", "n/a", "variable", "unknown", "remote", "", "null", "na", "none"}
-    for category, city, cnt in combos:
-        if not category or not city:
-            continue
-        if city.lower().strip() in BAD_CITY_NAMES:
-            logger.info(f"Skipping bad city name '{city}' for {category}")
+    for city in cities:
+        if not city.name:
             continue
 
-        display = _vertical_display(category)
-        name = f"{city} {display} Opportunities"
-        description = (
-            f"{cnt} curated {display} opportunities in {city} with AI opportunity scores, "
-            f"estimated market size, and startup cost data."
+        # Count GoogleScrapeJob for this city
+        job_count = (
+            db.query(func.count(GoogleScrapeJob.id))
+            .filter(GoogleScrapeJob.location_id == city.id)
+            .scalar()
+            or 0
         )
-        price = _price_cents_for_city(cnt)
+
+        # Count opportunities in HubOpportunityEnriched for this city
+        # Use approximate matching by name
+        opp_count = (
+            db.query(func.count(HubOpportunityEnriched.opportunity_id))
+            .filter(
+                HubOpportunityEnriched.city.ilike(f"%{city.name}%"),
+            )
+            .scalar()
+            or 0
+        )
+
+        total_records = job_count + opp_count
+        if total_records < 3:
+            continue
+
+        name = f"{city.name} Business Opportunities"
+        description = (
+            f"{total_records} curated business opportunities in {city.name} including "
+            f"{job_count} Google Maps scraped records and {opp_count} AI-analyzed opportunities "
+            f"with market size, startup cost, and competition data."
+        )
+        price = _price_cents_for_city(total_records)
         query = {
-            "category": category,
-            "city": city,
-            "table": "hub_opportunities_enriched",
+            "location_id": city.id,
+            "city": city.name,
+            "tables": ["google_scrape_jobs", "hub_opportunities_enriched"],
         }
 
         ds = _create_dataset(
-            db, name, description, "opportunities", category, city, price, cnt, query
+            db, name, description, "opportunities", "mixed", city.name, price, total_records, query
         )
         if ds:
             created.append(ds)
