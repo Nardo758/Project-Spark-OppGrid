@@ -27,27 +27,12 @@ SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000"
 
 # ── Bad name filters ───────────────────────────────────────────
 BAD_PATTERNS = [
-    r"^\d+$",           # pure numbers (ZIP codes)
-    r"^\d{5}",          # ZIP codes
-    r"Unknown",         # Unknown
-    r"N/A",             # N/A
-    r"Remote",          # Remote
-    r"Variable",        # Variable
-    r"Not specified",   # Not specified
-    r"Unspecified",     # Unspecified
-    r"^Service area",   # Service area dependent
-    r"^Online",         # Online/distributed
-    r"Dubai",           # Dubai (test data)
-    r"Lagos",           # Lagos (test data)
-    r"Dublin",          # Dublin (test data)
-    r"Multiple",        # Multiple metropolitan areas
-    r"Bay Area to",     # Bay Area to Humboldt
-    r"Santa Cruz to",   # Santa Cruz to Roseville
-    r"Northern California", # Northern California
-    r"^Varies",         # Varies
-    r"inferred from",   # inferred from Craigslist
-    r"^not specified",  # not specified in posting
-    r"^not location",   # not location-specific
+    r"^\d+$", r"^\d{5}", r"Unknown", r"N/A", r"Remote",
+    r"Variable", r"Not specified", r"Unspecified",
+    r"^Service area", r"^Online", r"Dubai", r"Lagos", r"Dublin",
+    r"Multiple", r"Bay Area to", r"Santa Cruz to",
+    r"Northern California", r"^Varies", r"inferred from",
+    r"^not specified", r"^not location",
 ]
 BAD_RE = [re.compile(p, re.IGNORECASE) for p in BAD_PATTERNS]
 
@@ -58,6 +43,15 @@ def is_clean_city(name):
         if r.search(name):
             return False
     return True
+
+def parse_city_state(name):
+    """Parse 'Austin, TX' -> ('Austin', 'TX')."""
+    if not name:
+        return None, None
+    if ", " in name:
+        parts = name.split(", ")
+        return parts[0], parts[1] if len(parts) > 1 else ""
+    return name, ""
 
 print("=" * 60)
 print("Dataset Catalog v4 — Strictly Curated (LocationCatalog Only)")
@@ -114,29 +108,29 @@ print(f"\nClean parent cities: {len(clean_cities)} / {len(parent_locs)}")
 
 # ════════════════════════════════════════════════════════════════
 # TIER 1: Opportunity Signal Feed — per city
-# Moat: HubOpportunityEnriched + HubMarketSignal (category-matched)
-# No single competitor has: correlated demand signals across sources
 # ════════════════════════════════════════════════════════════════
 print("\n--- TIER 1: Opportunity Signal Feed ---")
 
 tier1_count = 0
 for loc in clean_cities:
-    # Count opportunities for this city
+    city_name, state_code = parse_city_state(loc.name)
+    if not city_name:
+        continue
+
     opp_count_city = (
         db.query(HubOpportunityEnriched)
         .filter(
-            HubOpportunityEnriched.city == loc.city,
-            HubOpportunityEnriched.state == loc.state,
+            HubOpportunityEnriched.city == city_name,
+            HubOpportunityEnriched.state == state_code,
         )
         .count()
     )
     if not opp_count_city:
         continue
 
-    # Count signals matching categories for this city
     opp_cats = db.query(HubOpportunityEnriched.category).filter(
-        HubOpportunityEnriched.city == loc.city,
-        HubOpportunityEnriched.state == loc.state,
+        HubOpportunityEnriched.city == city_name,
+        HubOpportunityEnriched.state == state_code,
     ).distinct().all()
     opp_cat_list = [c[0] for c in opp_cats if c[0]]
     
@@ -151,7 +145,7 @@ for loc in clean_cities:
         continue
 
     tier1_count += 1
-    price = 4900 if total <= 20 else 9900  # $49 or $99
+    price = 4900 if total <= 20 else 9900
     create_dataset(
         name=f"Signal Feed — {loc.name}",
         record_count=total,
@@ -166,38 +160,38 @@ for loc in clean_cities:
                 "competition_density", "signal_strength", "pain_intensity"
             ],
             "moat": "Cross-source signal correlation + AI scoring not available from any single competitor",
-            "city": loc.city, "state": loc.state,
+            "city": city_name, "state": state_code,
         },
         price_cents=price,
     )
 
 # ════════════════════════════════════════════════════════════════
 # TIER 2: 4P's Market Intelligence — per city
-# Moat: HubMarketByGeography + HubIndustryInsight + HubOpportunityEnriched
-# No single competitor has: demographics + industry + opportunity in one file
 # ════════════════════════════════════════════════════════════════
 print("\n--- TIER 2: 4P's Market Intelligence ---")
 
 tier2_count = 0
 for loc in clean_cities:
-    # Count geo records for this city
+    city_name, state_code = parse_city_state(loc.name)
+    if not city_name:
+        continue
+
     geo_count_city = (
         db.query(HubMarketByGeography)
         .filter(
-            HubMarketByGeography.city == loc.city,
-            HubMarketByGeography.state == loc.state,
+            HubMarketByGeography.city == city_name,
+            HubMarketByGeography.state == state_code,
         )
         .count()
     )
     if not geo_count_city:
         continue
 
-    # Count opportunities for this city
     opp_count_city = (
         db.query(HubOpportunityEnriched)
         .filter(
-            HubOpportunityEnriched.city == loc.city,
-            HubOpportunityEnriched.state == loc.state,
+            HubOpportunityEnriched.city == city_name,
+            HubOpportunityEnriched.state == state_code,
         )
         .count()
     )
@@ -222,19 +216,16 @@ for loc in clean_cities:
                 "spending_power_index", "cost_of_living_index", "competitor_analysis"
             ],
             "moat": "Census + BLS + Google Maps + AI scoring pre-joined — no single competitor has all 4",
-            "city": loc.city, "state": loc.state,
+            "city": city_name, "state": state_code,
         },
         price_cents=price,
     )
 
 # ════════════════════════════════════════════════════════════════
 # TIER 3: Economic Intelligence — national, top categories only
-# Moat: HubIndustryInsight + city coverage + AI market entry timing
-# No single competitor has: FRED/BLS data aligned with market signals
 # ════════════════════════════════════════════════════════════════
 print("\n--- TIER 3: Economic Intelligence ---")
 
-# Only top 5 categories with meaningful data
 top_categories = (
     db.query(
         HubOpportunityEnriched.category,
@@ -251,14 +242,12 @@ for category, cat_count in top_categories:
     if not category or not is_clean_city(category):
         continue
 
-    # Count cities with this category
     city_count = db.query(
         func.count(func.distinct(HubOpportunityEnriched.city))
     ).filter(
         HubOpportunityEnriched.category == category
     ).scalar() or 0
 
-    # Count industry insight records
     insight_count = db.query(HubIndustryInsight).filter(
         HubIndustryInsight.industry_name == category
     ).count()
@@ -290,23 +279,23 @@ for category, cat_count in top_categories:
 
 # ════════════════════════════════════════════════════════════════
 # TIER 4: Competition & Location Intelligence — per city
-# Moat: HubMarketByGeography (competition) + GoogleScrapeJob
-# No single competitor has: Google Maps + Census + AI gap analysis
 # ════════════════════════════════════════════════════════════════
 print("\n--- TIER 4: Competition & Location Intelligence ---")
 
 tier4_count = 0
 for loc in clean_cities:
-    # Get geo record for this city
+    city_name, state_code = parse_city_state(loc.name)
+    if not city_name:
+        continue
+
     geo = db.query(HubMarketByGeography).filter(
-        HubMarketByGeography.city == loc.city,
-        HubMarketByGeography.state == loc.state,
+        HubMarketByGeography.city == city_name,
+        HubMarketByGeography.state == state_code,
     ).first()
     
     if not geo or not geo.total_businesses:
         continue
 
-    # Count GoogleScrapeJob via location_id
     job_count = (
         db.query(func.count(GoogleScrapeJob.id))
         .filter(GoogleScrapeJob.location_id == loc.id)
@@ -333,7 +322,7 @@ for loc in clean_cities:
                 "competitive_advantages", "barriers_to_entry"
             ],
             "moat": "Google Maps business listings + Census demographics + AI competition gap analysis — no single competitor has all 3",
-            "city": loc.city, "state": loc.state,
+            "city": city_name, "state": state_code,
         },
         price_cents=price,
     )
