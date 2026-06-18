@@ -88,15 +88,18 @@ tier1_count = 0
 for city, state, cnt in tier1_cities:
     if not city or not state:
         continue
-    # Also count signals for this city
-    signal_cnt = db.query(HubMarketSignal).filter(
-        HubMarketSignal.primary_regions.contains([city]) | 
-        HubMarketSignal.category.in_(
-            db.query(HubOpportunityEnriched.category)
-            .filter(HubOpportunityEnriched.city == city)
-            .distinct()
-        )
-    ).count()
+    # Also count signals matching the categories for this city
+    opp_cats = db.query(HubOpportunityEnriched.category).filter(
+        HubOpportunityEnriched.city == city,
+        HubOpportunityEnriched.state == state,
+    ).distinct().all()
+    opp_cat_list = [c[0] for c in opp_cats if c[0]]
+    
+    signal_cnt = 0
+    if opp_cat_list:
+        signal_cnt = db.query(HubMarketSignal).filter(
+            HubMarketSignal.category.in_(opp_cat_list)
+        ).count()
 
     total = max(cnt, signal_cnt)
     if total < 5:
@@ -147,10 +150,8 @@ for city, state, cnt in tier2_cities:
         HubOpportunityEnriched.state == state,
     ).distinct().count()
 
-    # Count industries with insight data
-    insight_match = db.query(HubIndustryInsight).filter(
-        HubIndustryInsight.opportunities.contains([city]) if hasattr(HubIndustryInsight, 'opportunities') else True
-    ).count()
+    # Count industries with insight data (national, applies to all cities)
+    insight_match = db.query(HubIndustryInsight).count()
 
     total = max(cnt, opp_cats, insight_match)
     if total < 5:
