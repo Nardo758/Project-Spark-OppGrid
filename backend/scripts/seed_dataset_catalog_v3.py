@@ -125,7 +125,7 @@ print("\n--- NATIONAL DATASETS ---")
 national_categories = (
     db.query(
         HubOpportunityEnriched.category,
-        func.count(HubOpportunityEnriched.id).label("cnt")
+        func.count(HubOpportunityEnriched.opportunity_id).label("cnt")
     )
     .group_by(HubOpportunityEnriched.category)
     .order_by(func.count(HubOpportunityEnriched.id).desc())
