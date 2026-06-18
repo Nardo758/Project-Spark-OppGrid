@@ -73,32 +73,27 @@ parent_locs = (
 )
 
 for loc in parent_locs:
-    # Count GoogleScrapeJob via location_id (no city column on the model)
-    job_count = (
+    # Count GoogleScrapeJob via location_id (most reliable)
+    rec_count = (
         db.query(func.count(GoogleScrapeJob.id))
         .filter(GoogleScrapeJob.location_id == loc.id)
         .scalar()
-    )
-    rec_count = job_count or 0
-    if not rec_count:
-        rec_count = (
-            db.query(HubOpportunityEnriched)
-            .filter(
-                HubOpportunityEnriched.city == loc.city,
-                HubOpportunityEnriched.state == loc.state,
-            )
-            .count()
-        )
+    ) or 0
     if not rec_count:
         continue
 
+    # Parse city/state from loc.name (e.g., "Austin, TX")
+    parts = loc.name.split(", ") if ", " in loc.name else loc.name.split(" ")
+    city_name = parts[0] if len(parts) > 0 else loc.name
+    state_code = parts[1] if len(parts) > 1 else ""
+
     create_dataset(
-        name=f"{loc.city}, {loc.state} Business Opportunities",
+        name=f"{loc.name} Business Opportunities",
         record_count=rec_count,
         data_sources=["HubOpportunityEnriched", "GoogleScrapeJob"],
         scope_type="city",
-        city=loc.city,
-        state=loc.state,
+        city=city_name,
+        state=state_code,
         category="Business Opportunities",
     )
 
@@ -108,14 +103,13 @@ print("\n--- NATIONAL DATASETS ---")
 for category in ["B2B Services", "Healthcare", "Technology"]:
     # Count via KeywordGroup join (GoogleScrapeJob has no category column)
     kg = db.query(KeywordGroup).filter(KeywordGroup.category == category).first()
-    job_count = 0
+    rec_count = 0
     if kg:
-        job_count = (
+        rec_count = (
             db.query(func.count(GoogleScrapeJob.id))
             .filter(GoogleScrapeJob.keyword_group_id == kg.id)
             .scalar()
-        )
-    rec_count = job_count or 0
+        ) or 0
     if not rec_count:
         rec_count = (
             db.query(HubOpportunityEnriched)
