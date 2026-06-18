@@ -117,11 +117,11 @@ for loc in clean_cities:
     if not city_name:
         continue
 
+    # Count opportunities for this city (fuzzy match: city name starts with or equals)
     opp_count_city = (
         db.query(HubOpportunityEnriched)
         .filter(
-            HubOpportunityEnriched.city == city_name,
-            HubOpportunityEnriched.state == state_code,
+            HubOpportunityEnriched.city.ilike(f"{city_name}%"),
         )
         .count()
     )
@@ -129,8 +129,7 @@ for loc in clean_cities:
         continue
 
     opp_cats = db.query(HubOpportunityEnriched.category).filter(
-        HubOpportunityEnriched.city == city_name,
-        HubOpportunityEnriched.state == state_code,
+        HubOpportunityEnriched.city.ilike(f"{city_name}%"),
     ).distinct().all()
     opp_cat_list = [c[0] for c in opp_cats if c[0]]
     
@@ -179,19 +178,18 @@ for loc in clean_cities:
     geo_count_city = (
         db.query(HubMarketByGeography)
         .filter(
-            HubMarketByGeography.city == city_name,
-            HubMarketByGeography.state == state_code,
+            HubMarketByGeography.city.ilike(f"{city_name}%"),
         )
         .count()
     )
     if not geo_count_city:
         continue
 
+    # Count opportunities for this city (fuzzy match: city name starts with or equals)
     opp_count_city = (
         db.query(HubOpportunityEnriched)
         .filter(
-            HubOpportunityEnriched.city == city_name,
-            HubOpportunityEnriched.state == state_code,
+            HubOpportunityEnriched.city.ilike(f"{city_name}%"),
         )
         .count()
     )
@@ -289,8 +287,7 @@ for loc in clean_cities:
         continue
 
     geo = db.query(HubMarketByGeography).filter(
-        HubMarketByGeography.city == city_name,
-        HubMarketByGeography.state == state_code,
+        HubMarketByGeography.city.ilike(f"{city_name}%"),
     ).first()
     
     if not geo or not geo.total_businesses:
