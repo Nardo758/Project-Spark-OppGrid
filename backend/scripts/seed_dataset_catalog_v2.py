@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.db.database import get_db
 from app.models.dataset import Dataset
 from app.models.data_hub import HubOpportunityEnriched, HubMarketByGeography, HubIndustryInsight, HubMarketSignal
-from app.models.google_scraping import LocationCatalog, GoogleScrapeJob
+from app.models.google_scraping import LocationCatalog, GoogleScrapeJob, KeywordGroup
 from sqlalchemy import func, or_
 import uuid
 from datetime import datetime
@@ -73,14 +73,13 @@ parent_locs = (
 )
 
 for loc in parent_locs:
-    rec_count = (
-        db.query(GoogleScrapeJob)
-        .filter(
-            GoogleScrapeJob.city == loc.city,
-            GoogleScrapeJob.state == loc.state,
-        )
-        .count()
+    # Count GoogleScrapeJob via location_id (no city column on the model)
+    job_count = (
+        db.query(func.count(GoogleScrapeJob.id))
+        .filter(GoogleScrapeJob.location_id == loc.id)
+        .scalar()
     )
+    rec_count = job_count or 0
     if not rec_count:
         rec_count = (
             db.query(HubOpportunityEnriched)
@@ -106,13 +105,17 @@ for loc in parent_locs:
 # ── National datasets ────────────────────────────────────────────
 print("\n--- NATIONAL DATASETS ---")
 
-# Top 3 categories by record count
 for category in ["B2B Services", "Healthcare", "Technology"]:
-    rec_count = (
-        db.query(GoogleScrapeJob)
-        .filter(GoogleScrapeJob.category == category)
-        .count()
-    )
+    # Count via KeywordGroup join (GoogleScrapeJob has no category column)
+    kg = db.query(KeywordGroup).filter(KeywordGroup.category == category).first()
+    job_count = 0
+    if kg:
+        job_count = (
+            db.query(func.count(GoogleScrapeJob.id))
+            .filter(GoogleScrapeJob.keyword_group_id == kg.id)
+            .scalar()
+        )
+    rec_count = job_count or 0
     if not rec_count:
         rec_count = (
             db.query(HubOpportunityEnriched)
