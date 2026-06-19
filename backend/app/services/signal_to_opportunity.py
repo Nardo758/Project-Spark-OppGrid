@@ -239,6 +239,17 @@ class SignalToOpportunityProcessor:
         
         self.db.commit()
         
+        # Refresh Hub tables for newly created opportunities
+        if stats['opportunities']:
+            from app.services.hub_refresh_service import refresh_hub_for_opportunity
+            for opp_info in stats['opportunities']:
+                opp_id = opp_info.get('id')
+                if opp_id:
+                    try:
+                        refresh_hub_for_opportunity(opp_id, self.db)
+                    except Exception as e:
+                        logger.warning(f"[HubRefresh] Failed to refresh Hub for opp {opp_id}: {e}")
+        
         logger.info(f"Signal processing complete: {stats['opportunities_created']} opportunities from {stats['total_signals']} signals")
         return stats
     

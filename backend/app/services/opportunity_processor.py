@@ -107,8 +107,24 @@ class OpportunityProcessor:
                         source.processed = 1
                         source.processed_at = datetime.utcnow()
                         stats["opportunities_created"] += 1
+                        # Track for Hub refresh after commit
+                        if not hasattr(self, '_created_opportunities'):
+                            self._created_opportunities = []
+                        self._created_opportunities.append(opportunity)
 
         self.db.commit()
+        
+        # Refresh Hub tables for newly created opportunities
+        if hasattr(self, '_created_opportunities') and self._created_opportunities:
+            from app.services.hub_refresh_service import refresh_hub_for_opportunity
+            for opp in self._created_opportunities:
+                if opp.id:
+                    try:
+                        refresh_hub_for_opportunity(opp.id, self.db)
+                    except Exception as e:
+                        logger.warning(f"[HubRefresh] Failed to refresh Hub for opp {opp.id}: {e}")
+            self._created_opportunities = []
+        
         logger.info(f"Opportunity processing complete: {stats}")
         return stats
     
