@@ -1,4 +1,4 @@
-import { useState, useEffect, type React } from 'react'
+import { useState, useEffect, useRef, type React } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Lightbulb,
@@ -154,6 +154,7 @@ export default function ConsultantStudio() {
   const [generatingReport, setGeneratingReport] = useState(false)
   const [reportResult, setReportResult] = useState<any>(null)
   const [reportError, setReportError] = useState<string | null>(null)
+  const [reportElapsed, setReportElapsed] = useState(0)
 
   // Clear report state when switching tabs to prevent cross-tab state leaks
   useEffect(() => {
@@ -161,7 +162,21 @@ export default function ConsultantStudio() {
     setGeneratingReport(false)
     setReportResult(null)
     setReportError(null)
+    setReportElapsed(0)
   }, [activeTab])
+
+  // Count elapsed seconds while generating a report
+  useEffect(() => {
+    if (!generatingReport) {
+      setReportElapsed(0)
+      return
+    }
+    const interval = setInterval(() => setReportElapsed((prev) => prev + 1), 1000)
+    return () => clearInterval(interval)
+  }, [generatingReport])
+
+  // Ref to hold the AbortController for cancelling in-flight report requests
+  const reportAbortRef = useRef<AbortController | null>(null)
 
   const REPORTS = [
     { id: 'feasibility_study', name: 'Feasibility Study', description: 'Quick viability check with market validation', price_cents: 2500, icon: Shield },
@@ -183,11 +198,15 @@ export default function ConsultantStudio() {
     setGeneratingReport(true)
     setReportError(null)
     setReportResult(null)
+    setReportElapsed(0)
+    const controller = new AbortController()
+    reportAbortRef.current = controller
     try {
       const res = await fetch('/api/v1/report-pricing/generate-free-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ report_type: reportType, idea_description: ideaDescription }),
+        signal: controller.signal,
       })
       if (!res.ok) {
         const text = await res.text()
@@ -198,14 +217,46 @@ export default function ConsultantStudio() {
       const data = await res.json()
       setReportResult(data)
     } catch (e: any) {
-      setReportError(e instanceof Error ? e.message : 'Failed to generate report')
+      if (e.name === 'AbortError') {
+        setReportError('Report generation was cancelled.')
+      } else if (e.message?.toLowerCase().includes('timeout') || e.message?.toLowerCase().includes('abort')) {
+        setReportError('Report generation timed out. Please try again — it may take 30–60 seconds.')
+      } else {
+        setReportError(e instanceof Error ? e.message : 'Failed to generate report')
+      }
     } finally {
       setGeneratingReport(false)
+      reportAbortRef.current = null
     }
   }
 
   const ReportPanel = ({ ideaDescription }: { ideaDescription?: string }) => (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+    <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6 relative">
+      {generatingReport && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
+          <div className="text-center p-6">
+            <Loader2 className="w-8 h-8 animate-spin text-[#D97757] mx-auto mb-3" />
+            <p className="text-sm font-medium text-gray-900 mb-1">
+              Generating {REPORTS.find(r => r.id === selectedReport)?.name || 'Report'}...
+            </p>
+            <p className="text-xs text-gray-500">
+              Elapsed {reportElapsed}s · This may take 30–60 seconds
+            </p>
+            {reportElapsed >= 20 && (
+              <p className="text-xs text-amber-600 mt-2">
+                Still working — our AI is analyzing market data deeply.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => reportAbortRef.current?.abort()}
+              className="mt-3 px-3 py-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
       <div className="flex items-center gap-2 mb-4">
         <FileText className="w-5 h-5 text-[#D97757]" />
         <h3 className="font-semibold text-gray-900">Generate Professional Report</h3>
@@ -217,14 +268,15 @@ export default function ConsultantStudio() {
         {REPORTS.map((r) => {
           const Icon = r.icon
           const isSelected = selectedReport === r.id
-          const isGenerating = generatingReport && isSelected
+          const isGenerated = isSelected && !!reportResult
           return (
             <button
               key={r.id}
+              type="button"
               onClick={() => handleGenerateReport(r.id, ideaDescription || '')}
               disabled={generatingReport}
               className={`text-left p-4 rounded-lg border transition-all ${
-                isSelected && reportResult
+                isGenerated
                   ? 'border-green-300 bg-green-50'
                   : 'border-gray-200 hover:border-[#D97757] hover:bg-[#D97757]/5'
               }`}
@@ -239,13 +291,7 @@ export default function ConsultantStudio() {
                     <span className="text-sm font-semibold text-gray-900">${(r.price_cents / 100).toFixed(0)}</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">{r.description}</p>
-                  {isGenerating && (
-                    <span className="inline-flex items-center gap-1 text-xs text-[#D97757] mt-2">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      Generating...
-                    </span>
-                  )}
-                  {isSelected && reportResult && (
+                  {isGenerated && (
                     <span className="inline-flex items-center gap-1 text-xs text-green-600 mt-2">
                       <CheckCircle className="w-3 h-3" />
                       Generated
@@ -262,9 +308,9 @@ export default function ConsultantStudio() {
           {reportError}
           {!isAuthenticated && (
             <div className="mt-2 flex gap-2">
-              <button onClick={() => navigate('/login')} className="text-sm underline font-medium">Sign In</button>
+              <button type="button" onClick={() => navigate('/login')} className="text-sm underline font-medium">Sign In</button>
               <span className="text-gray-400">or</span>
-              <button onClick={() => navigate('/signup')} className="text-sm underline font-medium">Create Account</button>
+              <button type="button" onClick={() => navigate('/signup')} className="text-sm underline font-medium">Create Account</button>
             </div>
           )}
         </div>
@@ -1012,3 +1058,101 @@ export default function ConsultantStudio() {
     </div>
   )
 }
+  const ReportPanel = ({ ideaDescription }: { ideaDescription?: string }) => (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6 relative">
+      {generatingReport && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
+          <div className="text-center p-6">
+            <Loader2 className="w-8 h-8 animate-spin text-[#D97757] mx-auto mb-3" />
+            <p className="text-sm font-medium text-gray-900 mb-1">
+              Generating {REPORTS.find(r => r.id === selectedReport)?.name || 'Report'}...
+            </p>
+            <p className="text-xs text-gray-500">
+              Elapsed {reportElapsed}s · This may take 30–60 seconds
+            </p>
+            {reportElapsed >= 20 && (
+              <p className="text-xs text-amber-600 mt-2">
+                Still working — our AI is analyzing market data deeply.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => reportAbortRef.current?.abort()}
+              className="mt-3 px-3 py-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="flex items-center gap-2 mb-4">
+        <FileText className="w-5 h-5 text-[#D97757]" />
+        <h3 className="font-semibold text-gray-900">Generate Professional Report</h3>
+      </div>
+      <p className="text-sm text-gray-600 mb-4">
+        Turn your analysis into a comprehensive, investor-ready document.
+      </p>
+      <div className="grid md:grid-cols-2 gap-3">
+        {REPORTS.map((r) => {
+          const Icon = r.icon
+          const isSelected = selectedReport === r.id
+          const isGenerated = isSelected && !!reportResult
+          return (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => handleGenerateReport(r.id, ideaDescription || '')}
+              disabled={generatingReport}
+              className={`text-left p-4 rounded-lg border transition-all ${
+                isGenerated
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-gray-200 hover:border-[#D97757] hover:bg-[#D97757]/5'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-4 h-4 text-gray-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm text-gray-900">{r.name}</span>
+                    <span className="text-sm font-semibold text-gray-900">${(r.price_cents / 100).toFixed(0)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{r.description}</p>
+                  {isGenerated && (
+                    <span className="inline-flex items-center gap-1 text-xs text-green-600 mt-2">
+                      <CheckCircle className="w-3 h-3" />
+                      Generated
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      {reportError && (
+        <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+          {reportError}
+          {!isAuthenticated && (
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={() => navigate('/login')} className="text-sm underline font-medium">Sign In</button>
+              <span className="text-gray-400">or</span>
+              <button type="button" onClick={() => navigate('/signup')} className="text-sm underline font-medium">Create Account</button>
+            </div>
+          )}
+        </div>
+      )}
+      {reportResult && (
+        <div className="mt-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle className="w-4 h-4 text-green-500" />
+            <span className="text-sm font-medium text-gray-900">Report Generated</span>
+          </div>
+          <pre className="text-xs text-gray-600 overflow-auto max-h-48 bg-white p-3 rounded border">
+            {JSON.stringify(reportResult, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
