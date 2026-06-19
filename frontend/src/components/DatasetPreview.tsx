@@ -122,6 +122,35 @@ export default function DatasetPreview({
                   </div>
                 )}
               </div>
+              {/* Data Quality Gate */}
+              {preview.metadata.data_quality && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {preview.metadata.data_quality.is_insufficient && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-red-900/30 border border-red-800 rounded-lg text-sm">
+                        <AlertCircle className="w-4 h-4 text-red-400" />
+                        <span className="text-red-300">No real data available ({preview.metadata.data_quality.actual_row_count ?? 0} rows)</span>
+                      </div>
+                    )}
+                    {preview.metadata.data_quality.is_preview_only && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-900/30 border border-yellow-800 rounded-lg text-sm">
+                        <AlertCircle className="w-4 h-4 text-yellow-400" />
+                        <span className="text-yellow-300">
+                          Preview only — {preview.metadata.data_quality.actual_row_count ?? 0} of {preview.metadata.data_quality.min_rows_for_tier ?? 25} rows needed
+                        </span>
+                      </div>
+                    )}
+                    {!preview.metadata.data_quality.is_insufficient && !preview.metadata.data_quality.is_preview_only && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-green-900/30 border border-green-800 rounded-lg text-sm">
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                        <span className="text-green-300">
+                          {preview.metadata.data_quality.actual_row_count ?? 0} real rows verified
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
