@@ -75,6 +75,12 @@ interface SearchResult {
   signal_surge_pct?: number
   top_signals_this_week?: Array<Record<string, any>>
   is_preview_mode?: boolean
+  data_quality?: {
+    completeness?: number
+    sources?: string[]
+    confidence?: string
+    recommendation?: string
+  }
   error?: string
 }
 
@@ -89,6 +95,12 @@ interface LocationResult {
   supply_label?: string
   demographic_snapshot?: Record<string, any>
   micro_markets?: Array<Record<string, any>>
+  data_quality?: {
+    completeness?: number
+    sources?: string[]
+    confidence?: string
+    recommendation?: string
+  }
   error?: string
 }
 
@@ -108,6 +120,12 @@ interface CloneResult {
   narrative_summary?: string
   replicability_label?: string
   why_it_works?: string[]
+  data_quality?: {
+    completeness?: number
+    sources?: string[]
+    confidence?: string
+    recommendation?: string
+  }
   error?: string
 }
 
@@ -234,6 +252,43 @@ export default function ConsultantStudio() {
       setGeneratingReport(false)
       reportAbortRef.current = null
     }
+  }
+
+  const DataQualityBadge = ({ quality }: { quality?: { completeness?: number; sources?: string[]; confidence?: string; recommendation?: string } }) => {
+    if (!quality) return null
+    const pct = Math.round((quality.completeness ?? 0) * 100)
+    const color = pct > 60 ? 'bg-green-50 text-green-700' : pct > 30 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-600'
+    const barColor = pct > 60 ? 'bg-green-500' : pct > 30 ? 'bg-amber-500' : 'bg-gray-400'
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-[#D97757]" />
+          Data Intelligence
+        </h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">Data Completeness</span>
+            <div className="flex items-center gap-2">
+              <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+              </div>
+              <span className="text-sm font-medium text-gray-900">{pct}%</span>
+            </div>
+          </div>
+          {quality.sources && quality.sources.length > 0 && (
+            <div>
+              <span className="text-sm text-gray-600">Sources:</span>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {quality.sources.map((source, i) => (
+                  <span key={i} className="px-2 py-0.5 bg-stone-100 text-stone-700 rounded text-xs">{source}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {quality.recommendation && <p className="text-xs text-gray-500 mt-2">{quality.recommendation}</p>}
+        </div>
+      </div>
+    )
   }
 
   const ReportPanel = ({ ideaDescription }: { ideaDescription?: string }) => (
@@ -821,6 +876,7 @@ export default function ConsultantStudio() {
                         </p>
                       </div>
                     )}
+                    <DataQualityBadge quality={searchResult.data_quality} />
                     <ReportPanel ideaDescription={searchQuery} />
                   </>
                 )}
@@ -953,6 +1009,7 @@ export default function ConsultantStudio() {
                         </div>
                       </div>
                     )}
+                    <DataQualityBadge quality={locResult.data_quality} />
                     <ReportPanel ideaDescription={locBusiness} />
                   </>
                 )}
@@ -1112,6 +1169,7 @@ export default function ConsultantStudio() {
                         </div>
                       </div>
                     )}
+                    <DataQualityBadge quality={cloneResult.data_quality} />
                     <ReportPanel ideaDescription={cloneName} />
                   </>
                 )}
