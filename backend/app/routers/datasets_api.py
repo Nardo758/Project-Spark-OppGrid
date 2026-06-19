@@ -216,6 +216,66 @@ def preview_dataset(
         rows: List[dict] = []
         columns: List[str] = []
 
+        # Data quality gate: count actual rows before generating preview
+        actual_row_count = 0
+        try:
+            from app.models.data_hub import HubOpportunityEnriched, HubMarketByGeography
+            from app.models.detected_trend import DetectedTrend
+            from app.models.data_source import ScrapeJob
+            filters = delivery._get_query_filters(dataset)
+            dt = dataset.dataset_type
+            if dt in (DatasetType.OPPORTUNITIES.value, 'opportunity_signals'):
+                query = db.query(HubOpportunityEnriched)
+                if filters.get('city'):
+                    query = query.filter(HubOpportunityEnriched.city.ilike(f"%{filters['city']}%"))
+                if filters.get('state'):
+                    query = query.filter(HubOpportunityEnriched.state.ilike(f"%{filters['state']}%"))
+                if filters.get('vertical'):
+                    query = query.filter(HubOpportunityEnriched.category.ilike(f"%{filters['vertical']}%"))
+                actual_row_count = query.count()
+            elif dt in (DatasetType.MARKETS.value, 'market_intelligence'):
+                query = db.query(HubMarketByGeography)
+                if filters.get('city'):
+                    query = query.filter(HubMarketByGeography.city.ilike(f"%{filters['city']}%"))
+                if filters.get('state'):
+                    query = query.filter(HubMarketByGeography.state.ilike(f"%{filters['state']}%"))
+                actual_row_count = query.count()
+            elif dt in (DatasetType.TRENDS.value, 'economic_intelligence'):
+                query = db.query(DetectedTrend)
+                if filters.get('vertical'):
+                    query = query.filter(DetectedTrend.category.ilike(f"%{filters['vertical']}%"))
+                actual_row_count = query.count()
+            elif dt in (DatasetType.RAW_DATA.value, 'competition_intelligence'):
+                query = db.query(ScrapeJob)
+                if filters.get('city'):
+                    query = query.filter(ScrapeJob.city.ilike(f"%{filters['city']}%"))
+                actual_row_count = query.count()
+        except Exception as count_err:
+            logger.warning(f"Could not count actual rows for dataset {dataset_id}: {count_err}")
+
+        # Tier thresholds for data quality warning
+        tier_min_rows = {
+            'opportunity_signals': 25,
+            'market_intelligence': 50,
+            'economic_intelligence': 30,
+            'competition_intelligence': 100,
+            DatasetType.OPPORTUNITIES.value: 25,
+            DatasetType.MARKETS.value: 50,
+            DatasetType.TRENDS.value: 30,
+            DatasetType.RAW_DATA.value: 100,
+        }
+        min_rows = tier_min_rows.get(dataset.dataset_type, 25)
+        is_preview_only = actual_row_count < min_rows and actual_row_count > 0
+        is_insufficient = actual_row_count == 0
+        data_quality = {
+            "actual_row_count": actual_row_count,
+            "advertised_row_count": dataset.record_count or 0,
+            "min_rows_for_tier": min_rows,
+            "is_preview_only": is_preview_only,
+            "is_insufficient": is_insufficient,
+            "quality_label": "insufficient" if is_insufficient else "preview" if is_preview_only else "ready",
+        }
+
         try:
             dt = dataset.dataset_type
             if dt == DatasetType.OPPORTUNITIES.value or dt == DatasetType.OPPORTUNITIES:
@@ -275,6 +335,7 @@ def preview_dataset(
                 "vertical": dataset.vertical,
                 "city": dataset.city,
                 "has_real_data": len(rows) > 0,
+                "data_quality": data_quality,
             },
             "rows": rows[:5],
             "columns": columns,

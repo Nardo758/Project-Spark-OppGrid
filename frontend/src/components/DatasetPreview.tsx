@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { X, Download, TrendingUp, Database, AlertCircle } from 'lucide-react'
+import { X, Download, TrendingUp, Database, AlertCircle, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
 interface PreviewData {
@@ -9,6 +9,14 @@ interface PreviewData {
     data_freshness: string
     vertical?: string
     city?: string
+    data_quality?: {
+      actual_row_count: number
+      advertised_row_count: number
+      min_rows_for_tier: number
+      is_preview_only: boolean
+      is_insufficient: boolean
+      quality_label: 'ready' | 'preview' | 'insufficient'
+    }
   }
   rows: Record<string, any>[]
   columns: string[]
@@ -85,6 +93,25 @@ export default function DatasetPreview({
           </button>
         </div>
 
+        {/* Data Quality Banner — shown as soon as preview loads */}
+        {preview?.metadata?.data_quality && (
+          <div className={`px-6 py-3 flex items-center gap-3 text-sm font-medium border-b ${
+            preview.metadata.data_quality.is_insufficient
+              ? 'bg-red-900/40 border-red-800 text-red-200'
+              : preview.metadata.data_quality.is_preview_only
+              ? 'bg-yellow-900/40 border-yellow-800 text-yellow-200'
+              : 'bg-green-900/40 border-green-800 text-green-200'
+          }`}>
+            {preview.metadata.data_quality.is_insufficient ? (
+              <><AlertCircle className="w-4 h-4 shrink-0" /> No real data rows found — this dataset may be empty ({preview.metadata.data_quality.actual_row_count} of {preview.metadata.data_quality.advertised_row_count} advertised rows verified)</>
+            ) : preview.metadata.data_quality.is_preview_only ? (
+              <><AlertCircle className="w-4 h-4 shrink-0" /> Limited data — {preview.metadata.data_quality.actual_row_count} of {preview.metadata.data_quality.min_rows_for_tier} rows required for this tier</>
+            ) : (
+              <><CheckCircle className="w-4 h-4 shrink-0" /> {preview.metadata.data_quality.actual_row_count} rows verified</>
+            )}
+          </div>
+        )}
+
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Metadata Section */}
@@ -122,6 +149,35 @@ export default function DatasetPreview({
                   </div>
                 )}
               </div>
+              {/* Data Quality Gate */}
+              {preview.metadata.data_quality && (
+                <div className="mt-4 pt-4 border-t border-gray-700">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {preview.metadata.data_quality.is_insufficient && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-red-900/30 border border-red-800 rounded-lg text-sm">
+                        <AlertCircle className="w-4 h-4 text-red-400" />
+                        <span className="text-red-300">No real data available ({preview.metadata.data_quality.actual_row_count ?? 0} rows)</span>
+                      </div>
+                    )}
+                    {preview.metadata.data_quality.is_preview_only && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-yellow-900/30 border border-yellow-800 rounded-lg text-sm">
+                        <AlertCircle className="w-4 h-4 text-yellow-400" />
+                        <span className="text-yellow-300">
+                          Preview only — {preview.metadata.data_quality.actual_row_count ?? 0} of {preview.metadata.data_quality.min_rows_for_tier ?? 25} rows needed
+                        </span>
+                      </div>
+                    )}
+                    {!preview.metadata.data_quality.is_insufficient && !preview.metadata.data_quality.is_preview_only && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 bg-green-900/30 border border-green-800 rounded-lg text-sm">
+                        <CheckCircle className="w-4 h-4 text-green-400" />
+                        <span className="text-green-300">
+                          {preview.metadata.data_quality.actual_row_count ?? 0} real rows verified
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -140,7 +140,7 @@ for loc in clean_cities:
         ).count()
 
     total = max(opp_count_city, signal_cnt)
-    if total < 5:
+    if total < 25:  # Was 5 — need meaningful row count for $49-$99 pricing
         continue
 
     tier1_count += 1
@@ -195,11 +195,11 @@ for loc in clean_cities:
     )
 
     total = max(geo_count_city, opp_count_city)
-    if total < 5:
+    if total < 50:  # Was 5 — need depth for $99-$199 multi-source blend
         continue
 
     tier2_count += 1
-    price = 9900 if total <= 20 else 14900 if total <= 50 else 19900
+    price = 9900 if total <= 100 else 14900 if total <= 200 else 19900
     create_dataset(
         name=f"4P's Market Intelligence — {loc.name}",
         record_count=total,
@@ -251,11 +251,11 @@ for category, cat_count in top_categories:
     ).count()
 
     total = max(cat_count, city_count, insight_count)
-    if total < 5:
+    if total < 30:  # Was 5 — need cross-city coverage for national datasets
         continue
 
     tier3_count += 1
-    price = 4900 if total <= 10 else 9900 if total <= 30 else 19900
+    price = 4900 if total <= 50 else 9900 if total <= 100 else 19900
     create_dataset(
         name=f"Economic Intelligence — {category}",
         record_count=total,
@@ -300,11 +300,11 @@ for loc in clean_cities:
     ) or 0
 
     total = max(geo.total_businesses, job_count)
-    if total < 5:
+    if total < 100:  # Was 5 — need volume for business listings to justify $99-$149
         continue
 
     tier4_count += 1
-    price = 9900 if total <= 50 else 14900
+    price = 9900 if total <= 500 else 14900
     create_dataset(
         name=f"Competition Map — {loc.name}",
         record_count=total,

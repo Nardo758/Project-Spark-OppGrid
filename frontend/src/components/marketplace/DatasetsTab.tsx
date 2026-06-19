@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Search, Eye, ShoppingCart, Star, Database, ArrowUpDown, TrendingUp, Zap, BarChart3, MapPin, Globe } from 'lucide-react'
+import { Search, Eye, ShoppingCart, Star, Database, ArrowUpDown, TrendingUp, Zap, BarChart3, MapPin, Globe, AlertCircle, CheckCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 import DatasetPreview from '../DatasetPreview'
@@ -88,9 +88,32 @@ const CITIES = [
   'Philadelphia', 'Phoenix', 'Tampa',
 ]
 
+const TIER_MIN_ROWS: Record<string, number> = {
+  competition_intelligence: 100,
+  raw_data: 100,
+  markets: 50,
+  market_intelligence: 50,
+  opportunities: 25,
+  opportunity_signals: 25,
+  trends: 30,
+  economic_intelligence: 30,
+}
+
+function getQualityPill(dataset: Dataset) {
+  const min = TIER_MIN_ROWS[dataset.dataset_type] ?? 25
+  if (dataset.record_count === 0) {
+    return { label: 'No Data', icon: <AlertCircle className="w-3 h-3" />, cls: 'bg-red-50 text-red-600 border-red-200' }
+  }
+  if (dataset.record_count < min) {
+    return { label: 'Limited Data', icon: <AlertCircle className="w-3 h-3" />, cls: 'bg-yellow-50 text-yellow-700 border-yellow-200' }
+  }
+  return { label: 'Verified', icon: <CheckCircle className="w-3 h-3" />, cls: 'bg-green-50 text-green-700 border-green-200' }
+}
+
 function MiniDatasetCard({ dataset, onPreview, onBuy }: { dataset: Dataset; onPreview: () => void; onBuy: () => void }) {
   const cat = CATEGORY_COLORS[dataset.dataset_type] || CATEGORY_COLORS.raw_data
   const label = CATEGORY_LABELS[dataset.dataset_type] || 'Data'
+  const quality = getQualityPill(dataset)
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-300 hover:shadow-sm transition-all flex flex-col h-full">
@@ -105,9 +128,15 @@ function MiniDatasetCard({ dataset, onPreview, onBuy }: { dataset: Dataset; onPr
       <p className="text-xs text-gray-600 line-clamp-2 mb-2 flex-1">
         {dataset.description || 'High-quality market intelligence dataset'}
       </p>
-      <div className="flex items-center gap-2 text-xs text-gray-500 mb-2">
-        <Database className="w-3.5 h-3.5" />
-        {dataset.record_count} rows
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <Database className="w-3.5 h-3.5" />
+          {dataset.record_count} rows
+        </div>
+        <span className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border ${quality.cls}`}>
+          {quality.icon}
+          {quality.label}
+        </span>
       </div>
       <div className="flex items-center justify-between gap-2 pt-3 border-t border-gray-100">
         <div className="text-lg font-bold text-gray-900">
