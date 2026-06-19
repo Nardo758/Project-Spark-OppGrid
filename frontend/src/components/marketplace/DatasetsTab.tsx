@@ -8,7 +8,7 @@ interface Dataset {
   id: string
   name: string
   description: string
-  dataset_type: 'opportunities' | 'markets' | 'trends' | 'raw_data'
+  dataset_type: 'opportunities' | 'markets' | 'trends' | 'raw_data' | 'opportunity_signals' | 'market_intelligence' | 'economic_intelligence' | 'competition_intelligence'
   vertical?: string | null
   city?: string | null
   price_cents: number
@@ -40,32 +40,23 @@ const CATEGORIES = [
   { value: 'markets', label: 'Markets' },
   { value: 'trends', label: 'Trends' },
   { value: 'raw_data', label: 'Raw Data' },
+  { value: 'opportunity_signals', label: 'Signal Feed' },
+  { value: 'market_intelligence', label: '4P\'s Market Intelligence' },
+  { value: 'economic_intelligence', label: 'Economic Intelligence' },
+  { value: 'competition_intelligence', label: 'Competition Map' },
 ]
 
 const VERTICALS = [
-  'Coffee',
-  'Coworking',
-  'Gyms',
-  'Fitness',
-  'Restaurants',
-  'Retail',
-  'Tech',
-  'Healthcare',
-  'Finance',
-  'Education',
+  'Coffee', 'Coworking', 'Gyms', 'Fitness', 'Restaurants', 'Retail', 'Tech',
+  'Healthcare', 'Finance', 'Education', 'Business', 'Location Analysis',
+  'Multi-Vertical', '4P\'s Framework', 'Economic Intelligence',
 ]
 
 const CITIES = [
-  'San Francisco',
-  'New York',
-  'Los Angeles',
-  'Austin',
-  'Chicago',
-  'Boston',
-  'Seattle',
-  'Miami',
-  'Denver',
-  'Portland',
+  'San Francisco', 'New York', 'Los Angeles', 'Austin', 'Chicago', 'Boston',
+  'Seattle', 'Miami', 'Denver', 'Portland', 'Bay Area', 'Dallas', 'Atlanta',
+  'San Diego', 'Houston', 'Nashville', 'Bend', 'Boise', 'Salt Lake City',
+  'Philadelphia', 'Phoenix', 'Dallas', 'Tampa',
 ]
 
 export default function DatasetsTab() {
