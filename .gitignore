@@ -20,6 +20,7 @@ yarn-error.log*
 .pnpm-debug.log*
 dist/
 build/
+!frontend/src/pages/build/
 
 # IDEs
 .vscode/
