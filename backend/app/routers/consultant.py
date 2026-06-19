@@ -18,6 +18,7 @@ from app.services.success_profile.identify_location_service import IdentifyLocat
 from app.services.cache_manager import get_cache_manager, search_ideas_cache_key
 from app.models.consultant_activity import ConsultantActivity
 from app.models.user import User
+from app.core.dependencies import get_current_user, get_current_user_optional, get_current_admin_user
 from app.schemas.identify_location import (
     IdentifyLocationRequest, IdentifyLocationResult,
     CandidateDetailResponse, PromoteCandidateRequest, PromoteCandidateResponse,
@@ -242,7 +243,7 @@ class ActivityLogResponse(BaseModel):
 async def validate_idea(
     request: ValidateIdeaRequest,
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Path 1: Validate Idea - Online vs Physical decision engine
@@ -283,7 +284,7 @@ async def validate_idea(
     try:
         result = await asyncio.wait_for(
             service.validate_idea(
-                user_id=user_id,
+                user_id=current_user.id if current_user else None,
                 idea_description=request.idea_description,
                 business_context=request.business_context,
                 session_id=request.session_id,
@@ -316,7 +317,7 @@ async def search_ideas(
     request: SearchIdeasRequest,
     response: Response,
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Path 2: Search Ideas - Database exploration with trend detection
@@ -363,7 +364,7 @@ async def search_ideas(
         return SearchIdeasResponse(**cached_result)
     
     # Check user subscription status
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == (current_user.id if current_user else None)).first()
     
     # Determine if user has paid access
     has_paid_access = False
@@ -392,7 +393,7 @@ async def search_ideas(
     try:
         result = await asyncio.wait_for(
             service.search_ideas(
-                user_id=user_id,
+                user_id=current_user.id if current_user else None,
                 filters=filters,
                 session_id=request.session_id,
                 is_paid_user=has_paid_access,
@@ -431,7 +432,7 @@ async def search_ideas(
 async def identify_location(
     request: ConsultantLocationRequest,
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Path 3: Identify Location - Geographic intelligence
@@ -448,7 +449,7 @@ async def identify_location(
     try:
         result = await asyncio.wait_for(
             service.identify_location(
-                user_id=user_id,
+                user_id=current_user.id if current_user else None,
                 city=request.city,
                 business_description=request.business_description,
                 additional_params=request.additional_params,
@@ -462,14 +463,14 @@ async def identify_location(
             success=False,
             error="Analysis timed out after 65 seconds. Please try again with a simpler query.",
             city=request.city,
-            business_type=request.business_description,
+            business_description=request.business_description,
         )
     except Exception as e:
         return IdentifyLocationResponse(
             success=False,
             error=f"Analysis failed: {str(e)}",
             city=request.city,
-            business_type=request.business_description,
+            business_description=request.business_description,
         )
 
 
@@ -477,7 +478,7 @@ async def identify_location(
 async def clone_success(
     request: CloneSuccessRequest,
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Path 4: Clone Success - Replicate successful business models
@@ -492,7 +493,7 @@ async def clone_success(
     try:
         result = await asyncio.wait_for(
             service.clone_success(
-                user_id=user_id,
+                user_id=current_user.id if current_user else None,
                 business_name=request.business_name,
                 business_address=request.business_address,
                 target_city=request.target_city,
@@ -521,8 +522,7 @@ async def clone_success(
 async def deep_clone_analysis(
     request: DeepCloneRequest,
     db: Session = Depends(get_db),
-    user_id: int = 1,
-    paid: bool = False,
+    current_user: User = Depends(get_current_user),
 ):
     """
     Premium: Deep Clone Analysis - Detailed 3mi and 5mi radius analysis for a specific target city.
@@ -535,13 +535,16 @@ async def deep_clone_analysis(
     """
     from app.models import User
     
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).filter(User.id == (current_user.id if current_user else 1)).first()
     has_premium_access = False
     
     if user and user.subscription:
         has_premium_access = user.subscription.tier in ['growth', 'pro', 'team', 'business', 'enterprise']
     
-    if not has_premium_access and not paid:
+    # Check if user has paid for this specific feature or has premium subscription
+    has_paid = False  # TODO: check payment records for this user
+    
+    if not has_premium_access and not has_paid:
         return DeepCloneResponse(
             success=False,
             requires_payment=True,
@@ -551,7 +554,7 @@ async def deep_clone_analysis(
     service = ConsultantStudioService(db)
     
     result = await service.deep_clone_analysis(
-        user_id=user_id,
+        user_id=current_user.id,
         source_business_name=request.source_business_name,
         source_business_address=request.source_business_address,
         target_city=request.target_city,
@@ -566,11 +569,11 @@ async def get_activity_log(
     limit: int = 20,
     path: Optional[str] = None,
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: User = Depends(get_current_user),
 ):
     """Get user's consultant activity history"""
     query = db.query(ConsultantActivity).filter(
-        ConsultantActivity.user_id == user_id
+        ConsultantActivity.user_id == current_user.id
     )
     
     if path:
@@ -597,7 +600,7 @@ async def get_activity_log(
 @router.get("/stats")
 async def get_consultant_stats(
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: User = Depends(get_current_user),
 ):
     """Get consultant studio usage statistics"""
     from sqlalchemy import func
@@ -605,14 +608,14 @@ async def get_consultant_stats(
     from app.models.location_analysis_cache import LocationAnalysisCache
     
     total_activities = db.query(func.count(ConsultantActivity.id)).filter(
-        ConsultantActivity.user_id == user_id
+        ConsultantActivity.user_id == current_user.id
     ).scalar() or 0
     
     path_counts = db.query(
         ConsultantActivity.path,
         func.count(ConsultantActivity.id)
     ).filter(
-        ConsultantActivity.user_id == user_id
+        ConsultantActivity.user_id == current_user.id
     ).group_by(ConsultantActivity.path).all()
     
     total_trends = db.query(func.count(DetectedTrend.id)).scalar() or 0
@@ -630,6 +633,7 @@ async def get_consultant_stats(
 async def get_consultant_analytics(
     days: int = 30,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin_user),
 ):
     """
     Admin analytics for Consultant Studio usage.
@@ -797,7 +801,7 @@ async def get_consultant_analytics(
 async def identify_location_search(
     request: IdentifyLocationRequest,
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: User = Depends(get_current_user),
 ):
     """
     POST /api/consultant-studio/identify-location/search
@@ -831,7 +835,7 @@ async def identify_location_search(
     try:
         # Determine user tier (would normally fetch from user subscription)
         user_tier = UserTier.FREE  # Default to FREE
-        user_obj = db.query(User).filter(User.id == user_id).first()
+        user_obj = db.query(User).filter(User.id == current_user.id).first()
         if user_obj and user_obj.subscription:
             tier_mapping = {
                 'BUILDER': UserTier.BUILDER,
@@ -852,7 +856,7 @@ async def identify_location_search(
                 archetype_preference=request.archetype_preference,
                 include_gap_discovery=request.include_gap_discovery,
                 user_tier=user_tier,
-                user_id=user_id,
+                user_id=current_user.id if current_user else None,
             ),
             timeout=12.0
         )
@@ -884,7 +888,7 @@ async def identify_location_search(
 async def get_identify_location_result(
     request_id: str = Path(..., description="Request ID from initial search"),
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: User = Depends(get_current_user),
 ):
     """
     GET /api/consultant-studio/identify-location/{request_id}
@@ -920,7 +924,7 @@ async def get_candidate_detail(
     request_id: str = Path(..., description="Request ID"),
     candidate_id: str = Path(..., description="Candidate ID"),
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: User = Depends(get_current_user),
 ):
     """
     GET /api/consultant-studio/identify-location/{request_id}/candidate/{candidate_id}
@@ -957,7 +961,7 @@ async def promote_candidate(
     candidate_id: str = Path(..., description="Candidate ID"),
     promote_request: PromoteCandidateRequest = None,
     db: Session = Depends(get_db),
-    user_id: int = 1,
+    current_user: User = Depends(get_current_user),
 ):
     """
     POST /api/consultant-studio/identify-location/{request_id}/promote/{candidate_id}
@@ -978,7 +982,7 @@ async def promote_candidate(
         result = service.promote_candidate(
             request_id=request_id,
             candidate_id=candidate_id,
-            user_id=user_id,
+            user_id=current_user.id,
             user_notes=promote_request.notes if promote_request else None
         )
         
