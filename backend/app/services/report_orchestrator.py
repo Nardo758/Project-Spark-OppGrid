@@ -190,7 +190,173 @@ class ReportOrchestrator:
 
         logger.info(f"[Orchestrator] Generation complete ({len(content)} chars)")
         economic_snapshot = self._build_economic_snapshot(macro_context, labor_data, industry_benchmarks)
+        
+        # ── 7. Wrap with OppGrid institutional header ──────────────────────
+        content = self._wrap_with_institutional_header(
+            content=content,
+            report_type=norm_type,
+            business_type=business_type,
+            city=city,
+            state=state,
+            data_quality=rdc.data_quality if rdc else None,
+            formula_scores=formula_scores,
+            economic_snapshot=economic_snapshot,
+        )
+        
         return {"content": content, "economic_snapshot": economic_snapshot}
+
+    def _wrap_with_institutional_header(
+        self,
+        content: str,
+        report_type: str,
+        business_type: str,
+        city: str,
+        state: str,
+        data_quality=None,
+        formula_scores=None,
+        economic_snapshot=None,
+    ) -> str:
+        """Wrap report content with an OppGrid institutional header and footer.
+        
+        If the content already contains <html> tags (from AI generators), extract the body content.
+        """
+        from datetime import datetime
+        import re
+        
+        report_type_display = report_type.replace("_", " ").title()
+        generated_at = datetime.utcnow().strftime("%B %d, %Y at %H:%M UTC")
+        
+        # Extract body content if the report already has full HTML tags
+        body_content = content
+        if "<body" in content.lower() or "<html" in content.lower():
+            # Extract content between <body> and </body>
+            body_match = re.search(r'<body[^>]*>(.*?)</body>', content, re.DOTALL | re.IGNORECASE)
+            if body_match:
+                body_content = body_match.group(1).strip()
+            else:
+                # Fallback: strip html, head, body tags
+                body_content = re.sub(r'<html[^>]*>.*?</head>', '', content, flags=re.DOTALL | re.IGNORECASE)
+                body_content = re.sub(r'</html>', '', body_content, flags=re.IGNORECASE)
+                body_content = re.sub(r'<body[^>]*>|</body>', '', body_content, flags=re.IGNORECASE)
+        
+        # Build data quality badge
+        data_quality_html = ""
+        if data_quality:
+            completeness_pct = int(data_quality.completeness * 100) if hasattr(data_quality, "completeness") else 0
+            confidence_pct = int(data_quality.confidence * 100) if hasattr(data_quality, "confidence") else 0
+            data_quality_html = f"""
+            <div style="margin-top: 12px; padding: 12px; background: #f8f7f5; border-radius: 8px; border-left: 4px solid #D97757;">
+                <div style="font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Data Intelligence</div>
+                <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+                    <div>
+                        <div style="font-size: 20px; font-weight: 700; color: #1a1a1a;">{completeness_pct}%</div>
+                        <div style="font-size: 11px; color: #666;">Data Completeness</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 20px; font-weight: 700; color: #1a1a1a;">{confidence_pct}%</div>
+                        <div style="font-size: 11px; color: #666;">Confidence Score</div>
+                    </div>
+                    {f'<div><div style="font-size: 20px; font-weight: 700; color: #1a1a1a;">{formula_scores.cls:.0f}/100</div><div style="font-size: 11px; color: #666;">Composite Location Score</div></div>' if formula_scores else ''}
+                </div>
+            </div>
+            """
+        
+        # Build proprietary scores badge
+        scores_html = ""
+        if formula_scores:
+            scores = [
+                ("TAI", formula_scores.tai, "Traffic Anomaly"),
+                ("WMM", formula_scores.wmm, "Wealth Migration"),
+                ("DVS", formula_scores.dvs, "Demand Velocity"),
+                ("CWI", formula_scores.cwi, "Competitive Whitespace"),
+                ("BFV", formula_scores.bfv, "Business Formation"),
+                ("ATI", formula_scores.ati, "Affordability Trend"),
+                ("FMW", formula_scores.fmw, "First-Mover Window"),
+                ("DSI", formula_scores.dsi, "Demographic Shift"),
+            ]
+            scores_html = """
+            <div style="margin-top: 16px; padding: 12px; background: #f8f7f5; border-radius: 8px;">
+                <div style="font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Proprietary Scores</div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+            """
+            for code, value, label in scores:
+                display_val = f"{value:.1f}" if value is not None else "N/A"
+                scores_html += f"""
+                    <div style="text-align: center; padding: 8px; background: white; border-radius: 6px; border: 1px solid #e5e5e5;">
+                        <div style="font-size: 10px; color: #999; text-transform: uppercase;">{code}</div>
+                        <div style="font-size: 16px; font-weight: 700; color: #1a1a1a; margin: 2px 0;">{display_val}</div>
+                        <div style="font-size: 9px; color: #666;">{label}</div>
+                    </div>
+                """
+            scores_html += "</div></div>"
+        
+        header = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OppGrid — {report_type_display} for {business_type}</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {{ font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; color: #1a1a1a; max-width: 900px; margin: 0 auto; padding: 40px 24px; background: #fff; }}
+        h1, h2, h3 {{ color: #1a1a1a; font-weight: 600; }}
+        h1 {{ font-size: 28px; margin-bottom: 8px; }}
+        h2 {{ font-size: 22px; margin-top: 32px; margin-bottom: 16px; border-bottom: 2px solid #D97757; padding-bottom: 8px; }}
+        h3 {{ font-size: 18px; margin-top: 24px; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 16px 0; }}
+        th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #e5e5e5; }}
+        th {{ background: #f8f7f5; font-weight: 600; font-size: 12px; text-transform: uppercase; color: #666; }}
+        .institutional-header {{ background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 32px; border-radius: 12px; margin-bottom: 32px; }}
+        .institutional-header .logo {{ font-size: 24px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; }}
+        .institutional-header .tagline {{ font-size: 13px; color: #aaa; font-weight: 400; }}
+        .institutional-header .report-meta {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 32px; flex-wrap: wrap; }}
+        .institutional-header .meta-item {{ font-size: 12px; }}
+        .institutional-header .meta-label {{ color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; margin-bottom: 4px; }}
+        .institutional-header .meta-value {{ color: white; font-weight: 500; }}
+        .footer {{ margin-top: 48px; padding-top: 24px; border-top: 2px solid #f0f0f0; text-align: center; color: #999; font-size: 11px; }}
+        .footer .logo {{ font-weight: 700; color: #1a1a1a; font-size: 14px; }}
+        .confidential {{ display: inline-block; padding: 4px 12px; background: #f8f7f5; border-radius: 4px; font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }}
+    </style>
+</head>
+<body>
+    <div class="institutional-header">
+        <div class="logo">OppGrid</div>
+        <div class="tagline">Intelligence-Driven Business Opportunity Platform</div>
+        <div class="report-meta">
+            <div class="meta-item">
+                <div class="meta-label">Report Type</div>
+                <div class="meta-value">{report_type_display}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Business Concept</div>
+                <div class="meta-value">{business_type}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Location</div>
+                <div class="meta-value">{city}, {state}</div>
+            </div>
+            <div class="meta-item">
+                <div class="meta-label">Generated</div>
+                <div class="meta-value">{generated_at}</div>
+            </div>
+        </div>
+        {data_quality_html}
+        {scores_html}
+    </div>
+"""
+        
+        footer = """
+    <div class="footer">
+        <div class="logo">OppGrid</div>
+        <div>Intelligence-Driven Business Opportunity Platform</div>
+        <div class="confidential">Confidential — For Internal Use Only</div>
+        <div style="margin-top: 8px; color: #bbb;">This report was generated using OppGrid's proprietary data pipeline, including real-time market signals, competitive intelligence, and demographic analysis.</div>
+    </div>
+</body>
+</html>
+"""
+        
+        return header + body_content + footer
 
     async def generate_layer_report(
         self,
