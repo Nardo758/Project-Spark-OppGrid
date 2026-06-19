@@ -47,6 +47,12 @@ interface ValidateResult {
   competition_level?: string
   key_competitors?: string[]
   market_heat_sources?: string[]
+  data_quality?: {
+    completeness?: number
+    sources?: string[]
+    confidence?: string
+    recommendation?: string
+  }
   error?: string
 }
 
@@ -541,7 +547,7 @@ export default function ConsultantStudio() {
                           <p className="text-sm text-gray-600 mt-1">
                             {validateResult.verdict_detail || 'AI has analyzed your idea across multiple market dimensions.'}
                           </p>
-                          <div className="flex items-center gap-4 mt-3">
+                          <div className="flex items-center gap-4 mt-3 flex-wrap">
                             <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(validateResult.validation_score ?? 50)}`}>
                               <Star className="w-3.5 h-3.5" />
                               Score: {validateResult.validation_score ?? 'N/A'}/100
@@ -550,6 +556,18 @@ export default function ConsultantStudio() {
                               {getRecommendationIcon(validateResult.recommendation)}
                               {getRecommendationLabel(validateResult.recommendation)}
                             </span>
+                            {validateResult.data_quality && (
+                              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+                                (validateResult.data_quality.completeness ?? 0) > 0.6
+                                  ? 'bg-green-50 text-green-700'
+                                  : (validateResult.data_quality.completeness ?? 0) > 0.3
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-gray-50 text-gray-600'
+                              }`}>
+                                <BarChart3 className="w-3 h-3" />
+                                Data Quality: {Math.round((validateResult.data_quality.completeness ?? 0) * 100)}%
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -613,6 +631,53 @@ export default function ConsultantStudio() {
                               {c}
                             </span>
                           ))}
+                        </div>
+                      </div>
+                    )}
+                    {validateResult.data_quality && (
+                      <div className="bg-white rounded-xl border border-gray-200 p-6">
+                        <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                          <BarChart3 className="w-4 h-4 text-[#D97757]" />
+                          Data Intelligence
+                        </h3>
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm text-gray-600">Data Completeness</span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    (validateResult.data_quality.completeness ?? 0) > 0.6
+                                      ? 'bg-green-500'
+                                      : (validateResult.data_quality.completeness ?? 0) > 0.3
+                                      ? 'bg-amber-500'
+                                      : 'bg-gray-400'
+                                  }`}
+                                  style={{ width: `${Math.round((validateResult.data_quality.completeness ?? 0) * 100)}%` }}
+                                />
+                              </div>
+                              <span className="text-sm font-medium text-gray-900">
+                                {Math.round((validateResult.data_quality.completeness ?? 0) * 100)}%
+                              </span>
+                            </div>
+                          </div>
+                          {validateResult.data_quality.sources && validateResult.data_quality.sources.length > 0 && (
+                            <div>
+                              <span className="text-sm text-gray-600">Sources:</span>
+                              <div className="flex flex-wrap gap-2 mt-1">
+                                {validateResult.data_quality.sources.map((source, i) => (
+                                  <span key={i} className="px-2 py-0.5 bg-stone-100 text-stone-700 rounded text-xs">
+                                    {source}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {validateResult.data_quality.recommendation && (
+                            <p className="text-xs text-gray-500 mt-2">
+                              {validateResult.data_quality.recommendation}
+                            </p>
+                          )}
                         </div>
                       </div>
                     )}

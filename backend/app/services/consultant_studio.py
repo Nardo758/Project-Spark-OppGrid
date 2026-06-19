@@ -867,7 +867,7 @@ Return as JSON:
 
     async def validate_idea(
         self,
-        user_id: int,
+        user_id: Optional[int],
         idea_description: str,
         business_context: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
@@ -1025,7 +1025,7 @@ Return as JSON:
 
     async def search_ideas(
         self,
-        user_id: int,
+        user_id: Optional[int],
         filters: Dict[str, Any],
         session_id: Optional[str] = None,
         is_paid_user: bool = False,
@@ -1153,7 +1153,7 @@ Return as JSON:
 
     async def identify_location(
         self,
-        user_id: int,
+        user_id: Optional[int],
         city: str,
         business_description: str,
         additional_params: Optional[Dict[str, Any]] = None,
@@ -1295,7 +1295,7 @@ Return as JSON:
 
     async def clone_success(
         self,
-        user_id: int,
+        user_id: Optional[int],
         business_name: str,
         business_address: str,
         target_city: Optional[str] = None,
@@ -1370,7 +1370,7 @@ Return as JSON:
 
     async def deep_clone_analysis(
         self,
-        user_id: int,
+        user_id: Optional[int],
         source_business_name: str,
         source_business_address: str,
         target_city: str,
@@ -3544,7 +3544,7 @@ Return as JSON:
 
     async def _log_activity(
         self,
-        user_id: int,
+        user_id: Optional[int],
         session_id: Optional[str],
         path: str,
         action: str,
@@ -3554,7 +3554,9 @@ Return as JSON:
         processing_time_ms: int,
         tokens_used: Optional[int] = None,
     ):
-        """Log consultant activity"""
+        """Log consultant activity. Skip logging for guest users (user_id is None)."""
+        if user_id is None:
+            return
         activity = ConsultantActivity(
             user_id=user_id,
             session_id=session_id,
