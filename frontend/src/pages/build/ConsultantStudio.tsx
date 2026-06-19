@@ -20,9 +20,12 @@ import {
   Building2,
   Users,
   DollarSign,
+  FileText,
+  Shield,
+  Briefcase,
+  Presentation,
   Lock,
-  LogIn,
-  UserPlus,
+  ShoppingCart,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -146,6 +149,132 @@ export default function ConsultantStudio() {
   const [cloning, setCloning] = useState(false)
   const [cloneResult, setCloneResult] = useState<CloneResult | null>(null)
 
+  // Report generation state
+  const [selectedReport, setSelectedReport] = useState('')
+  const [generatingReport, setGeneratingReport] = useState(false)
+  const [reportResult, setReportResult] = useState<any>(null)
+  const [reportError, setReportError] = useState<string | null>(null)
+
+  const REPORTS = [
+    { id: 'feasibility_study', name: 'Feasibility Study', description: 'Quick viability check with market validation', price_cents: 2500, icon: Shield },
+    { id: 'business_plan', name: 'Business Plan', description: 'Comprehensive strategy document', price_cents: 14900, icon: Briefcase },
+    { id: 'financial_model', name: 'Financial Model', description: '5-year projections and unit economics', price_cents: 12900, icon: DollarSign },
+    { id: 'market_analysis', name: 'Market Analysis', description: 'TAM/SAM/SOM with competitive landscape', price_cents: 9900, icon: BarChart3 },
+    { id: 'strategic_assessment', name: 'Strategic Assessment', description: 'SWOT analysis and strategic positioning', price_cents: 8900, icon: Target },
+    { id: 'pestle_analysis', name: 'PESTLE Analysis', description: 'Political, Economic, Social, Technological, Legal, Environmental factors', price_cents: 9900, icon: Shield },
+    { id: 'pitch_deck', name: 'Pitch Deck', description: 'Investor presentation outline and key slides', price_cents: 7900, icon: Presentation },
+    { id: 'location_analysis', name: 'Location Analysis', description: 'Top 5 locations ranked by 8 proprietary formulas', price_cents: 11900, icon: MapPin },
+  ]
+
+  const handleGenerateReport = async (reportType: string) => {
+    if (!isAuthenticated || !token) {
+      setReportError('Sign in to generate professional reports.')
+      return
+    }
+    setSelectedReport(reportType)
+    setGeneratingReport(true)
+    setReportError(null)
+    setReportResult(null)
+    try {
+      const res = await fetch('/api/v1/report-pricing/generate-free-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ report_type: reportType, idea_description: ideaInput || searchQuery || locBusiness || cloneName }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        let detail = 'Failed to generate report'
+        try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+        throw new Error(detail)
+      }
+      const data = await res.json()
+      setReportResult(data)
+    } catch (e: any) {
+      setReportError(e instanceof Error ? e.message : 'Failed to generate report')
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
+
+  const ReportPanel = ({ context }: { context?: string }) => (
+    <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
+      <div className="flex items-center gap-2 mb-4">
+        <FileText className="w-5 h-5 text-[#D97757]" />
+        <h3 className="font-semibold text-gray-900">Generate Professional Report</h3>
+      </div>
+      <p className="text-sm text-gray-600 mb-4">
+        Turn your analysis into a comprehensive, investor-ready document.
+      </p>
+      <div className="grid md:grid-cols-2 gap-3">
+        {REPORTS.map((r) => {
+          const Icon = r.icon
+          const isSelected = selectedReport === r.id
+          const isGenerating = generatingReport && isSelected
+          return (
+            <button
+              key={r.id}
+              onClick={() => handleGenerateReport(r.id)}
+              disabled={generatingReport}
+              className={`text-left p-4 rounded-lg border transition-all ${
+                isSelected && reportResult
+                  ? 'border-green-300 bg-green-50'
+                  : 'border-gray-200 hover:border-[#D97757] hover:bg-[#D97757]/5'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-4 h-4 text-gray-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-sm text-gray-900">{r.name}</span>
+                    <span className="text-sm font-semibold text-gray-900">${(r.price_cents / 100).toFixed(0)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{r.description}</p>
+                  {isGenerating && (
+                    <span className="inline-flex items-center gap-1 text-xs text-[#D97757] mt-2">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Generating...
+                    </span>
+                  )}
+                  {isSelected && reportResult && (
+                    <span className="inline-flex items-center gap-1 text-xs text-green-600 mt-2">
+                      <CheckCircle className="w-3 h-3" />
+                      Generated
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+      {reportError && (
+        <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+          {reportError}
+          {!isAuthenticated && (
+            <div className="mt-2 flex gap-2">
+              <button onClick={() => navigate('/login')} className="text-sm underline font-medium">Sign In</button>
+              <span className="text-gray-400">or</span>
+              <button onClick={() => navigate('/signup')} className="text-sm underline font-medium">Create Account</button>
+            </div>
+          )}
+        </div>
+      )}
+      {reportResult && (
+        <div className="mt-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle className="w-4 h-4 text-green-500" />
+            <span className="text-sm font-medium text-gray-900">Report Generated</span>
+          </div>
+          <pre className="text-xs text-gray-600 overflow-auto max-h-48 bg-white p-3 rounded border">
+            {JSON.stringify(reportResult, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+
   const headers = (): Record<string, string> => {
     const h: Record<string, string> = { 'Content-Type': 'application/json' }
     if (token) h['Authorization'] = `Bearer ${token}`
@@ -263,36 +392,6 @@ export default function ConsultantStudio() {
     { id: 'location', label: 'Identify Location', icon: MapPin, description: 'Geographic intelligence' },
     { id: 'clone', label: 'Clone Success', icon: Copy, description: 'Replicate winning models' },
   ]
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-stone-100 flex items-center justify-center">
-        <div className="bg-white rounded-2xl border border-gray-200 p-12 max-w-md w-full text-center shadow-sm">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Lock className="w-8 h-8 text-gray-500" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign in to use Consultant Studio</h2>
-          <p className="text-gray-600 mb-8">AI-powered business analysis requires an account</p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => navigate('/login')}
-              className="px-6 py-2.5 bg-[#D97757] text-white rounded-lg hover:bg-[#B85C3D] transition-colors flex items-center justify-center gap-2 font-medium"
-            >
-              <LogIn className="w-4 h-4" />
-              Sign In
-            </button>
-            <button
-              onClick={() => navigate('/signup')}
-              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 font-medium"
-            >
-              <UserPlus className="w-4 h-4" />
-              Create Account
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-stone-100">
@@ -463,6 +562,7 @@ export default function ConsultantStudio() {
                         </div>
                       </div>
                     )}
+                    <ReportPanel context={ideaInput} />
                   </>
                 )}
               </div>
@@ -602,6 +702,7 @@ export default function ConsultantStudio() {
                         </p>
                       </div>
                     )}
+                    <ReportPanel context={searchQuery} />
                   </>
                 )}
               </div>
@@ -733,6 +834,7 @@ export default function ConsultantStudio() {
                         </div>
                       </div>
                     )}
+                    <ReportPanel context={locBusiness} />
                   </>
                 )}
               </div>
@@ -893,6 +995,7 @@ export default function ConsultantStudio() {
                     )}
                   </>
                 )}
+                <ReportPanel context={cloneName} />
               </div>
             )}
           </div>
