@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type React } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Lightbulb,
@@ -118,7 +118,7 @@ const getRecommendationLabel = (rec?: string) => {
 }
 
 export default function ConsultantStudio() {
-  const { token } = useAuthStore()
+  const { token, isAuthenticated } = useAuthStore()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabId>('validate')
 
@@ -159,10 +159,16 @@ export default function ConsultantStudio() {
         headers: headers(),
         body: JSON.stringify({ idea_description: ideaInput }),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        let detail = 'Request failed'
+        try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+        throw new Error(detail)
+      }
       const data = await res.json()
       setValidateResult(data)
-    } catch (e) {
-      setValidateResult({ success: false, error: 'Network error. Please try again.' })
+    } catch (e: any) {
+      setValidateResult({ success: false, error: e instanceof Error ? e.message : 'An error occurred.' })
     } finally {
       setValidating(false)
     }
@@ -180,10 +186,16 @@ export default function ConsultantStudio() {
         headers: headers(),
         body: JSON.stringify(body),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        let detail = 'Request failed'
+        try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+        throw new Error(detail)
+      }
       const data = await res.json()
       setSearchResult(data)
-    } catch (e) {
-      setSearchResult({ success: false, error: 'Network error. Please try again.' })
+    } catch (e: any) {
+      setSearchResult({ success: false, error: e instanceof Error ? e.message : 'An error occurred.' })
     } finally {
       setSearching(false)
     }
@@ -199,10 +211,16 @@ export default function ConsultantStudio() {
         headers: headers(),
         body: JSON.stringify({ city: locCity, business_description: locBusiness }),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        let detail = 'Request failed'
+        try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+        throw new Error(detail)
+      }
       const data = await res.json()
       setLocResult(data)
-    } catch (e) {
-      setLocResult({ success: false, error: 'Network error. Please try again.' })
+    } catch (e: any) {
+      setLocResult({ success: false, error: e instanceof Error ? e.message : 'An error occurred.' })
     } finally {
       setLocating(false)
     }
@@ -221,10 +239,16 @@ export default function ConsultantStudio() {
         headers: headers(),
         body: JSON.stringify(body),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        let detail = 'Request failed'
+        try { detail = JSON.parse(text).detail || detail } catch { detail = text || detail }
+        throw new Error(detail)
+      }
       const data = await res.json()
       setCloneResult(data)
-    } catch (e) {
-      setCloneResult({ success: false, error: 'Network error. Please try again.' })
+    } catch (e: any) {
+      setCloneResult({ success: false, error: e instanceof Error ? e.message : 'An error occurred.' })
     } finally {
       setCloning(false)
     }
@@ -332,9 +356,9 @@ export default function ConsultantStudio() {
                             {validateResult.verdict_detail || 'AI has analyzed your idea across multiple market dimensions.'}
                           </p>
                           <div className="flex items-center gap-4 mt-3">
-                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(validateResult.validation_score || 50)}`}>
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(validateResult.validation_score ?? 50)}`}>
                               <Star className="w-3.5 h-3.5" />
-                              Score: {validateResult.validation_score || 'N/A'}/100
+                              Score: {validateResult.validation_score ?? 'N/A'}/100
                             </span>
                             <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium bg-blue-50 text-blue-700">
                               {getRecommendationIcon(validateResult.recommendation)}

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type React } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FileText,
@@ -182,7 +182,10 @@ export default function ReportStudio() {
                 <div className="space-y-6">
                   <div className="flex items-start gap-4">
                     <div className="w-12 h-12 bg-gradient-to-br from-[#D97757] to-[#B85C3D] rounded-xl flex items-center justify-center">
-                      {(REPORT_ICONS[selected.id] || FileText)({ className: 'w-6 h-6 text-white' })}
+                      {(() => {
+                        const Icon = REPORT_ICONS[selected.id] || FileText
+                        return <Icon className="w-6 h-6 text-white" />
+                      })()}
                     </div>
                     <div>
                       <h2 className="text-xl font-bold text-gray-900">{selected.name}</h2>
