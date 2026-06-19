@@ -83,16 +83,18 @@ export default function LeadsTab() {
   }, [searchQuery, selectedIndustry, sortBy, token])
 
   const handlePurchase = async (leadId: number) => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated || !token) return
 
     setPurchasing(leadId)
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (token) headers['Authorization'] = `Bearer ${token}`
+
       const response = await fetch('/api/v1/marketplace/leads/purchase', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
         body: JSON.stringify({ lead_id: leadId }),
       })
 
