@@ -344,20 +344,8 @@ export default function DatasetsTab() {
             <MiniDatasetCard
               key={dataset.id}
               dataset={dataset}
-              onPreview={() => {
-                if (!isAuthenticated) {
-                  navigate('/signin')
-                  return
-                }
-                setPreviewDataset(dataset)
-              }}
-              onBuy={() => {
-                if (!isAuthenticated) {
-                  navigate('/signin')
-                  return
-                }
-                navigate(`/datasets/${dataset.id}/checkout`)
-              }}
+              onPreview={() => setPreviewDataset(dataset)}
+              onBuy={() => navigate(`/datasets/${dataset.id}/checkout`)}
             />
           ))}
         </div>

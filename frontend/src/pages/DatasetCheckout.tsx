@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { 
   ShoppingCart, 
   Check, 
@@ -8,7 +8,9 @@ import {
   AlertCircle, 
   Clock,
   Lock,
-  Database
+  Database,
+  LogIn,
+  UserPlus
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
@@ -61,26 +63,17 @@ export default function DatasetCheckout() {
   const [downloadUrl, setDownloadUrl] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/signin')
-    }
-  }, [isAuthenticated, navigate])
-
-  // Fetch dataset details
+  // Fetch dataset details — works for guests too (no auth required)
   const { data: dataset, isLoading, error } = useQuery({
     queryKey: ['dataset', datasetId],
     queryFn: async (): Promise<Dataset> => {
-      const res = await fetch(`/api/v1/datasets/${datasetId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(`/api/v1/datasets/${datasetId}`, { headers })
       if (!res.ok) throw new Error('Failed to load dataset')
       return res.json()
     },
-    enabled: !!datasetId && !!token,
+    enabled: !!datasetId,
   })
 
   // Purchase mutation
@@ -298,31 +291,55 @@ export default function DatasetCheckout() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => purchaseMutation.mutate()}
-                  disabled={!agreeToTerms || purchaseMutation.isPending}
-                  className={`w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors mb-3 ${
-                    agreeToTerms && !purchaseMutation.isPending
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {purchaseMutation.isPending ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-blue-300 border-t-white rounded-full animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-5 h-5" />
-                      Complete Purchase
-                    </>
-                  )}
-                </button>
+                {isAuthenticated ? (
+                  <>
+                    <button
+                      onClick={() => purchaseMutation.mutate()}
+                      disabled={!agreeToTerms || purchaseMutation.isPending}
+                      className={`w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors mb-3 ${
+                        agreeToTerms && !purchaseMutation.isPending
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {purchaseMutation.isPending ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-blue-300 border-t-white rounded-full animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-5 h-5" />
+                          Complete Purchase
+                        </>
+                      )}
+                    </button>
 
-                {purchaseMutation.error && (
-                  <div className="bg-red-900/20 border border-red-800 rounded p-3 text-sm text-red-300">
-                    {purchaseMutation.error.message}
+                    {purchaseMutation.error && (
+                      <div className="bg-red-900/20 border border-red-800 rounded p-3 text-sm text-red-300">
+                        {purchaseMutation.error.message}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-3 mb-3">
+                    <p className="text-sm text-gray-400 text-center">
+                      Create a free account or sign in to complete your purchase.
+                    </p>
+                    <Link
+                      to={`/signup?redirect=/datasets/${datasetId}/checkout`}
+                      className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                    >
+                      <UserPlus className="w-5 h-5" />
+                      Create Free Account
+                    </Link>
+                    <Link
+                      to={`/signin?redirect=/datasets/${datasetId}/checkout`}
+                      className="w-full py-2 rounded-lg font-medium flex items-center justify-center gap-2 border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      Sign In
+                    </Link>
                   </div>
                 )}
 
