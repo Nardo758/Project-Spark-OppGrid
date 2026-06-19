@@ -35,13 +35,17 @@ class DatasetDeliveryService:
         file_path = os.path.join(self.TEMP_STORAGE_PATH, f"{dataset.id}_{datetime.utcnow().isoformat()}.csv")
         dt = dataset.dataset_type
         dt_val = dt.value if hasattr(dt, 'value') else dt
-        if dt_val == DatasetType.OPPORTUNITIES.value or dt == DatasetType.OPPORTUNITIES:
+        _OPPS = {DatasetType.OPPORTUNITIES.value, "opportunity_signals", "opportunities"}
+        _MKTS = {DatasetType.MARKETS.value, "market_intelligence", "markets"}
+        _TRNDS = {DatasetType.TRENDS.value, "economic_intelligence", "trends"}
+        _RAW = {DatasetType.RAW_DATA.value, "competition_intelligence", "raw_data"}
+        if dt_val in _OPPS or dt == DatasetType.OPPORTUNITIES:
             result_path, row_count = self._export_opportunities(dataset, file_path, db)
-        elif dt_val == DatasetType.MARKETS.value or dt == DatasetType.MARKETS:
+        elif dt_val in _MKTS or dt == DatasetType.MARKETS:
             result_path, row_count = self._export_markets(dataset, file_path, db)
-        elif dt_val == DatasetType.TRENDS.value or dt == DatasetType.TRENDS:
+        elif dt_val in _TRNDS or dt == DatasetType.TRENDS:
             result_path, row_count = self._export_trends(dataset, file_path, db)
-        elif dt_val == DatasetType.RAW_DATA.value or dt == DatasetType.RAW_DATA:
+        elif dt_val in _RAW or dt == DatasetType.RAW_DATA:
             result_path, row_count = self._export_raw_data(dataset, file_path, db)
         else:
             raise ValueError(f"Unknown dataset type: {dataset.dataset_type}")
@@ -242,13 +246,17 @@ class DatasetDeliveryService:
         file_path = os.path.join(self.TEMP_STORAGE_PATH, f"{dataset.id}_{datetime.utcnow().isoformat()}.csv")
         dt = dataset.dataset_type
         dt_val = dt.value if hasattr(dt, 'value') else dt
-        if dt_val == DatasetType.OPPORTUNITIES.value or dt == DatasetType.OPPORTUNITIES:
+        _OPPS = {DatasetType.OPPORTUNITIES.value, "opportunity_signals", "opportunities"}
+        _MKTS = {DatasetType.MARKETS.value, "market_intelligence", "markets"}
+        _TRNDS = {DatasetType.TRENDS.value, "economic_intelligence", "trends"}
+        _RAW = {DatasetType.RAW_DATA.value, "competition_intelligence", "raw_data"}
+        if dt_val in _OPPS or dt == DatasetType.OPPORTUNITIES:
             result_path, row_count = self._export_opportunities(dataset, file_path, db)
-        elif dt_val == DatasetType.MARKETS.value or dt == DatasetType.MARKETS:
+        elif dt_val in _MKTS or dt == DatasetType.MARKETS:
             result_path, row_count = self._export_markets(dataset, file_path, db)
-        elif dt_val == DatasetType.TRENDS.value or dt == DatasetType.TRENDS:
+        elif dt_val in _TRNDS or dt == DatasetType.TRENDS:
             result_path, row_count = self._export_trends(dataset, file_path, db)
-        elif dt_val == DatasetType.RAW_DATA.value or dt == DatasetType.RAW_DATA:
+        elif dt_val in _RAW or dt == DatasetType.RAW_DATA:
             result_path, row_count = self._export_raw_data(dataset, file_path, db)
         else:
             raise ValueError(f"Unknown dataset type: {dataset.dataset_type}")
