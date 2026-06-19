@@ -36,7 +36,9 @@ POSTGIS_SYSTEM_TABLES = {
 _POSTGIS_TABLE_NAMES = "|".join(re.escape(t) for t in POSTGIS_SYSTEM_TABLES)
 _POSTGIS_DDL_RE = re.compile(
     r'(?i)\b(ALTER\s+TABLE|CREATE\s+TABLE|DROP\s+TABLE)\s+(?:IF\s+(?:NOT\s+)?EXISTS\s+)?'
+    r'(?:\w+\.)?'  # optional schema prefix like public.
     r'(?:")?(' + _POSTGIS_TABLE_NAMES + r')(?:")?'
+    r'\b'
 )
 
 
@@ -52,8 +54,15 @@ def _postgis_ddl_filter(conn, cursor, statement, parameters, context, executeman
     Global cursor-level hook: replace DDL targeting PostGIS-owned system
     tables with a harmless no-op.
     """
-    if isinstance(statement, str) and _POSTGIS_DDL_RE.search(statement):
-        return "SELECT 1", ()
+    if isinstance(statement, str):
+        if _POSTGIS_DDL_RE.search(statement):
+            print(f"[PostGIS FILTER] BLOCKED: {statement[:100]}...")
+            return "SELECT 1", ()
+        # Fallback: check for any mention of PostGIS tables
+        for table_name in POSTGIS_SYSTEM_TABLES:
+            if f'"{table_name}"' in statement or table_name in statement.split():
+                print(f"[PostGIS FILTER] BLOCKED (fallback): {statement[:100]}...")
+                return "SELECT 1", ()
     return statement, parameters
 
 
