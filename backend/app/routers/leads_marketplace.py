@@ -1,12 +1,13 @@
 """
-Leads Marketplace Router
+Signals Marketplace Router
 
-Public endpoints for browsing, purchasing, and managing saved searches for leads.
+Public endpoints for browsing, purchasing, and managing saved searches for market signals.
+Signals are real opportunities derived from the Hub pipeline (scraped data, AI analysis).
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func, cast, String
+from sqlalchemy import desc, func, or_, and_
 from typing import Optional, List
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -14,32 +15,37 @@ from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.models.user import User
-from app.models.lead import Lead, LeadStatus, LeadSource
+from app.models.opportunity import Opportunity
+from app.models.lead import Lead, LeadStatus, LeadPurchase
 from app.models.saved_search import SavedSearch
-from app.models.lead_purchase import LeadPurchase
 from app.core.dependencies import get_current_user, get_current_user_optional
 
 router = APIRouter()
 
 
-class MarketplaceLeadResponse(BaseModel):
+class MarketplaceSignalResponse(BaseModel):
     id: int
+    title: str
     category: str
-    company: Optional[str]
+    subcategory: Optional[str]
     location: Optional[str]
     quality_score: int
     price: float
-    contact_count: int
-    last_active: Optional[datetime]
+    source_platform: Optional[str]
+    confidence_tier: Optional[str]
+    ai_summary: Optional[str]
+    ai_urgency_level: Optional[str]
+    market_size: Optional[str]
     verified: bool
     is_purchased: bool = False
+    created_at: Optional[datetime]
 
     class Config:
         from_attributes = True
 
 
-class MarketplaceLeadListResponse(BaseModel):
-    items: List[MarketplaceLeadResponse]
+class MarketplaceSignalListResponse(BaseModel):
+    items: List[MarketplaceSignalResponse]
     total: int
     categories: List[dict]
 
@@ -68,21 +74,21 @@ class SavedSearchResponse(BaseModel):
 
 
 class PurchaseRequest(BaseModel):
-    lead_id: int
+    signal_id: int
     payment_method_id: Optional[str] = None
 
 
 class PurchaseResponse(BaseModel):
     id: int
-    lead_id: int
+    signal_id: int
     price_paid: float
     status: str
     purchased_at: datetime
     expires_at: Optional[datetime]
-    lead: Optional[MarketplaceLeadResponse]
+    signal: Optional[MarketplaceSignalResponse]
 
 
-LEAD_PRICING = {
+SIGNAL_PRICING = {
     "high": 149.00,
     "medium": 99.00,
     "low": 49.00,
@@ -98,51 +104,59 @@ CATEGORIES = [
 ]
 
 
-def _get_quality_score(lead: Lead) -> int:
-    """Calculate quality score based on lead completeness and engagement."""
+def _get_signal_quality_score(opp: Opportunity) -> int:
+    """Calculate quality score from opportunity AI fields."""
     score = 50
-    if lead.name:
-        score += 10
-    if lead.company:
-        score += 15
-    if lead.phone:
-        score += 10
-    if lead.interest_category:
-        score += 5
-    if lead.status == LeadStatus.QUALIFIED:
-        score += 10
+    if opp.ai_opportunity_score:
+        score = opp.ai_opportunity_score
+    else:
+        # Fallback: derive from severity + confidence tier
+        if opp.severity:
+            score = opp.severity * 20
+        if opp.confidence_tier == "goldmine":
+            score = max(score, 85)
+        elif opp.confidence_tier == "validated":
+            score = max(score, 70)
+        elif opp.confidence_tier == "weak_signal":
+            score = max(score, 50)
     return min(score, 100)
 
 
-def _get_lead_price(quality_score: int) -> float:
+def _get_signal_price(quality_score: int) -> float:
     """Get price based on quality score."""
     if quality_score >= 80:
-        return LEAD_PRICING["high"]
+        return SIGNAL_PRICING["high"]
     elif quality_score >= 60:
-        return LEAD_PRICING["medium"]
+        return SIGNAL_PRICING["medium"]
     else:
-        return LEAD_PRICING["low"]
+        return SIGNAL_PRICING["low"]
 
 
-def _lead_to_marketplace_response(lead: Lead, is_purchased: bool = False) -> dict:
-    """Convert Lead to marketplace response."""
-    quality = _get_quality_score(lead)
+def _opportunity_to_signal_response(opp: Opportunity, is_purchased: bool = False) -> dict:
+    """Convert Opportunity to marketplace signal response."""
+    quality = _get_signal_quality_score(opp)
+    location = opp.city or opp.region or opp.country or opp.geographic_scope
     return {
-        "id": lead.id,
-        "category": lead.interest_category or "general",
-        "company": lead.company,
-        "location": None,
+        "id": opp.id,
+        "title": opp.title,
+        "category": opp.category or "general",
+        "subcategory": opp.subcategory,
+        "location": location,
         "quality_score": quality,
-        "price": _get_lead_price(quality),
-        "contact_count": 1,
-        "last_active": lead.last_contacted_at or lead.created_at,
-        "verified": lead.status in [LeadStatus.QUALIFIED, LeadStatus.CONVERTED],
+        "price": _get_signal_price(quality),
+        "source_platform": opp.source_platform,
+        "confidence_tier": opp.confidence_tier,
+        "ai_summary": opp.ai_summary,
+        "ai_urgency_level": opp.ai_urgency_level,
+        "market_size": opp.market_size or opp.ai_market_size_estimate,
+        "verified": opp.moderation_status == "approved",
         "is_purchased": is_purchased,
+        "created_at": opp.created_at,
     }
 
 
-@router.get("/browse", response_model=MarketplaceLeadListResponse)
-def browse_leads(
+@router.get("/browse", response_model=MarketplaceSignalListResponse)
+def browse_signals(
     limit: int = Query(20, ge=1, le=100),
     skip: int = Query(0, ge=0),
     category: Optional[str] = Query(None),
@@ -153,107 +167,81 @@ def browse_leads(
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """Browse available leads in the marketplace."""
-    from sqlalchemy import text as sql_text
-
-    # Build WHERE clauses manually to avoid ORM enum mapping issues
-    where_parts = ["status IN ('new', 'qualified')"]
-    params: dict = {}
+    """Browse available market signals derived from real opportunity data."""
+    # Build query against Opportunity (real data from Hub pipeline)
+    query = db.query(Opportunity).filter(
+        Opportunity.status.in_(["active"]),
+        Opportunity.moderation_status.in_(["approved", "pending_review"])
+    )
 
     if category:
-        where_parts.append("interest_category ILIKE :category")
-        params["category"] = f"%{category}%"
+        cat_lower = category.lower()
+        query = query.filter(
+            or_(
+                Opportunity.category.ilike(f"%{cat_lower}%"),
+                Opportunity.subcategory.ilike(f"%{cat_lower}%")
+            )
+        )
 
     if search:
-        where_parts.append("(company ILIKE :search OR interest_category ILIKE :search)")
-        params["search"] = f"%{search}%"
+        search_term = f"%{search.lower()}%"
+        query = query.filter(
+            or_(
+                Opportunity.title.ilike(search_term),
+                Opportunity.description.ilike(search_term),
+                Opportunity.category.ilike(search_term),
+                Opportunity.subcategory.ilike(search_term)
+            )
+        )
 
-    where_sql = " AND ".join(where_parts)
-
-    # Count
-    count_row = db.execute(sql_text(f"SELECT COUNT(*) FROM leads WHERE {where_sql}"), params).scalar()
-    total = count_row or 0
+    # Count total
+    total = query.count()
 
     # Sort
     if sort_by == "recent":
-        order_sql = "created_at DESC"
+        query = query.order_by(desc(Opportunity.created_at))
     elif sort_by == "price":
-        # price is derived from quality score; sort by name proxy (company) for stability
-        order_sql = "company ASC NULLS LAST"
+        # Price is derived from quality; sort by ai_opportunity_score as proxy
+        query = query.order_by(desc(Opportunity.ai_opportunity_score))
     else:
-        # quality: more fields filled = higher score — sort by completeness proxy
-        order_sql = "CASE WHEN company IS NOT NULL THEN 1 ELSE 0 END + CASE WHEN phone IS NOT NULL THEN 1 ELSE 0 END DESC, created_at DESC"
+        # quality: sort by ai_opportunity_score, then severity
+        query = query.order_by(
+            desc(Opportunity.ai_opportunity_score),
+            desc(Opportunity.severity),
+            desc(Opportunity.created_at)
+        )
 
-    params["limit"] = limit
-    params["skip"] = skip
-    rows = db.execute(
-        sql_text(f"""
-            SELECT id, name, company, phone, interest_category, status,
-                   last_contacted_at, created_at
-            FROM leads
-            WHERE {where_sql}
-            ORDER BY {order_sql}
-            LIMIT :limit OFFSET :skip
-        """),
-        params,
-    ).fetchall()
+    opportunities = query.offset(skip).limit(limit).all()
 
-    # Purchased ids
+    # Get purchased ids (for now, check LeadPurchase table as fallback)
     purchased_ids: set = set()
     if current_user:
-        p_rows = db.execute(
-            sql_text("SELECT lead_id FROM lead_purchases WHERE user_id = :uid AND status = 'completed'"),
-            {"uid": current_user.id},
-        ).fetchall()
-        purchased_ids = {r[0] for r in p_rows if r[0]}
-
-    def _score(row) -> int:
-        score = 50
-        if row[1]:   # name
-            score += 10
-        if row[2]:   # company
-            score += 15
-        if row[3]:   # phone
-            score += 10
-        if row[4]:   # interest_category
-            score += 5
-        if row[5] in ("qualified", "converted"):
-            score += 10
-        return min(score, 100)
-
-    def _price(score: int) -> float:
-        if score >= 80: return LEAD_PRICING["high"]
-        if score >= 60: return LEAD_PRICING["medium"]
-        return LEAD_PRICING["low"]
+        p_rows = db.query(LeadPurchase).filter(
+            LeadPurchase.user_id == current_user.id,
+            LeadPurchase.status == "completed"
+        ).all()
+        purchased_ids = {p.lead_id for p in p_rows}
 
     items = []
-    for row in rows:
-        lead_id, name, company, phone, cat, status, last_active, created_at = row
-        quality = _score(row)
-        price = _price(quality)
+    for opp in opportunities:
+        quality = _get_signal_quality_score(opp)
+        price = _get_signal_price(quality)
 
         if min_quality and quality < min_quality:
             continue
         if max_price and price > max_price:
             continue
 
-        items.append({
-            "id": lead_id,
-            "category": cat or "general",
-            "company": company,
-            "location": None,
-            "quality_score": quality,
-            "price": price,
-            "contact_count": 1,
-            "last_active": last_active or created_at,
-            "verified": status in ("qualified", "converted"),
-            "is_purchased": lead_id in purchased_ids,
-        })
+        items.append(_opportunity_to_signal_response(opp, opp.id in purchased_ids))
 
-    # Category counts via raw SQL
-    cat_rows = db.execute(
-        sql_text("SELECT interest_category, COUNT(*) FROM leads WHERE status IN ('new','qualified') GROUP BY interest_category")
-    ).fetchall()
+    # Category counts from real opportunities
+    cat_rows = db.query(
+        Opportunity.category,
+        func.count(Opportunity.id)
+    ).filter(
+        Opportunity.status == "active",
+        Opportunity.moderation_status.in_(["approved", "pending_review"])
+    ).group_by(Opportunity.category).all()
 
     categories = []
     for cat in CATEGORIES:
@@ -267,54 +255,55 @@ def browse_leads(
     }
 
 
-@router.get("/lead/{lead_id}", response_model=MarketplaceLeadResponse)
-def get_lead_details(
-    lead_id: int,
+@router.get("/signal/{signal_id}", response_model=MarketplaceSignalResponse)
+def get_signal_details(
+    signal_id: int,
     current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """Get details of a specific lead."""
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    
+    """Get details of a specific market signal."""
+    opp = db.query(Opportunity).filter(Opportunity.id == signal_id).first()
+    if not opp:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
     is_purchased = False
     if current_user:
         purchase = db.query(LeadPurchase).filter(
             LeadPurchase.user_id == current_user.id,
-            LeadPurchase.lead_id == lead_id,
+            LeadPurchase.lead_id == signal_id,
             LeadPurchase.status == "completed"
         ).first()
         is_purchased = purchase is not None
-    
-    return _lead_to_marketplace_response(lead, is_purchased)
+
+    return _opportunity_to_signal_response(opp, is_purchased)
 
 
 @router.post("/purchase", response_model=PurchaseResponse)
-def purchase_lead(
+def purchase_signal(
     payload: PurchaseRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Purchase access to a lead."""
-    lead = db.query(Lead).filter(Lead.id == payload.lead_id).first()
-    if not lead:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    
+    """Purchase access to a market signal (unlocks full AI analysis + source data)."""
+    opp = db.query(Opportunity).filter(Opportunity.id == payload.signal_id).first()
+    if not opp:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    # Check if already purchased
     existing = db.query(LeadPurchase).filter(
         LeadPurchase.user_id == current_user.id,
-        LeadPurchase.lead_id == payload.lead_id,
+        LeadPurchase.lead_id == payload.signal_id,
         LeadPurchase.status == "completed"
     ).first()
     if existing:
-        raise HTTPException(status_code=400, detail="You have already purchased this lead")
-    
-    quality = _get_quality_score(lead)
-    price = Decimal(str(_get_lead_price(quality)))
-    
+        raise HTTPException(status_code=400, detail="You have already purchased this signal")
+
+    quality = _get_signal_quality_score(opp)
+    price = Decimal(str(_get_signal_price(quality)))
+
     purchase = LeadPurchase(
         user_id=current_user.id,
-        lead_id=lead.id,
+        lead_id=opp.id,
         price_paid=price,
         status="completed",
         expires_at=datetime.utcnow() + timedelta(days=90),
@@ -322,15 +311,15 @@ def purchase_lead(
     db.add(purchase)
     db.commit()
     db.refresh(purchase)
-    
+
     return {
         "id": purchase.id,
-        "lead_id": purchase.lead_id,
+        "signal_id": purchase.lead_id,
         "price_paid": float(purchase.price_paid),
         "status": purchase.status,
         "purchased_at": purchase.purchased_at,
         "expires_at": purchase.expires_at,
-        "lead": _lead_to_marketplace_response(lead, True),
+        "signal": _opportunity_to_signal_response(opp, True),
     }
 
 
@@ -339,27 +328,28 @@ def get_my_purchases(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get list of purchased leads."""
+    """Get list of purchased signals."""
     purchases = db.query(LeadPurchase).filter(
         LeadPurchase.user_id == current_user.id
     ).order_by(desc(LeadPurchase.purchased_at)).all()
-    
+
     result = []
     for p in purchases:
-        lead_data = None
-        if p.lead:
-            lead_data = _lead_to_marketplace_response(p.lead, True)
-        
+        signal_data = None
+        opp = db.query(Opportunity).filter(Opportunity.id == p.lead_id).first()
+        if opp:
+            signal_data = _opportunity_to_signal_response(opp, True)
+
         result.append({
             "id": p.id,
-            "lead_id": p.lead_id,
+            "signal_id": p.lead_id,
             "price_paid": float(p.price_paid),
             "status": p.status,
             "purchased_at": p.purchased_at,
             "expires_at": p.expires_at,
-            "lead": lead_data,
+            "signal": signal_data,
         })
-    
+
     return result
 
 
@@ -372,7 +362,7 @@ def list_saved_searches(
     searches = db.query(SavedSearch).filter(
         SavedSearch.user_id == current_user.id
     ).order_by(desc(SavedSearch.created_at)).all()
-    
+
     return [
         {
             "id": s.id,
@@ -399,10 +389,10 @@ def create_saved_search(
     existing_count = db.query(SavedSearch).filter(
         SavedSearch.user_id == current_user.id
     ).count()
-    
+
     if existing_count >= 10:
         raise HTTPException(status_code=400, detail="Maximum 10 saved searches allowed")
-    
+
     search = SavedSearch(
         user_id=current_user.id,
         name=payload.name,
@@ -414,7 +404,7 @@ def create_saved_search(
     db.add(search)
     db.commit()
     db.refresh(search)
-    
+
     return {
         "id": search.id,
         "name": search.name,
@@ -439,10 +429,10 @@ def delete_saved_search(
         SavedSearch.id == search_id,
         SavedSearch.user_id == current_user.id
     ).first()
-    
+
     if not search:
         raise HTTPException(status_code=404, detail="Saved search not found")
-    
+
     db.delete(search)
     db.commit()
     return None
@@ -460,19 +450,19 @@ def update_saved_search(
         SavedSearch.id == search_id,
         SavedSearch.user_id == current_user.id
     ).first()
-    
+
     if not search:
         raise HTTPException(status_code=404, detail="Saved search not found")
-    
+
     search.name = payload.name
     search.query = payload.query
     search.filters = payload.filters
     search.alert_enabled = payload.alert_enabled
     search.alert_frequency = payload.alert_frequency
-    
+
     db.commit()
     db.refresh(search)
-    
+
     return {
         "id": search.id,
         "name": search.name,

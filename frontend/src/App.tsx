@@ -110,7 +110,7 @@ function App() {
         />
         <Route path="login" element={<Login />} />
         <Route path="signup" element={<Signup />} />
-        <Route path="leads" element={<Navigate to="/marketplace?tab=leads" replace />} />
+        <Route path="signals" element={<Navigate to="/marketplace?tab=signals" replace />} />
         <Route path="tools" element={<Tools />} />
         <Route path="learn" element={<Learn />} />
         <Route path="ai-roadmap" element={<AIRoadmap />} />
