@@ -56,7 +56,11 @@ class DatasetDeliveryService:
                 logger.warning(f"[DatasetDelivery] Cloud upload failed, keeping local file: {error}")
         return result_path, row_count
 
-    def _export_opportunities(self, dataset: Dataset, file_path: str, db: Session) -> Tuple[str, int]:
+    # -------------------------------------------------------------------------
+    # Query helpers (shared between export and preview)
+    # -------------------------------------------------------------------------
+
+    def _query_opportunities(self, dataset: Dataset, db: Session) -> List[Any]:
         filters = self._get_query_filters(dataset)
         max_results = filters.get("max_results", 100)
         try:
@@ -71,13 +75,199 @@ class DatasetDeliveryService:
             if filters.get("min_score"):
                 query = query.filter(HubOpportunityEnriched.ai_opportunity_score >= filters["min_score"])
             query = query.order_by(HubOpportunityEnriched.ai_opportunity_score.desc()).limit(max_results)
-            rows = query.all()
+            return query.all()
         except Exception as e:
             logger.warning(f"[DatasetDelivery] Could not query HubOpportunityEnriched: {e}")
-            rows = []
+            return []
+
+    def _query_markets(self, dataset: Dataset, db: Session) -> List[Any]:
+        filters = self._get_query_filters(dataset)
+        max_results = filters.get("max_results", 100)
+        try:
+            from app.models.data_hub import HubMarketByGeography
+            query = db.query(HubMarketByGeography)
+            if filters.get("city"):
+                query = query.filter(HubMarketByGeography.city.ilike(f"%{filters['city']}%"))
+            if filters.get("state"):
+                query = query.filter(HubMarketByGeography.state.ilike(f"%{filters['state']}%"))
+            query = query.limit(max_results)
+            return query.all()
+        except Exception as e:
+            logger.warning(f"[DatasetDelivery] Could not query HubMarketByGeography: {e}")
+            return []
+
+    def _query_trends(self, dataset: Dataset, db: Session) -> List[Any]:
+        filters = self._get_query_filters(dataset)
+        max_results = filters.get("max_results", 100)
+        try:
+            from app.models.detected_trend import DetectedTrend
+            query = db.query(DetectedTrend)
+            if filters.get("vertical"):
+                query = query.filter(DetectedTrend.category.ilike(f"%{filters['vertical']}%"))
+            query = query.order_by(DetectedTrend.trend_strength.desc()).limit(max_results)
+            return query.all()
+        except Exception as e:
+            logger.warning(f"[DatasetDelivery] Could not query DetectedTrend: {e}")
+            return []
+
+    def _query_raw_data(self, dataset: Dataset, db: Session) -> List[Any]:
+        filters = self._get_query_filters(dataset)
+        max_results = filters.get("max_results", 100)
+        try:
+            from app.models.data_source import ScrapeJob
+            query = db.query(ScrapeJob).order_by(ScrapeJob.completed_at.desc()).limit(max_results)
+            return query.all()
+        except Exception as e:
+            logger.warning(f"[DatasetDelivery] Could not query ScrapeJob: {e}")
+            return []
+
+    # -------------------------------------------------------------------------
+    # Preview methods (return dicts for the preview endpoint)
+    # -------------------------------------------------------------------------
+
+    def preview_opportunities(self, dataset: Dataset, db: Session) -> Tuple[List[str], List[Dict]]:
+        rows = self._query_opportunities(dataset, db)
         if not rows:
-            logger.warning(f"No real opportunity data for dataset {dataset.id} (filters: {filters})")
-            return self._export_mock_opportunities(dataset, file_path, filters)
+            return [], []
+        columns = [
+            'opportunity_id', 'title', 'category', 'city', 'state',
+            'ai_opportunity_score', 'market_tier', 'trend_momentum', 'competition_density',
+            'estimated_market_size_usd', 'estimated_startup_cost_usd', 'estimated_monthly_revenue_usd',
+            'roi_estimate_percent', 'break_even_months', 'confidence_score', 'data_freshness', 'data_source',
+        ]
+        result = []
+        for row in rows:
+            result.append({
+                'opportunity_id': getattr(row, 'opportunity_id', row.id),
+                'title': getattr(row, 'title', ''),
+                'category': getattr(row, 'category', ''),
+                'city': getattr(row, 'city', ''),
+                'state': getattr(row, 'state', ''),
+                'ai_opportunity_score': getattr(row, 'ai_opportunity_score', ''),
+                'market_tier': getattr(row, 'market_tier', ''),
+                'trend_momentum': getattr(row, 'trend_momentum', ''),
+                'competition_density': getattr(row, 'competition_density', ''),
+                'estimated_market_size_usd': getattr(row, 'estimated_market_size_usd', ''),
+                'estimated_startup_cost_usd': getattr(row, 'estimated_startup_cost_usd', ''),
+                'estimated_monthly_revenue_usd': getattr(row, 'estimated_monthly_revenue_usd', ''),
+                'roi_estimate_percent': getattr(row, 'roi_estimate_percent', ''),
+                'break_even_months': getattr(row, 'break_even_months', ''),
+                'confidence_score': getattr(row, 'confidence_score', ''),
+                'data_freshness': getattr(row, 'data_freshness', 'unknown') or 'unknown',
+                'data_source': 'HubOpportunityEnriched (real)',
+            })
+        return columns, result
+
+    def preview_markets(self, dataset: Dataset, db: Session) -> Tuple[List[str], List[Dict]]:
+        rows = self._query_markets(dataset, db)
+        if not rows:
+            return [], []
+        columns = ['market_id', 'city', 'state', 'country', 'total_opportunities', 'categories', 'avg_score', 'market_health', 'data_source']
+        result = []
+        for row in rows:
+            categories = getattr(row, 'categories', None)
+            result.append({
+                'market_id': getattr(row, 'market_id', row.id),
+                'city': getattr(row, 'city', ''),
+                'state': getattr(row, 'state', ''),
+                'country': getattr(row, 'country', 'USA'),
+                'total_opportunities': getattr(row, 'total_opportunities', ''),
+                'categories': json.dumps(categories) if categories else '[]',
+                'avg_score': 0,
+                'market_health': 'unknown',
+                'data_source': 'HubMarketByGeography (real)',
+            })
+        return columns, result
+
+    def preview_trends(self, dataset: Dataset, db: Session) -> Tuple[List[str], List[Dict]]:
+        rows = self._query_trends(dataset, db)
+        if not rows:
+            return [], []
+        columns = [
+            'id', 'trend_name', 'trend_strength', 'category', 'source_type',
+            'opportunities_count', 'growth_rate', 'confidence_score', 'keywords', 'detected_at', 'data_source',
+        ]
+        result = []
+        for row in rows:
+            keywords = getattr(row, 'keywords', None)
+            detected_at = getattr(row, 'detected_at', None)
+            result.append({
+                'id': row.id,
+                'trend_name': getattr(row, 'trend_name', ''),
+                'trend_strength': getattr(row, 'trend_strength', ''),
+                'category': getattr(row, 'category', ''),
+                'source_type': getattr(row, 'source_type', ''),
+                'opportunities_count': getattr(row, 'opportunities_count', ''),
+                'growth_rate': getattr(row, 'growth_rate', ''),
+                'confidence_score': getattr(row, 'confidence_score', ''),
+                'keywords': json.dumps(keywords) if keywords else '[]',
+                'detected_at': detected_at.isoformat() if detected_at else '',
+                'data_source': 'DetectedTrend (real)',
+            })
+        return columns, result
+
+    def preview_raw_data(self, dataset: Dataset, db: Session) -> Tuple[List[str], List[Dict]]:
+        rows = self._query_raw_data(dataset, db)
+        if not rows:
+            return [], []
+        columns = [
+            'job_id', 'source_name', 'job_type', 'status',
+            'items_processed', 'items_accepted', 'items_rejected',
+            'error_message', 'completed_at', 'created_at', 'data_source',
+        ]
+        result = []
+        for row in rows:
+            completed_at = getattr(row, 'completed_at', None)
+            created_at = getattr(row, 'created_at', None)
+            result.append({
+                'job_id': row.id,
+                'source_name': getattr(row, 'source_name', ''),
+                'job_type': getattr(row, 'job_type', ''),
+                'status': getattr(row, 'status', ''),
+                'items_processed': getattr(row, 'items_processed', ''),
+                'items_accepted': getattr(row, 'items_accepted', ''),
+                'items_rejected': getattr(row, 'items_rejected', ''),
+                'error_message': getattr(row, 'error_message', '') or '',
+                'completed_at': completed_at.isoformat() if completed_at else '',
+                'created_at': created_at.isoformat() if created_at else '',
+                'data_source': 'ScrapeJob (real)',
+            })
+        return columns, result
+
+    # -------------------------------------------------------------------------
+    # CSV Export methods (query real data, NO mock fallback)
+    # -------------------------------------------------------------------------
+
+    def generate_csv_file(self, dataset: Dataset, db: Session) -> Tuple[str, int]:
+        file_path = os.path.join(self.TEMP_STORAGE_PATH, f"{dataset.id}_{datetime.utcnow().isoformat()}.csv")
+        dt = dataset.dataset_type
+        dt_val = dt.value if hasattr(dt, 'value') else dt
+        if dt_val == DatasetType.OPPORTUNITIES.value or dt == DatasetType.OPPORTUNITIES:
+            result_path, row_count = self._export_opportunities(dataset, file_path, db)
+        elif dt_val == DatasetType.MARKETS.value or dt == DatasetType.MARKETS:
+            result_path, row_count = self._export_markets(dataset, file_path, db)
+        elif dt_val == DatasetType.TRENDS.value or dt == DatasetType.TRENDS:
+            result_path, row_count = self._export_trends(dataset, file_path, db)
+        elif dt_val == DatasetType.RAW_DATA.value or dt == DatasetType.RAW_DATA:
+            result_path, row_count = self._export_raw_data(dataset, file_path, db)
+        else:
+            raise ValueError(f"Unknown dataset type: {dataset.dataset_type}")
+        storage = get_cloud_storage()
+        if storage.is_configured() and storage.provider != "local":
+            object_key = f"datasets/{dataset.id}/{os.path.basename(result_path)}"
+            success, error = storage.upload_file(result_path, object_key, "text/csv")
+            if success:
+                logger.info(f"[DatasetDelivery] Uploaded dataset {dataset.id} to cloud storage: {object_key}")
+                return object_key, row_count
+            else:
+                logger.warning(f"[DatasetDelivery] Cloud upload failed, keeping local file: {error}")
+        return result_path, row_count
+
+    def _export_opportunities(self, dataset: Dataset, file_path: str, db: Session) -> Tuple[str, int]:
+        rows = self._query_opportunities(dataset, db)
+        if not rows:
+            logger.warning(f"No real opportunity data for dataset {dataset.id}")
+            return file_path, 0
         fieldnames = [
             'opportunity_id', 'title', 'category', 'city', 'state',
             'ai_opportunity_score', 'market_tier', 'trend_momentum', 'competition_density',
@@ -111,23 +301,10 @@ class DatasetDeliveryService:
         return file_path, len(rows)
 
     def _export_markets(self, dataset: Dataset, file_path: str, db: Session) -> Tuple[str, int]:
-        filters = self._get_query_filters(dataset)
-        max_results = filters.get("max_results", 100)
-        try:
-            from app.models.data_hub import HubMarketByGeography
-            query = db.query(HubMarketByGeography)
-            if filters.get("city"):
-                query = query.filter(HubMarketByGeography.city.ilike(f"%{filters['city']}%"))
-            if filters.get("state"):
-                query = query.filter(HubMarketByGeography.state.ilike(f"%{filters['state']}%"))
-            query = query.limit(max_results)
-            rows = query.all()
-        except Exception as e:
-            logger.warning(f"[DatasetDelivery] Could not query HubMarketByGeography: {e}")
-            rows = []
+        rows = self._query_markets(dataset, db)
         if not rows:
             logger.warning(f"No real market data for dataset {dataset.id}")
-            return self._export_mock_markets(dataset, file_path, filters)
+            return file_path, 0
         fieldnames = ['market_id', 'city', 'state', 'country', 'total_opportunities', 'categories', 'avg_score', 'market_health', 'data_source']
         with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -149,21 +326,10 @@ class DatasetDeliveryService:
         return file_path, len(rows)
 
     def _export_trends(self, dataset: Dataset, file_path: str, db: Session) -> Tuple[str, int]:
-        filters = self._get_query_filters(dataset)
-        max_results = filters.get("max_results", 100)
-        try:
-            from app.models.detected_trend import DetectedTrend
-            query = db.query(DetectedTrend)
-            if filters.get("vertical"):
-                query = query.filter(DetectedTrend.category.ilike(f"%{filters['vertical']}%"))
-            query = query.order_by(DetectedTrend.trend_strength.desc()).limit(max_results)
-            rows = query.all()
-        except Exception as e:
-            logger.warning(f"[DatasetDelivery] Could not query DetectedTrend: {e}")
-            rows = []
+        rows = self._query_trends(dataset, db)
         if not rows:
             logger.warning(f"No real trend data for dataset {dataset.id}")
-            return self._export_mock_trends(dataset, file_path, filters)
+            return file_path, 0
         fieldnames = [
             'id', 'trend_name', 'trend_strength', 'category', 'source_type',
             'opportunities_count', 'growth_rate', 'confidence_score', 'keywords', 'detected_at', 'data_source',
@@ -191,18 +357,10 @@ class DatasetDeliveryService:
         return file_path, len(rows)
 
     def _export_raw_data(self, dataset: Dataset, file_path: str, db: Session) -> Tuple[str, int]:
-        filters = self._get_query_filters(dataset)
-        max_results = filters.get("max_results", 100)
-        try:
-            from app.models.data_source import ScrapeJob
-            query = db.query(ScrapeJob).order_by(ScrapeJob.completed_at.desc()).limit(max_results)
-            rows = query.all()
-        except Exception as e:
-            logger.warning(f"[DatasetDelivery] Could not query ScrapeJob: {e}")
-            rows = []
+        rows = self._query_raw_data(dataset, db)
         if not rows:
             logger.warning(f"No real scrape data for dataset {dataset.id}")
-            return self._export_mock_raw_data(dataset, file_path, filters)
+            return file_path, 0
         fieldnames = [
             'job_id', 'source_name', 'job_type', 'status',
             'items_processed', 'items_accepted', 'items_rejected',
@@ -231,7 +389,7 @@ class DatasetDeliveryService:
         return file_path, len(rows)
 
     # -------------------------------------------------------------------------
-    # Mock fallbacks (clearly labeled as MOCK_DATA)
+    # Mock fallbacks (deprecated — kept for emergency use only, clearly labeled)
     # -------------------------------------------------------------------------
 
     def _export_mock_opportunities(self, dataset, file_path, filters):
