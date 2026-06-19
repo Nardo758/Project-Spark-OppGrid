@@ -31,7 +31,7 @@ from app.db.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.services.google_scraper_scheduler import GoogleScraperScheduler
-from app.services.hub_refresh_service import refresh_hub_for_all
+from app.services.hub_refresh_service import refresh_hub_for_opportunity
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/scheduler", tags=["Scheduler"])
@@ -74,7 +74,7 @@ def trigger_hub_refresh(
 ):
     """Trigger incremental Hub table refresh for all opportunities."""
     try:
-from app.models.opportunity import Opportunity
+        from app.models.opportunity import Opportunity
         opportunities = db.query(Opportunity).filter(
             Opportunity.moderation_status == "approved"
         ).all()
