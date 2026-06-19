@@ -16,7 +16,8 @@ from pydantic import BaseModel
 from app.db.database import get_db
 from app.models.user import User
 from app.models.opportunity import Opportunity
-from app.models.lead import Lead, LeadStatus, LeadPurchase
+from app.models.lead import Lead, LeadStatus
+from app.models.lead_purchase import LeadPurchase
 from app.models.saved_search import SavedSearch
 from app.core.dependencies import get_current_user, get_current_user_optional
 
