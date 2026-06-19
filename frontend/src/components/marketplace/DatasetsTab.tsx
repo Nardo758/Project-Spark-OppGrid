@@ -69,10 +69,16 @@ const CATEGORY_LABELS: Record<string, string> = {
   competition_intelligence: 'Competition Map',
 }
 
-const VERTICALS = [
-  'Coffee', 'Coworking', 'Gyms', 'Fitness', 'Restaurants', 'Retail', 'Tech',
-  'Healthcare', 'Finance', 'Education', 'Business', 'Location Analysis',
-  'Multi-Vertical', "4P's Framework", 'Economic Intelligence',
+const VERTICALS: { value: string; label: string }[] = [
+  { value: 'coffee', label: 'Coffee' },
+  { value: 'location_analysis', label: 'Location Analysis' },
+  { value: 'multi_vertical', label: 'Multi-Vertical' },
+  { value: '4ps_framework', label: "4P's Framework" },
+  { value: 'b2b_services', label: 'B2B Services' },
+  { value: 'consumer_services', label: 'Consumer Services' },
+  { value: 'entertainment', label: 'Entertainment' },
+  { value: 'technology', label: 'Technology' },
+  { value: 'technology_&_software', label: 'Technology & Software' },
 ]
 
 const CITIES = [
@@ -260,8 +266,8 @@ export default function DatasetsTab() {
         >
           <option value="">All Verticals</option>
           {VERTICALS.map((v) => (
-            <option key={v} value={v}>
-              {v}
+            <option key={v.value} value={v.value}>
+              {v.label}
             </option>
           ))}
         </select>
