@@ -219,76 +219,54 @@ def preview_dataset(
         try:
             dt = dataset.dataset_type
             if dt == DatasetType.OPPORTUNITIES.value or dt == DatasetType.OPPORTUNITIES:
-                rows = delivery._generate_mock_opportunities(dataset)
-                columns = ['id', 'title', 'vertical', 'city', 'success_probability',
-                           'confidence', 'risk_profile', 'market_health', 'trend_momentum', 'reasoning']
+                columns, rows = delivery.preview_opportunities(dataset, db)
+                if not columns:
+                    columns = ['opportunity_id', 'title', 'category', 'city', 'state',
+                               'ai_opportunity_score', 'market_tier', 'trend_momentum', 'competition_density',
+                               'estimated_market_size_usd', 'estimated_startup_cost_usd', 'estimated_monthly_revenue_usd',
+                               'roi_estimate_percent', 'break_even_months', 'confidence_score', 'data_freshness', 'data_source']
             elif dt == DatasetType.MARKETS.value or dt == DatasetType.MARKETS:
-                rows = delivery._generate_mock_markets(dataset)
-                columns = ['vertical', 'city', 'market_health_score', 'saturation_level',
-                           'demand_vs_supply', 'business_count', 'growth_rate', 'confidence']
+                columns, rows = delivery.preview_markets(dataset, db)
+                if not columns:
+                    columns = ['market_id', 'city', 'state', 'country', 'total_opportunities', 'categories', 'avg_score', 'market_health', 'data_source']
             elif dt == DatasetType.TRENDS.value or dt == DatasetType.TRENDS:
-                rows = delivery._generate_mock_trends(dataset)
-                columns = ['trend_name', 'vertical', 'acceleration_factor', 'direction',
-                           'signal_count', 'confidence', 'top_cities']
+                columns, rows = delivery.preview_trends(dataset, db)
+                if not columns:
+                    columns = ['id', 'trend_name', 'trend_strength', 'category', 'source_type',
+                               'opportunities_count', 'growth_rate', 'confidence_score', 'keywords', 'detected_at', 'data_source']
             elif dt == DatasetType.RAW_DATA.value or dt == DatasetType.RAW_DATA:
-                rows = delivery._generate_mock_raw_data(dataset)
-                columns = ['source_type', 'external_id', 'title', 'description', 'processed',
-                           'received_at', 'observed_at']
+                columns, rows = delivery.preview_raw_data(dataset, db)
+                if not columns:
+                    columns = ['job_id', 'source_name', 'job_type', 'status',
+                               'items_processed', 'items_accepted', 'items_rejected',
+                               'error_message', 'completed_at', 'created_at', 'data_source']
             elif dt == 'opportunity_signals':
-                columns = ['signal_type', 'city', 'vertical', 'signal_strength',
-                           'trend_direction', 'data_source', 'detected_at', 'confidence']
-                signal_types = ['demand_surge', 'supply_gap', 'price_pressure', 'foot_traffic_spike', 'permit_activity']
-                sources = ['google_trends', 'serpapi_maps', 'census_acs', 'bls_data', 'apify_scrape']
-                city = dataset.city or 'San Francisco, CA'
-                vertical = dataset.vertical or 'multi_vertical'
-                rows = [
-                    {'signal_type': signal_types[i % 5], 'city': city, 'vertical': vertical,
-                     'signal_strength': round(0.60 + i * 0.07, 2), 'trend_direction': 'up' if i % 3 != 2 else 'stable',
-                     'data_source': sources[i % 5], 'detected_at': f'2026-06-{14 + i:02d}',
-                     'confidence': round(0.78 + i * 0.04, 2)}
-                    for i in range(5)
-                ]
+                columns, rows = delivery.preview_opportunities(dataset, db)
+                if not columns:
+                    columns = ['signal_type', 'city', 'vertical', 'signal_strength',
+                               'trend_direction', 'data_source', 'detected_at', 'confidence']
             elif dt == 'market_intelligence':
-                columns = ['product_category', 'price_position', 'promotion_channel',
-                           'place_coverage', 'market_share_pct', 'competitive_score', 'city']
-                city = dataset.city or 'New York, NY'
-                categories = ['Specialty Coffee', 'Cold Brew', 'Pastries', 'Retail Merch', 'Subscriptions']
-                channels = ['social_media', 'local_seo', 'word_of_mouth', 'events', 'email']
-                rows = [
-                    {'product_category': categories[i], 'price_position': ['budget', 'mid', 'premium', 'premium', 'mid'][i],
-                     'promotion_channel': channels[i], 'place_coverage': ['high', 'medium', 'low', 'high', 'medium'][i],
-                     'market_share_pct': round(8.2 + i * 3.1, 1), 'competitive_score': round(6.5 + i * 0.6, 1),
-                     'city': city}
-                    for i in range(5)
-                ]
+                columns, rows = delivery.preview_markets(dataset, db)
+                if not columns:
+                    columns = ['product_category', 'price_position', 'promotion_channel',
+                               'place_coverage', 'market_share_pct', 'competitive_score', 'city']
             elif dt == 'economic_intelligence':
-                columns = ['industry', 'gdp_contribution_pct', 'employment_growth_pct',
-                           'revenue_trend', 'investment_flow_m', 'market_size_b', 'year']
-                vertical = (dataset.vertical or 'technology').replace('_', ' ').title()
-                sub_sectors = [f'{vertical} - Sector {chr(65+i)}' for i in range(5)]
-                rows = [
-                    {'industry': sub_sectors[i], 'gdp_contribution_pct': round(1.8 + i * 0.7, 1),
-                     'employment_growth_pct': round(3.2 + i * 1.4, 1),
-                     'revenue_trend': ['growing', 'growing', 'stable', 'growing', 'declining'][i],
-                     'investment_flow_m': round(85.0 + i * 42.5, 1),
-                     'market_size_b': round(4.2 + i * 2.1, 1), 'year': 2025}
-                    for i in range(5)
-                ]
+                columns, rows = delivery.preview_trends(dataset, db)
+                if not columns:
+                    columns = ['industry', 'gdp_contribution_pct', 'employment_growth_pct',
+                               'revenue_trend', 'investment_flow_m', 'market_size_b', 'year']
             elif dt == 'competition_intelligence':
-                columns = ['business_name', 'address', 'rating', 'review_count',
-                           'category', 'price_level', 'is_open']
-                city = dataset.city or 'Dallas, TX'
-                names = ['The Local Spot', 'Metro Market', 'City Corner', 'Urban Hub', 'Main St Collective']
-                rows = [
-                    {'business_name': names[i], 'address': f'{100 + i * 22} Main St, {city}',
-                     'rating': round(3.8 + i * 0.2, 1), 'review_count': 45 + i * 38,
-                     'category': 'Retail / Food & Bev', 'price_level': ['$', '$$', '$$', '$$$', '$$'][i],
-                     'is_open': True}
-                    for i in range(5)
-                ]
+                columns, rows = delivery.preview_raw_data(dataset, db)
+                if not columns:
+                    columns = ['business_name', 'address', 'rating', 'review_count',
+                               'category', 'price_level', 'is_open']
+            else:
+                columns = []
+                rows = []
         except Exception as gen_err:
             logger.warning(f"Preview row generation failed for dataset {dataset_id}: {gen_err}")
             rows = []
+            columns = []
 
         return {
             "metadata": {
@@ -296,6 +274,7 @@ def preview_dataset(
                 "data_freshness": dataset.data_freshness or (dataset.generated_at.isoformat() if dataset.generated_at else ""),
                 "vertical": dataset.vertical,
                 "city": dataset.city,
+                "has_real_data": len(rows) > 0,
             },
             "rows": rows[:5],
             "columns": columns,
@@ -538,6 +517,12 @@ def download_dataset(
         # Generate CSV if not already stored
         delivery_service = get_delivery_service()
         file_path, row_count = delivery_service.generate_csv_file(dataset, db)
+        
+        if row_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Dataset has no matching data. The data may be stale or the filters may be too restrictive. Please contact support.",
+            )
         
         # Update access time
         purchase.accessed_at = datetime.utcnow()
