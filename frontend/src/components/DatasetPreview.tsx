@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { X, Download, TrendingUp, Database, AlertCircle } from 'lucide-react'
+import { X, Download, TrendingUp, Database, AlertCircle, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
 interface PreviewData {
@@ -9,6 +9,14 @@ interface PreviewData {
     data_freshness: string
     vertical?: string
     city?: string
+    data_quality?: {
+      actual_row_count: number
+      advertised_row_count: number
+      min_rows_for_tier: number
+      is_preview_only: boolean
+      is_insufficient: boolean
+      quality_label: 'ready' | 'preview' | 'insufficient'
+    }
   }
   rows: Record<string, any>[]
   columns: string[]
