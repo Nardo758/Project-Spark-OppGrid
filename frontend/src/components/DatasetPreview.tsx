@@ -93,6 +93,25 @@ export default function DatasetPreview({
           </button>
         </div>
 
+        {/* Data Quality Banner — shown as soon as preview loads */}
+        {preview?.metadata?.data_quality && (
+          <div className={`px-6 py-3 flex items-center gap-3 text-sm font-medium border-b ${
+            preview.metadata.data_quality.is_insufficient
+              ? 'bg-red-900/40 border-red-800 text-red-200'
+              : preview.metadata.data_quality.is_preview_only
+              ? 'bg-yellow-900/40 border-yellow-800 text-yellow-200'
+              : 'bg-green-900/40 border-green-800 text-green-200'
+          }`}>
+            {preview.metadata.data_quality.is_insufficient ? (
+              <><AlertCircle className="w-4 h-4 shrink-0" /> No real data rows found — this dataset may be empty ({preview.metadata.data_quality.actual_row_count} of {preview.metadata.data_quality.advertised_row_count} advertised rows verified)</>
+            ) : preview.metadata.data_quality.is_preview_only ? (
+              <><AlertCircle className="w-4 h-4 shrink-0" /> Limited data — {preview.metadata.data_quality.actual_row_count} of {preview.metadata.data_quality.min_rows_for_tier} rows required for this tier</>
+            ) : (
+              <><CheckCircle className="w-4 h-4 shrink-0" /> {preview.metadata.data_quality.actual_row_count} rows verified</>
+            )}
+          </div>
+        )}
+
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Metadata Section */}
