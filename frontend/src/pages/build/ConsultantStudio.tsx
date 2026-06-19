@@ -1,4 +1,4 @@
-import { useState, type React } from 'react'
+import { useState, useEffect, type React } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Lightbulb,
@@ -155,6 +155,14 @@ export default function ConsultantStudio() {
   const [reportResult, setReportResult] = useState<any>(null)
   const [reportError, setReportError] = useState<string | null>(null)
 
+  // Clear report state when switching tabs to prevent cross-tab state leaks
+  useEffect(() => {
+    setSelectedReport('')
+    setGeneratingReport(false)
+    setReportResult(null)
+    setReportError(null)
+  }, [activeTab])
+
   const REPORTS = [
     { id: 'feasibility_study', name: 'Feasibility Study', description: 'Quick viability check with market validation', price_cents: 2500, icon: Shield },
     { id: 'business_plan', name: 'Business Plan', description: 'Comprehensive strategy document', price_cents: 14900, icon: Briefcase },
@@ -166,7 +174,7 @@ export default function ConsultantStudio() {
     { id: 'location_analysis', name: 'Location Analysis', description: 'Top 5 locations ranked by 8 proprietary formulas', price_cents: 11900, icon: MapPin },
   ]
 
-  const handleGenerateReport = async (reportType: string) => {
+  const handleGenerateReport = async (reportType: string, ideaDescription: string) => {
     if (!isAuthenticated || !token) {
       setReportError('Sign in to generate professional reports.')
       return
@@ -179,7 +187,7 @@ export default function ConsultantStudio() {
       const res = await fetch('/api/v1/report-pricing/generate-free-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ report_type: reportType, idea_description: ideaInput || searchQuery || locBusiness || cloneName }),
+        body: JSON.stringify({ report_type: reportType, idea_description: ideaDescription }),
       })
       if (!res.ok) {
         const text = await res.text()
@@ -196,7 +204,7 @@ export default function ConsultantStudio() {
     }
   }
 
-  const ReportPanel = ({ context }: { context?: string }) => (
+  const ReportPanel = ({ ideaDescription }: { ideaDescription?: string }) => (
     <div className="bg-white rounded-xl border border-gray-200 p-6 mt-6">
       <div className="flex items-center gap-2 mb-4">
         <FileText className="w-5 h-5 text-[#D97757]" />
@@ -213,7 +221,7 @@ export default function ConsultantStudio() {
           return (
             <button
               key={r.id}
-              onClick={() => handleGenerateReport(r.id)}
+              onClick={() => handleGenerateReport(r.id, ideaDescription || '')}
               disabled={generatingReport}
               className={`text-left p-4 rounded-lg border transition-all ${
                 isSelected && reportResult
@@ -562,7 +570,7 @@ export default function ConsultantStudio() {
                         </div>
                       </div>
                     )}
-                    <ReportPanel context={ideaInput} />
+                    <ReportPanel ideaDescription={ideaInput} />
                   </>
                 )}
               </div>
@@ -702,7 +710,7 @@ export default function ConsultantStudio() {
                         </p>
                       </div>
                     )}
-                    <ReportPanel context={searchQuery} />
+                    <ReportPanel ideaDescription={searchQuery} />
                   </>
                 )}
               </div>
@@ -834,7 +842,7 @@ export default function ConsultantStudio() {
                         </div>
                       </div>
                     )}
-                    <ReportPanel context={locBusiness} />
+                    <ReportPanel ideaDescription={locBusiness} />
                   </>
                 )}
               </div>
@@ -993,9 +1001,9 @@ export default function ConsultantStudio() {
                         </div>
                       </div>
                     )}
+                    <ReportPanel ideaDescription={cloneName} />
                   </>
                 )}
-                <ReportPanel context={cloneName} />
               </div>
             )}
           </div>
