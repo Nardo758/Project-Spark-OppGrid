@@ -32,10 +32,12 @@ export default function DatasetPreview({
   const { data: preview, isLoading, error } = useQuery({
     queryKey: ['dataset-preview', datasetId],
     queryFn: async (): Promise<PreviewData> => {
+      const headers: Record<string, string> = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
       const res = await fetch(`/api/v1/datasets/${datasetId}/preview`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers,
       })
       if (!res.ok) throw new Error('Failed to load preview')
       return res.json()

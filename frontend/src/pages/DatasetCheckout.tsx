@@ -62,6 +62,8 @@ export default function DatasetCheckout() {
   const [purchaseComplete, setPurchaseComplete] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
 
   // Fetch dataset details — works for guests too (no auth required)
   const { data: dataset, isLoading, error } = useQuery({
@@ -121,6 +123,37 @@ export default function DatasetCheckout() {
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  const handleDownload = async () => {
+    if (!downloadUrl) return
+    setDownloading(true)
+    setDownloadError('')
+    try {
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(downloadUrl, { headers })
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Download failed')
+        throw new Error(errText)
+      }
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      // Extract filename from Content-Disposition or use default
+      const cd = res.headers.get('content-disposition')
+      const match = cd?.match(/filename="?([^";]+)"?/)
+      a.download = match ? match[1] : 'dataset.csv'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setDownloadError(e.message || 'Download failed')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   if (isLoading) {
@@ -372,13 +405,28 @@ export default function DatasetCheckout() {
             {purchaseComplete && (
               <div className="bg-green-900/20 border border-green-800 rounded-lg p-6">
                 <h3 className="font-semibold text-green-300 mb-4">What's Next?</h3>
-                <a
-                  href={downloadUrl}
-                  className="block w-full mb-3 py-3 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors text-center flex items-center justify-center gap-2"
+                <button
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="block w-full mb-3 py-3 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:cursor-not-allowed transition-colors text-center flex items-center justify-center gap-2"
                 >
-                  <Download className="w-5 h-5" />
-                  Download Dataset
-                </a>
+                  {downloading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-green-300 border-t-white rounded-full animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      Download Dataset
+                    </>
+                  )}
+                </button>
+                {downloadError && (
+                  <div className="bg-red-900/20 border border-red-800 rounded p-3 text-sm text-red-300 mb-3">
+                    {downloadError}
+                  </div>
+                )}
                 <button
                   onClick={() => navigate('/marketplace')}
                   className="block w-full py-2 text-green-300 hover:text-green-200 text-sm font-medium"
