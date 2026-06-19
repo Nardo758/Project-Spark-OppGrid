@@ -8,6 +8,7 @@ with optional AI-powered insights for personalized match reasons.
 import json
 import logging
 from typing import List, Optional, Dict, Any
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.models.expert_collaboration import ExpertProfile, ExpertCategory
 from app.models.opportunity import Opportunity
@@ -284,7 +285,11 @@ def get_recommended_experts(
     
     experts = db.query(ExpertProfile).filter(
         ExpertProfile.is_verified == True,
-        ExpertProfile.is_accepting_clients == True
+        ExpertProfile.is_accepting_clients == True,
+        or_(
+            ExpertProfile.external_source != "sample",
+            ExpertProfile.external_source.is_(None)
+        )
     ).all()
     
     if not experts:

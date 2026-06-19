@@ -300,9 +300,11 @@ export default function ExpertMarketplace() {
                     />
                   ) : (
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold ${
-                      expert.external_source 
-                        ? 'bg-gradient-to-br from-green-500 to-teal-600' 
-                        : 'bg-gradient-to-br from-purple-500 to-indigo-600'
+                      expert.external_source === 'sample'
+                        ? 'bg-gradient-to-br from-amber-400 to-orange-500'
+                        : expert.external_source
+                          ? 'bg-gradient-to-br from-green-500 to-teal-600'
+                          : 'bg-gradient-to-br from-purple-500 to-indigo-600'
                     }`}>
                       {(expert.external_name || expert.user_name || 'E').charAt(0)}
                     </div>
@@ -329,13 +331,19 @@ export default function ExpertMarketplace() {
                       <p className="text-purple-600 font-medium text-sm line-clamp-1">{expert.title}</p>
                     )}
                     <div className="flex items-center gap-2 mt-1">
-                      {expert.is_verified && (
+                      {expert.external_source === 'sample' && (
+                        <span className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Sample
+                        </span>
+                      )}
+                      {expert.is_verified && expert.external_source !== 'sample' && (
                         <span className="flex items-center gap-1 text-xs text-green-600">
                           <CheckCircle className="w-3.5 h-3.5" />
                           Verified
                         </span>
                       )}
-                      {expert.external_source && !expert.is_verified && (
+                      {expert.external_source && !expert.is_verified && expert.external_source !== 'sample' && (
                         <span className="flex items-center gap-1 text-xs text-blue-600">
                           <ExternalLink className="w-3.5 h-3.5" />
                           External

@@ -87,6 +87,7 @@ from app.routers import (
     market,
     opportunity_collections,
     opportunity_lifecycle,
+    scheduler,
     mapping_reports,
 )
 
@@ -200,6 +201,7 @@ app.include_router(enhanced_workspaces.router, prefix=f"{settings.API_V1_PREFIX}
 app.include_router(agent.router, tags=["Agent API"])
 app.include_router(agent_api.router, tags=["Agent Opportunities API"])
 app.include_router(datasets_api.router, tags=["Dataset Marketplace"])
+app.include_router(scheduler.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Scheduler"])
 app.include_router(market.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Market Intelligence"])
 
 # Mount the Public API v1 sub-application.

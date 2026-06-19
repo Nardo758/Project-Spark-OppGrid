@@ -257,6 +257,10 @@ async def list_experts(
         or_(
             ExpertProfile.is_verified == True,
             ExpertProfile.external_source.isnot(None)
+        ),
+        or_(
+            ExpertProfile.external_source != "sample",
+            ExpertProfile.external_source.is_(None)
         )
     )
     
