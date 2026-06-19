@@ -117,30 +117,39 @@ def list_datasets(
     vertical: Optional[str] = Query(None),
     city: Optional[str] = Query(None),
     dataset_type: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     x_agent_key: Optional[str] = Header(None),
 ) -> List[dict]:
     """
     List available datasets for purchase.
-    
+
     Query Parameters:
-    - vertical: Filter by vertical (coffee, restaurants, etc.)
-    - city: Filter by city
-    - dataset_type: Filter by type (opportunities, markets, trends, raw_data)
+    - vertical: Filter by vertical (partial, case-insensitive)
+    - city: Filter by city (partial, case-insensitive)
+    - dataset_type: Filter by type (exact match)
+    - search: Full-text search across name, description, city, vertical
     """
+    from sqlalchemy import or_
     try:
-        # Build query
         query = db.query(Dataset).filter(Dataset.is_active == True)
-        
+
         if vertical:
-            query = query.filter(Dataset.vertical == vertical)
+            query = query.filter(Dataset.vertical.ilike(f"%{vertical}%"))
         if city:
-            query = query.filter(Dataset.city == city)
+            query = query.filter(Dataset.city.ilike(f"%{city}%"))
         if dataset_type:
             query = query.filter(Dataset.dataset_type == dataset_type)
-        
+        if search:
+            s = f"%{search}%"
+            query = query.filter(or_(
+                Dataset.name.ilike(s),
+                Dataset.description.ilike(s),
+                Dataset.city.ilike(s),
+                Dataset.vertical.ilike(s),
+            ))
+
         datasets = query.order_by(Dataset.created_at.desc()).all()
-        
         return [d.to_dict() for d in datasets]
     except Exception as e:
         logger.error(f"Error listing datasets: {e}")
@@ -152,11 +161,37 @@ def list_datasets(
 
 @router.get("/my-purchases", response_model=PurchaseListResponse)
 def list_purchases_early(
-    authorization: Optional[str] = Header(None),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> PurchaseListResponse:
     """Get list of user's purchased datasets. (Declared early to avoid /{dataset_id} wildcard.)"""
-    return list_purchases(authorization=authorization, db=db)
+    try:
+        purchases = db.query(DatasetPurchase).filter(
+            DatasetPurchase.user_id == current_user.id,
+        ).order_by(DatasetPurchase.created_at.desc()).all()
+
+        purchase_list = []
+        for purchase in purchases:
+            dataset = db.query(Dataset).filter(Dataset.id == purchase.dataset_id).first()
+            if not dataset:
+                continue
+            purchase_list.append(PurchaseHistory(
+                purchase_id=purchase.id,
+                dataset_id=purchase.dataset_id,
+                dataset_name=dataset.name,
+                price_cents=purchase.price_cents,
+                purchased_at=purchase.created_at.isoformat() if purchase.created_at else None,
+                expires_at=purchase.expires_at.isoformat() if purchase.expires_at else None,
+                download_url=purchase.download_url or f"/api/v1/datasets/download/{purchase.id}",
+                status=purchase.status,
+            ))
+
+        return PurchaseListResponse(purchases=purchase_list, total_count=len(purchase_list))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving purchases: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{dataset_id}/preview", response_model=dict)
@@ -182,22 +217,75 @@ def preview_dataset(
         columns: List[str] = []
 
         try:
-            if dataset.dataset_type == DatasetType.OPPORTUNITIES.value or dataset.dataset_type == DatasetType.OPPORTUNITIES:
+            dt = dataset.dataset_type
+            if dt == DatasetType.OPPORTUNITIES.value or dt == DatasetType.OPPORTUNITIES:
                 rows = delivery._generate_mock_opportunities(dataset)
                 columns = ['id', 'title', 'vertical', 'city', 'success_probability',
                            'confidence', 'risk_profile', 'market_health', 'trend_momentum', 'reasoning']
-            elif dataset.dataset_type == DatasetType.MARKETS.value or dataset.dataset_type == DatasetType.MARKETS:
+            elif dt == DatasetType.MARKETS.value or dt == DatasetType.MARKETS:
                 rows = delivery._generate_mock_markets(dataset)
                 columns = ['vertical', 'city', 'market_health_score', 'saturation_level',
                            'demand_vs_supply', 'business_count', 'growth_rate', 'confidence']
-            elif dataset.dataset_type == DatasetType.TRENDS.value or dataset.dataset_type == DatasetType.TRENDS:
+            elif dt == DatasetType.TRENDS.value or dt == DatasetType.TRENDS:
                 rows = delivery._generate_mock_trends(dataset)
                 columns = ['trend_name', 'vertical', 'acceleration_factor', 'direction',
                            'signal_count', 'confidence', 'top_cities']
-            elif dataset.dataset_type == DatasetType.RAW_DATA.value or dataset.dataset_type == DatasetType.RAW_DATA:
+            elif dt == DatasetType.RAW_DATA.value or dt == DatasetType.RAW_DATA:
                 rows = delivery._generate_mock_raw_data(dataset)
                 columns = ['source_type', 'external_id', 'title', 'description', 'processed',
                            'received_at', 'observed_at']
+            elif dt == 'opportunity_signals':
+                columns = ['signal_type', 'city', 'vertical', 'signal_strength',
+                           'trend_direction', 'data_source', 'detected_at', 'confidence']
+                signal_types = ['demand_surge', 'supply_gap', 'price_pressure', 'foot_traffic_spike', 'permit_activity']
+                sources = ['google_trends', 'serpapi_maps', 'census_acs', 'bls_data', 'apify_scrape']
+                city = dataset.city or 'San Francisco, CA'
+                vertical = dataset.vertical or 'multi_vertical'
+                rows = [
+                    {'signal_type': signal_types[i % 5], 'city': city, 'vertical': vertical,
+                     'signal_strength': round(0.60 + i * 0.07, 2), 'trend_direction': 'up' if i % 3 != 2 else 'stable',
+                     'data_source': sources[i % 5], 'detected_at': f'2026-06-{14 + i:02d}',
+                     'confidence': round(0.78 + i * 0.04, 2)}
+                    for i in range(5)
+                ]
+            elif dt == 'market_intelligence':
+                columns = ['product_category', 'price_position', 'promotion_channel',
+                           'place_coverage', 'market_share_pct', 'competitive_score', 'city']
+                city = dataset.city or 'New York, NY'
+                categories = ['Specialty Coffee', 'Cold Brew', 'Pastries', 'Retail Merch', 'Subscriptions']
+                channels = ['social_media', 'local_seo', 'word_of_mouth', 'events', 'email']
+                rows = [
+                    {'product_category': categories[i], 'price_position': ['budget', 'mid', 'premium', 'premium', 'mid'][i],
+                     'promotion_channel': channels[i], 'place_coverage': ['high', 'medium', 'low', 'high', 'medium'][i],
+                     'market_share_pct': round(8.2 + i * 3.1, 1), 'competitive_score': round(6.5 + i * 0.6, 1),
+                     'city': city}
+                    for i in range(5)
+                ]
+            elif dt == 'economic_intelligence':
+                columns = ['industry', 'gdp_contribution_pct', 'employment_growth_pct',
+                           'revenue_trend', 'investment_flow_m', 'market_size_b', 'year']
+                vertical = (dataset.vertical or 'technology').replace('_', ' ').title()
+                sub_sectors = [f'{vertical} - Sector {chr(65+i)}' for i in range(5)]
+                rows = [
+                    {'industry': sub_sectors[i], 'gdp_contribution_pct': round(1.8 + i * 0.7, 1),
+                     'employment_growth_pct': round(3.2 + i * 1.4, 1),
+                     'revenue_trend': ['growing', 'growing', 'stable', 'growing', 'declining'][i],
+                     'investment_flow_m': round(85.0 + i * 42.5, 1),
+                     'market_size_b': round(4.2 + i * 2.1, 1), 'year': 2025}
+                    for i in range(5)
+                ]
+            elif dt == 'competition_intelligence':
+                columns = ['business_name', 'address', 'rating', 'review_count',
+                           'category', 'price_level', 'is_open']
+                city = dataset.city or 'Dallas, TX'
+                names = ['The Local Spot', 'Metro Market', 'City Corner', 'Urban Hub', 'Main St Collective']
+                rows = [
+                    {'business_name': names[i], 'address': f'{100 + i * 22} Main St, {city}',
+                     'rating': round(3.8 + i * 0.2, 1), 'review_count': 45 + i * 38,
+                     'category': 'Retail / Food & Bev', 'price_level': ['$', '$$', '$$', '$$$', '$$'][i],
+                     'is_open': True}
+                    for i in range(5)
+                ]
         except Exception as gen_err:
             logger.warning(f"Preview row generation failed for dataset {dataset_id}: {gen_err}")
             rows = []
@@ -220,6 +308,63 @@ def preview_dataset(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e),
         )
+
+
+@router.post("/{dataset_id}/purchase")
+def purchase_dataset_by_id(
+    dataset_id: str = Path(..., description="Dataset ID"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Complete a dataset purchase for the authenticated user."""
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id, Dataset.is_active == True
+    ).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    # Check for existing completed purchase
+    existing = db.query(DatasetPurchase).filter(
+        DatasetPurchase.dataset_id == dataset_id,
+        DatasetPurchase.user_id == str(current_user.id),
+        DatasetPurchase.status == "completed",
+    ).first()
+    if existing:
+        return {
+            "purchase_id": existing.id,
+            "dataset_id": existing.dataset_id,
+            "download_url": existing.download_url or f"/api/v1/datasets/{dataset_id}/download/{existing.id}",
+            "expires_at": existing.expires_at.isoformat() if existing.expires_at else None,
+            "status": existing.status,
+        }
+
+    purchase_id = str(uuid.uuid4())
+    expires_at = datetime.utcnow() + timedelta(days=30)
+    download_url = f"/api/v1/datasets/{dataset_id}/download/{purchase_id}"
+
+    purchase = DatasetPurchase(
+        id=purchase_id,
+        dataset_id=dataset.id,
+        user_id=str(current_user.id),
+        price_cents=dataset.price_cents,
+        payment_method="direct",
+        status="completed",
+        download_url=download_url,
+        expires_at=expires_at,
+        created_at=datetime.utcnow(),
+    )
+    db.add(purchase)
+    db.commit()
+
+    logger.info(f"Dataset purchase completed: {purchase_id} for user {current_user.id}")
+
+    return {
+        "purchase_id": purchase_id,
+        "dataset_id": dataset_id,
+        "download_url": download_url,
+        "expires_at": expires_at.isoformat(),
+        "status": "completed",
+    }
 
 
 @router.get("/{dataset_id}", response_model=dict)
@@ -331,74 +476,6 @@ def purchase_dataset(
         amount_cents=dataset.price_cents,
         currency="usd",
     )
-
-
-@router.get("/my-purchases", response_model=PurchaseListResponse)
-def list_purchases(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> PurchaseListResponse:
-    """
-    Get list of user's purchased datasets.
-    
-    Response:
-    {
-        "purchases": [
-            {
-                "purchase_id": "purchase-123",
-                "dataset_id": "dataset-456",
-                "dataset_name": "Coffee Markets in Austin",
-                "price_cents": 9900,
-                "purchased_at": "2024-04-30T10:30:00Z",
-                "expires_at": "2024-05-01T10:30:00Z",
-                "download_url": "/api/v1/datasets/download/purchase-123",
-                "status": "completed"
-            }
-        ],
-        "total_count": 1
-    }
-    """
-    try:
-        user_id = current_user.id
-        
-        # Get user's purchases
-        purchases = db.query(DatasetPurchase).filter(
-            DatasetPurchase.user_id == user_id,
-        ).order_by(DatasetPurchase.created_at.desc()).all()
-        
-        purchase_list = []
-        for purchase in purchases:
-            # Get dataset info
-            dataset = db.query(Dataset).filter(
-                Dataset.id == purchase.dataset_id
-            ).first()
-            
-            if not dataset:
-                continue
-            
-            purchase_list.append(PurchaseHistory(
-                purchase_id=purchase.id,
-                dataset_id=purchase.dataset_id,
-                dataset_name=dataset.name,
-                price_cents=purchase.price_cents,
-                purchased_at=purchase.created_at.isoformat() if purchase.created_at else None,
-                expires_at=purchase.expires_at.isoformat() if purchase.expires_at else None,
-                download_url=purchase.download_url or f"/api/v1/datasets/download/{purchase.id}",
-                status=purchase.status,
-            ))
-        
-        return PurchaseListResponse(
-            purchases=purchase_list,
-            total_count=len(purchase_list),
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving purchases: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        )
 
 
 @router.get("/download/{purchase_id}")

@@ -154,60 +154,112 @@ def browse_leads(
     db: Session = Depends(get_db),
 ):
     """Browse available leads in the marketplace."""
-    q = db.query(Lead).filter(
-        cast(Lead.status, String).in_(["new", "qualified"])
-    )
-    
+    from sqlalchemy import text as sql_text
+
+    # Build WHERE clauses manually to avoid ORM enum mapping issues
+    where_parts = ["status IN ('new', 'qualified')"]
+    params: dict = {}
+
     if category:
-        q = q.filter(Lead.interest_category.ilike(f"%{category}%"))
-    
+        where_parts.append("interest_category ILIKE :category")
+        params["category"] = f"%{category}%"
+
     if search:
-        s = f"%{search}%"
-        q = q.filter(
-            (Lead.company.ilike(s)) |
-            (Lead.interest_category.ilike(s))
-        )
-    
-    total = q.count()
-    
+        where_parts.append("(company ILIKE :search OR interest_category ILIKE :search)")
+        params["search"] = f"%{search}%"
+
+    where_sql = " AND ".join(where_parts)
+
+    # Count
+    count_row = db.execute(sql_text(f"SELECT COUNT(*) FROM leads WHERE {where_sql}"), params).scalar()
+    total = count_row or 0
+
+    # Sort
     if sort_by == "recent":
-        q = q.order_by(desc(Lead.created_at))
+        order_sql = "created_at DESC"
+    elif sort_by == "price":
+        # price is derived from quality score; sort by name proxy (company) for stability
+        order_sql = "company ASC NULLS LAST"
     else:
-        q = q.order_by(desc(Lead.created_at))
-    
-    leads = q.offset(skip).limit(limit).all()
-    
-    purchased_ids = set()
+        # quality: more fields filled = higher score — sort by completeness proxy
+        order_sql = "CASE WHEN company IS NOT NULL THEN 1 ELSE 0 END + CASE WHEN phone IS NOT NULL THEN 1 ELSE 0 END DESC, created_at DESC"
+
+    params["limit"] = limit
+    params["skip"] = skip
+    rows = db.execute(
+        sql_text(f"""
+            SELECT id, name, company, phone, interest_category, status,
+                   last_contacted_at, created_at
+            FROM leads
+            WHERE {where_sql}
+            ORDER BY {order_sql}
+            LIMIT :limit OFFSET :skip
+        """),
+        params,
+    ).fetchall()
+
+    # Purchased ids
+    purchased_ids: set = set()
     if current_user:
-        purchases = db.query(LeadPurchase.lead_id).filter(
-            LeadPurchase.user_id == current_user.id,
-            LeadPurchase.status == "completed"
-        ).all()
-        purchased_ids = {p[0] for p in purchases if p[0]}
-    
+        p_rows = db.execute(
+            sql_text("SELECT lead_id FROM lead_purchases WHERE user_id = :uid AND status = 'completed'"),
+            {"uid": current_user.id},
+        ).fetchall()
+        purchased_ids = {r[0] for r in p_rows if r[0]}
+
+    def _score(row) -> int:
+        score = 50
+        if row[1]:   # name
+            score += 10
+        if row[2]:   # company
+            score += 15
+        if row[3]:   # phone
+            score += 10
+        if row[4]:   # interest_category
+            score += 5
+        if row[5] in ("qualified", "converted"):
+            score += 10
+        return min(score, 100)
+
+    def _price(score: int) -> float:
+        if score >= 80: return LEAD_PRICING["high"]
+        if score >= 60: return LEAD_PRICING["medium"]
+        return LEAD_PRICING["low"]
+
     items = []
-    for lead in leads:
-        item = _lead_to_marketplace_response(lead, lead.id in purchased_ids)
-        
-        if min_quality and item["quality_score"] < min_quality:
+    for row in rows:
+        lead_id, name, company, phone, cat, status, last_active, created_at = row
+        quality = _score(row)
+        price = _price(quality)
+
+        if min_quality and quality < min_quality:
             continue
-        if max_price and item["price"] > max_price:
+        if max_price and price > max_price:
             continue
-        
-        items.append(item)
-    
-    category_counts = db.query(
-        Lead.interest_category,
-        func.count(Lead.id)
-    ).filter(
-        cast(Lead.status, String).in_(["new", "qualified"])
-    ).group_by(Lead.interest_category).all()
-    
+
+        items.append({
+            "id": lead_id,
+            "category": cat or "general",
+            "company": company,
+            "location": None,
+            "quality_score": quality,
+            "price": price,
+            "contact_count": 1,
+            "last_active": last_active or created_at,
+            "verified": status in ("qualified", "converted"),
+            "is_purchased": lead_id in purchased_ids,
+        })
+
+    # Category counts via raw SQL
+    cat_rows = db.execute(
+        sql_text("SELECT interest_category, COUNT(*) FROM leads WHERE status IN ('new','qualified') GROUP BY interest_category")
+    ).fetchall()
+
     categories = []
     for cat in CATEGORIES:
-        count = next((c[1] for c in category_counts if c[0] and cat["id"].lower() in c[0].lower()), 0)
+        count = next((c[1] for c in cat_rows if c[0] and cat["id"].lower() in c[0].lower()), 0)
         categories.append({**cat, "count": count})
-    
+
     return {
         "items": items,
         "total": total,

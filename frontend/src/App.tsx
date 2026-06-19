@@ -271,11 +271,7 @@ function App() {
         <Route path="marketplace" element={<Marketplace />} />
         <Route
           path="datasets/:datasetId/checkout"
-          element={
-            <RequireAuth>
-              <DatasetCheckout />
-            </RequireAuth>
-          }
+          element={<DatasetCheckout />}
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Route>

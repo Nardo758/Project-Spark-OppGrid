@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { 
   ShoppingCart, 
   Check, 
@@ -8,7 +8,9 @@ import {
   AlertCircle, 
   Clock,
   Lock,
-  Database
+  Database,
+  LogIn,
+  UserPlus
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 
@@ -60,27 +62,20 @@ export default function DatasetCheckout() {
   const [purchaseComplete, setPurchaseComplete] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState('')
   const [expiresAt, setExpiresAt] = useState('')
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
 
-  // Redirect if not authenticated
-  useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/signin')
-    }
-  }, [isAuthenticated, navigate])
-
-  // Fetch dataset details
+  // Fetch dataset details — works for guests too (no auth required)
   const { data: dataset, isLoading, error } = useQuery({
     queryKey: ['dataset', datasetId],
     queryFn: async (): Promise<Dataset> => {
-      const res = await fetch(`/api/v1/datasets/${datasetId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(`/api/v1/datasets/${datasetId}`, { headers })
       if (!res.ok) throw new Error('Failed to load dataset')
       return res.json()
     },
-    enabled: !!datasetId && !!token,
+    enabled: !!datasetId,
   })
 
   // Purchase mutation
@@ -128,6 +123,37 @@ export default function DatasetCheckout() {
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  const handleDownload = async () => {
+    if (!downloadUrl) return
+    setDownloading(true)
+    setDownloadError('')
+    try {
+      const headers: Record<string, string> = {}
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      const res = await fetch(downloadUrl, { headers })
+      if (!res.ok) {
+        const errText = await res.text().catch(() => 'Download failed')
+        throw new Error(errText)
+      }
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      // Extract filename from Content-Disposition or use default
+      const cd = res.headers.get('content-disposition')
+      const match = cd?.match(/filename="?([^";]+)"?/)
+      a.download = match ? match[1] : 'dataset.csv'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setDownloadError(e.message || 'Download failed')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   if (isLoading) {
@@ -298,31 +324,55 @@ export default function DatasetCheckout() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => purchaseMutation.mutate()}
-                  disabled={!agreeToTerms || purchaseMutation.isPending}
-                  className={`w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors mb-3 ${
-                    agreeToTerms && !purchaseMutation.isPending
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {purchaseMutation.isPending ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-blue-300 border-t-white rounded-full animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-5 h-5" />
-                      Complete Purchase
-                    </>
-                  )}
-                </button>
+                {isAuthenticated ? (
+                  <>
+                    <button
+                      onClick={() => purchaseMutation.mutate()}
+                      disabled={!agreeToTerms || purchaseMutation.isPending}
+                      className={`w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-colors mb-3 ${
+                        agreeToTerms && !purchaseMutation.isPending
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                          : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {purchaseMutation.isPending ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-blue-300 border-t-white rounded-full animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="w-5 h-5" />
+                          Complete Purchase
+                        </>
+                      )}
+                    </button>
 
-                {purchaseMutation.error && (
-                  <div className="bg-red-900/20 border border-red-800 rounded p-3 text-sm text-red-300">
-                    {purchaseMutation.error.message}
+                    {purchaseMutation.error && (
+                      <div className="bg-red-900/20 border border-red-800 rounded p-3 text-sm text-red-300">
+                        {purchaseMutation.error.message}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-3 mb-3">
+                    <p className="text-sm text-gray-400 text-center">
+                      Create a free account or sign in to complete your purchase.
+                    </p>
+                    <Link
+                      to={`/signup?redirect=/datasets/${datasetId}/checkout`}
+                      className="w-full py-3 rounded-lg font-semibold flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                    >
+                      <UserPlus className="w-5 h-5" />
+                      Create Free Account
+                    </Link>
+                    <Link
+                      to={`/signin?redirect=/datasets/${datasetId}/checkout`}
+                      className="w-full py-2 rounded-lg font-medium flex items-center justify-center gap-2 border border-gray-600 text-gray-300 hover:text-white hover:border-gray-400 transition-colors"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      Sign In
+                    </Link>
                   </div>
                 )}
 
@@ -355,13 +405,28 @@ export default function DatasetCheckout() {
             {purchaseComplete && (
               <div className="bg-green-900/20 border border-green-800 rounded-lg p-6">
                 <h3 className="font-semibold text-green-300 mb-4">What's Next?</h3>
-                <a
-                  href={downloadUrl}
-                  className="block w-full mb-3 py-3 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 transition-colors text-center flex items-center justify-center gap-2"
+                <button
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="block w-full mb-3 py-3 rounded-lg font-semibold text-white bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:cursor-not-allowed transition-colors text-center flex items-center justify-center gap-2"
                 >
-                  <Download className="w-5 h-5" />
-                  Download Dataset
-                </a>
+                  {downloading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-green-300 border-t-white rounded-full animate-spin" />
+                      Downloading...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-5 h-5" />
+                      Download Dataset
+                    </>
+                  )}
+                </button>
+                {downloadError && (
+                  <div className="bg-red-900/20 border border-red-800 rounded p-3 text-sm text-red-300 mb-3">
+                    {downloadError}
+                  </div>
+                )}
                 <button
                   onClick={() => navigate('/marketplace')}
                   className="block w-full py-2 text-green-300 hover:text-green-200 text-sm font-medium"

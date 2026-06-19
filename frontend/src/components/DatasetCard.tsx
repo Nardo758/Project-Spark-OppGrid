@@ -8,7 +8,7 @@ interface Dataset {
   id: string
   name: string
   description: string
-  dataset_type: 'opportunities' | 'markets' | 'trends' | 'raw_data'
+  dataset_type: 'opportunities' | 'markets' | 'trends' | 'raw_data' | 'opportunity_signals' | 'market_intelligence' | 'economic_intelligence' | 'competition_intelligence'
   vertical?: string | null
   city?: string | null
   price_cents: number
@@ -23,6 +23,10 @@ const CATEGORY_COLORS: Record<string, { bg: string; text: string; icon: string }
   markets: { bg: 'bg-blue-100', text: 'text-blue-700', icon: '📊' },
   trends: { bg: 'bg-green-100', text: 'text-green-700', icon: '📈' },
   raw_data: { bg: 'bg-orange-100', text: 'text-orange-700', icon: '📦' },
+  opportunity_signals: { bg: 'bg-red-100', text: 'text-red-700', icon: '📡' },
+  market_intelligence: { bg: 'bg-indigo-100', text: 'text-indigo-700', icon: '🧠' },
+  economic_intelligence: { bg: 'bg-teal-100', text: 'text-teal-700', icon: '💰' },
+  competition_intelligence: { bg: 'bg-rose-100', text: 'text-rose-700', icon: '🗺️' },
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -30,6 +34,10 @@ const CATEGORY_LABELS: Record<string, string> = {
   markets: 'Markets',
   trends: 'Trends',
   raw_data: 'Raw Data',
+  opportunity_signals: 'Signal Feed',
+  market_intelligence: '4P\'s Market Intelligence',
+  economic_intelligence: 'Economic Intelligence',
+  competition_intelligence: 'Competition Map',
 }
 
 export default function DatasetCard({ dataset }: { dataset: Dataset }) {

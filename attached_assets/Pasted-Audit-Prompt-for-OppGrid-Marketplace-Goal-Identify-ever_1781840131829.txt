@@ -1,0 +1,56 @@
+Audit Prompt for OppGrid Marketplace
+Goal: Identify every broken feature on the marketplace page (/marketplace) and categorize by severity.
+Steps:
+Page Load
+Open https://project-spark--mdixon5030.replit.app/marketplace
+Does the page load without errors? (Check browser console for red errors)
+Do 23 datasets appear in the grid?
+Hero Section
+Is there a "Explore Our Data Tiers" section at the top?
+Are there 4 clickable tier cards?
+Does clicking a tier card filter the grid to that category?
+Search
+Type "Austin" in the search box — do Austin datasets appear?
+Type "Signal" — do Signal Feeds appear?
+Clear search — does the full grid return?
+Category Filter
+Select "Signal Feed" from dropdown — do Signal Feed datasets appear?
+Select "4P's Market Intelligence" — do those appear?
+Select "Economic Intelligence" — do those appear?
+Select "Competition Map" — do those appear?
+Select "All Categories" — does full grid return?
+Vertical Filter
+Select "Business" — do datasets appear?
+Select "Location Analysis" — do Competition Maps appear?
+City Filter
+Select "Austin" — do Austin datasets appear?
+Select "New York" — do NYC datasets appear?
+Sort
+Select "Price: Low to High" — is cheapest first?
+Select "Price: High to Low" — is most expensive first?
+Select "Most Popular" — is highest record count first?
+Dataset Cards
+Do cards show: Name, category badge, description, record count, price?
+Are category badges colored correctly?
+Do "Preview" and "Buy" buttons exist on every card?
+Preview Button (Click on any card)
+Click "Preview" — does a modal open?
+Does the modal show dataset name, record count, columns, sample rows?
+Is there a "Download Full Dataset" button in the modal?
+Does clicking "Close" close the modal?
+Buy Button (Click on any card)
+Click "Buy" — does it navigate to checkout page?
+Is the checkout page at /datasets/{id}/checkout?
+Auth Check
+Open marketplace in an incognito window (not logged in)
+Click "Preview" — does it redirect to /signin?
+Click "Buy" — does it redirect to /signin?
+Backend API Check
+Run: curl -s https://project-spark--mdixon5030.replit.app/api/v1/datasets | wc -c
+Is response > 10KB (indicating 23 datasets returned)?
+Report Format:
+For each check, mark:
+✅ PASS
+❌ FAIL (describe what happened)
+⚠️ PARTIAL (works but has issues)
+Report all FAILs and PARTIALs back for fixing.
