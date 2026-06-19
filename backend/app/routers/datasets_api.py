@@ -14,6 +14,7 @@ from app.db.database import get_db
 from app.models.dataset import Dataset, DatasetPurchase, DatasetType
 from app.models.user import User
 from app.core.dependencies import get_current_user
+from app.core.security import decode_access_token
 from app.services.dataset_delivery_service import get_delivery_service
 
 logger = logging.getLogger(__name__)
@@ -380,7 +381,7 @@ def purchase_dataset_by_id(
 
     purchase_id = str(uuid.uuid4())
     expires_at = datetime.utcnow() + timedelta(days=30)
-    download_url = f"/api/v1/datasets/{dataset_id}/download/{purchase_id}"
+    download_url = f"/api/v1/datasets/download/{purchase_id}"
 
     purchase = DatasetPurchase(
         id=purchase_id,
@@ -522,21 +523,50 @@ def purchase_dataset(
 def download_dataset(
     purchase_id: str = Path(..., description="Purchase ID"),
     token: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
+    authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
     """
     Download purchased dataset.
     
     Requirements:
-    - User must own the purchase (JWT authentication)
+    - User must own the purchase (JWT authentication via Bearer header or ?token= query param)
     - Purchase must not be expired
     
     Returns:
     - CSV file with proper headers
     """
     try:
-        user_id = current_user.id
+        # Resolve token from query param or Authorization header
+        resolved_token = token
+        if not resolved_token and authorization:
+            if authorization.lower().startswith("bearer "):
+                resolved_token = authorization[7:]
+
+        if not resolved_token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        payload = decode_access_token(resolved_token)
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
+        current_user = db.query(User).filter(User.email == email).first()
+        if not current_user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+        user_id = str(current_user.id)
         
         # Verify purchase exists and belongs to user
         purchase = db.query(DatasetPurchase).filter(
@@ -550,8 +580,13 @@ def download_dataset(
                 detail="Purchase not found",
             )
         
-        # Check if purchase is expired
-        if purchase.expires_at and purchase.expires_at < datetime.utcnow():
+        # Check if purchase is expired (handle both tz-aware and tz-naive)
+        from datetime import timezone as _tz
+        _now = datetime.now(_tz.utc)
+        _expires = purchase.expires_at
+        if _expires is not None and _expires.tzinfo is None:
+            _expires = _expires.replace(tzinfo=_tz.utc)
+        if _expires and _expires < _now:
             raise HTTPException(
                 status_code=status.HTTP_410_GONE,
                 detail="Download link has expired",
@@ -596,13 +631,19 @@ def download_dataset(
             signed_url = delivery_service.generate_download_url(purchase, file_path)
             return RedirectResponse(url=signed_url)
         
-        # Return local file
+        # Return local file — sanitize filename to ASCII for Content-Disposition header
+        import unicodedata
+        safe_name = unicodedata.normalize('NFKD', dataset.name)
+        safe_name = safe_name.encode('ascii', 'ignore').decode('ascii')
+        safe_name = safe_name.replace(' ', '_').replace('/', '_')
+        safe_name = safe_name or "dataset"
+        filename = f"{safe_name}.csv"
         return FileResponse(
             file_path,
-            media_type="text/csv",
-            filename=f"{dataset.name.replace(' ', '_')}.csv",
+            media_type="text/csv; charset=utf-8",
+            filename=filename,
             headers={
-                "Content-Disposition": f"attachment; filename={dataset.name.replace(' ', '_')}.csv",
+                "Content-Disposition": f'attachment; filename="{filename}"',
             },
         )
     except HTTPException:

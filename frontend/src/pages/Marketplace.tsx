@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Database, Users } from 'lucide-react'
+import { Database, Radio } from 'lucide-react'
 import DatasetsTab from '../components/marketplace/DatasetsTab'
-import LeadsTab from '../components/marketplace/LeadsTab'
+import SignalsTab from '../components/marketplace/SignalsTab'
 
-type TabId = 'datasets' | 'leads'
+type TabId = 'datasets' | 'signals'
 
 const TABS: { id: TabId; label: string; icon: React.ElementType; description: string }[] = [
   {
@@ -14,21 +14,21 @@ const TABS: { id: TabId; label: string; icon: React.ElementType; description: st
     description: 'Verified market intelligence datasets',
   },
   {
-    id: 'leads',
-    label: 'Leads',
-    icon: Users,
-    description: 'Vetted, high-intent business opportunities',
+    id: 'signals',
+    label: 'Signals',
+    icon: Radio,
+    description: 'AI-powered market signals from real opportunity data',
   },
 ]
 
 export default function Marketplace() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const activeTab: TabId = tabParam === 'leads' ? 'leads' : 'datasets'
+  const activeTab: TabId = tabParam === 'signals' ? 'signals' : 'datasets'
 
   // Normalize URL so the active tab is always reflected (e.g. /marketplace -> /marketplace?tab=datasets).
   useEffect(() => {
-    if (tabParam !== 'datasets' && tabParam !== 'leads') {
+    if (tabParam !== 'datasets' && tabParam !== 'signals') {
       const next = new URLSearchParams(searchParams)
       next.set('tab', 'datasets')
       setSearchParams(next, { replace: true })
@@ -92,12 +92,12 @@ export default function Marketplace() {
           <DatasetsTab />
         </div>
         <div
-          id="tabpanel-leads"
+          id="tabpanel-signals"
           role="tabpanel"
-          aria-labelledby="tab-leads"
-          hidden={activeTab !== 'leads'}
+          aria-labelledby="tab-signals"
+          hidden={activeTab !== 'signals'}
         >
-          <LeadsTab />
+          <SignalsTab />
         </div>
       </div>
     </div>
