@@ -20,6 +20,9 @@ import {
   Building2,
   Users,
   DollarSign,
+  Lock,
+  LogIn,
+  UserPlus,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 
@@ -260,6 +263,36 @@ export default function ConsultantStudio() {
     { id: 'location', label: 'Identify Location', icon: MapPin, description: 'Geographic intelligence' },
     { id: 'clone', label: 'Clone Success', icon: Copy, description: 'Replicate winning models' },
   ]
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-stone-100 flex items-center justify-center">
+        <div className="bg-white rounded-2xl border border-gray-200 p-12 max-w-md w-full text-center shadow-sm">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Lock className="w-8 h-8 text-gray-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">Sign in to use Consultant Studio</h2>
+          <p className="text-gray-600 mb-8">AI-powered business analysis requires an account</p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button
+              onClick={() => navigate('/login')}
+              className="px-6 py-2.5 bg-[#D97757] text-white rounded-lg hover:bg-[#B85C3D] transition-colors flex items-center justify-center gap-2 font-medium"
+            >
+              <LogIn className="w-4 h-4" />
+              Sign In
+            </button>
+            <button
+              onClick={() => navigate('/signup')}
+              className="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 font-medium"
+            >
+              <UserPlus className="w-4 h-4" />
+              Create Account
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-white to-stone-100">
