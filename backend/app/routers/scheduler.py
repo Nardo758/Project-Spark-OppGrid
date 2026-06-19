@@ -74,9 +74,9 @@ def trigger_hub_refresh(
 ):
     """Trigger incremental Hub table refresh for all opportunities."""
     try:
-        from app.models.opportunity import Opportunity
-        opportunities = db.query(Opportunity).filter(
-            Opportunity.moderation_status == "approved"
+        from app.models.opportunity import Opportunity as Opp
+        opportunities = db.query(Opp).filter(
+            Opp.moderation_status == "approved"
         ).all()
 
         refreshed = 0
@@ -122,9 +122,9 @@ def trigger_all_scheduled_jobs(
 
     # 2. Hub refresh
     try:
-        from app.models.opportunity import Opportunity
-        opportunities = db.query(Opportunity).filter(
-            Opportunity.moderation_status == "approved"
+        from app.models.opportunity import Opportunity as Opp2
+        opportunities = db.query(Opp2).filter(
+            Opp2.moderation_status == "approved"
         ).all()
         refreshed = 0
         for opp in opportunities:
