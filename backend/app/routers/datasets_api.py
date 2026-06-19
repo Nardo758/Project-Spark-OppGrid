@@ -310,6 +310,63 @@ def preview_dataset(
         )
 
 
+@router.post("/{dataset_id}/purchase")
+def purchase_dataset_by_id(
+    dataset_id: str = Path(..., description="Dataset ID"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Complete a dataset purchase for the authenticated user."""
+    dataset = db.query(Dataset).filter(
+        Dataset.id == dataset_id, Dataset.is_active == True
+    ).first()
+    if not dataset:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    # Check for existing completed purchase
+    existing = db.query(DatasetPurchase).filter(
+        DatasetPurchase.dataset_id == dataset_id,
+        DatasetPurchase.user_id == str(current_user.id),
+        DatasetPurchase.status == "completed",
+    ).first()
+    if existing:
+        return {
+            "purchase_id": existing.id,
+            "dataset_id": existing.dataset_id,
+            "download_url": existing.download_url or f"/api/v1/datasets/{dataset_id}/download/{existing.id}",
+            "expires_at": existing.expires_at.isoformat() if existing.expires_at else None,
+            "status": existing.status,
+        }
+
+    purchase_id = str(uuid.uuid4())
+    expires_at = datetime.utcnow() + timedelta(days=30)
+    download_url = f"/api/v1/datasets/{dataset_id}/download/{purchase_id}"
+
+    purchase = DatasetPurchase(
+        id=purchase_id,
+        dataset_id=dataset.id,
+        user_id=str(current_user.id),
+        price_cents=dataset.price_cents,
+        payment_method="direct",
+        status="completed",
+        download_url=download_url,
+        expires_at=expires_at,
+        created_at=datetime.utcnow(),
+    )
+    db.add(purchase)
+    db.commit()
+
+    logger.info(f"Dataset purchase completed: {purchase_id} for user {current_user.id}")
+
+    return {
+        "purchase_id": purchase_id,
+        "dataset_id": dataset_id,
+        "download_url": download_url,
+        "expires_at": expires_at.isoformat(),
+        "status": "completed",
+    }
+
+
 @router.get("/{dataset_id}", response_model=dict)
 def get_dataset(
     dataset_id: str = Path(..., description="Dataset ID"),
