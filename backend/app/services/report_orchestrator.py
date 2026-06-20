@@ -354,13 +354,13 @@ class ReportOrchestrator:
         table {{ width: 100%; border-collapse: collapse; margin: 16px 0; }}
         th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #e5e5e5; }}
         th {{ background: #f8f7f5; font-weight: 600; font-size: 12px; text-transform: uppercase; color: #666; }}
-        .institutional-header {{ background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); color: white; padding: 32px; border-radius: 12px; margin-bottom: 32px; }}
-        .institutional-header .logo {{ font-size: 24px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; }}
-        .institutional-header .tagline {{ font-size: 13px; color: #aaa; font-weight: 400; }}
-        .institutional-header .report-meta {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 32px; flex-wrap: wrap; }}
+        .institutional-header {{ background: #fafaf9; color: #1a1a1a; padding: 32px; border-radius: 12px; margin-bottom: 32px; border-top: 4px solid #D97757; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }}
+        .institutional-header .logo {{ font-size: 24px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; color: #1a1a1a; }}
+        .institutional-header .tagline {{ font-size: 13px; color: #78716c; font-weight: 400; }}
+        .institutional-header .report-meta {{ margin-top: 20px; padding-top: 16px; border-top: 1px solid #e7e5e4; display: flex; gap: 32px; flex-wrap: wrap; }}
         .institutional-header .meta-item {{ font-size: 12px; }}
-        .institutional-header .meta-label {{ color: #888; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; margin-bottom: 4px; }}
-        .institutional-header .meta-value {{ color: white; font-weight: 500; }}
+        .institutional-header .meta-label {{ color: #a8a29e; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; margin-bottom: 4px; }}
+        .institutional-header .meta-value {{ color: #1a1a1a; font-weight: 500; }}
         .footer {{ margin-top: 48px; padding-top: 24px; border-top: 2px solid #f0f0f0; text-align: center; color: #999; font-size: 11px; }}
         .footer .logo {{ font-weight: 700; color: #1a1a1a; font-size: 14px; }}
         .confidential {{ display: inline-block; padding: 4px 12px; background: #f8f7f5; border-radius: 4px; font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px; }}
