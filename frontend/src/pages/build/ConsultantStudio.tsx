@@ -28,6 +28,7 @@ import {
   ShoppingCart,
 } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
+import { GeneratedReportViewer } from '../../components/ConsultantResults'
 
 type TabId = 'validate' | 'search' | 'location' | 'clone'
 
@@ -564,22 +565,16 @@ export default function ConsultantStudio() {
         </div>
       )}
       {reportResult && (
-        <div className="mt-4 bg-gray-50 rounded-lg p-4 border border-gray-200">
-          <div className="flex items-center gap-2 mb-2">
-            <CheckCircle className="w-4 h-4 text-green-500" />
-            <span className="text-sm font-medium text-gray-900">Report Generated</span>
-          </div>
-          {reportResult.content && (
-            <div
-              className="prose prose-sm max-w-none text-gray-700 max-h-64 overflow-y-auto border border-gray-100 rounded-lg p-3 bg-white"
-              dangerouslySetInnerHTML={{ __html: reportResult.content }}
-            />
-          )}
-          {!reportResult.content && (
-            <pre className="text-xs text-gray-600 overflow-auto max-h-48 bg-white p-3 rounded border">
-              {JSON.stringify(reportResult, null, 2)}
-            </pre>
-          )}
+        <div className="mt-4">
+          <GeneratedReportViewer
+            report={{
+              id: reportResult.id,
+              title: reportResult.title,
+              content: reportResult.content,
+              report_type: reportResult.report_type,
+              confidence_score: reportResult.confidence_score,
+            }}
+          />
         </div>
       )}
     </div>
