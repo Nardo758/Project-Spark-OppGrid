@@ -623,7 +623,11 @@ class ReportOrchestrator:
     async def _generate_location_analysis(
         self, opportunity_context: dict, secret_sauce_block: str, db
     ) -> str:
-        """Template-based path for Location Analysis reports."""
+        """Template-based path for Location Analysis reports.
+        
+        IMPORTANT: The Secret Sauce block already contains pre-calculated formula scores
+        from FormulaEngine. We inject a strong instruction to prevent Claude from recomputing them.
+        """
         from app.models.report_template import ReportTemplate
         from app.services.llm_ai_engine import llm_ai_engine_service
         from app.services.ai_report_generator import AIReportGenerator
@@ -644,9 +648,21 @@ class ReportOrchestrator:
             loc_context = f"{loc_context}\n\n{secret_sauce_block}"
 
         prompt = tmpl.ai_prompt.replace("{context}", loc_context)
+        
+        # Override the "compute" instruction with "USE the pre-calculated values" instruction
+        # This prevents Claude from hallucinating formula inputs/outputs
+        prompt = prompt.replace(
+            "CRITICAL: For every location you must compute all 8 proprietary formula scores and the Composite Location Score (CLS). Show your work for each formula.",
+            "CRITICAL: The 8 proprietary formula scores (TAI, WMM, DVS, CWI, BFV, ATI, FMW, DSI) and the Composite Location Score (CLS) are ALREADY PRE-CALCULATED in the OppGrid Intelligence Data provided above. DO NOT recompute or invent new values. USE the pre-calculated scores exactly as provided. Show your interpretation of each score, not the derivation."
+        )
+        
         system = (
             "You are OppGrid's senior market intelligence analyst producing institutional-grade "
             f"location analysis reports.\n\n{AIReportGenerator.INSTITUTIONAL_STYLE_INSTRUCTIONS}"
+            "\n\nCRITICAL INSTRUCTION: The formula scores (TAI, WMM, DVS, CWI, BFV, ATI, FMW, DSI, CLS) "
+            "are ALREADY calculated by OppGrid's FormulaEngine and provided in the data block above. "
+            "Use these exact values. Do NOT invent, estimate, or recalculate them. "
+            "Your job is to INTERPRET and EXPLAIN the pre-calculated scores, not to derive them."
         )
 
         result = await llm_ai_engine_service.generate_response(
