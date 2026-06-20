@@ -124,8 +124,11 @@ export default function Signup() {
       } else if (selectedPlan && planInfo?.tier === 'enterprise') {
         navigate('/pricing?plan=enterprise&contact=true')
       } else {
+        const next = searchParams.get('next')
         const from = (location.state as { from?: string } | null)?.from
-        if (from) {
+        if (next) {
+          navigate(next)
+        } else if (from) {
           navigate(from)
         } else {
           setShowNextSteps(true)

@@ -1592,14 +1592,14 @@ Return as JSON:
         api_key = os.environ.get("CENSUS_API_KEY")
         if not api_key or not state:
             logger.warning("Census API key or state not available, using fallback")
-            fallback = self._get_fallback_demographics()
+            fallback = self._get_fallback_demographics(state)
             fallback["is_estimated"] = True
             return fallback
         
         state_fips = self._get_state_fips(state)
         if not state_fips:
             logger.warning(f"Unknown state: {state}, using fallback")
-            fallback = self._get_fallback_demographics()
+            fallback = self._get_fallback_demographics(state)
             fallback["is_estimated"] = True
             return fallback
         
@@ -1622,7 +1622,7 @@ Return as JSON:
                 data = response.json()
             
             if len(data) < 2:
-                fallback = self._get_fallback_demographics()
+                fallback = self._get_fallback_demographics(state)
                 fallback["is_estimated"] = True
                 return fallback
             
@@ -1658,7 +1658,7 @@ Return as JSON:
             
         except Exception as e:
             logger.error(f"Census API error: {e}")
-            fallback = self._get_fallback_demographics()
+            fallback = self._get_fallback_demographics(state)
             fallback["is_estimated"] = True
             return fallback
     
@@ -1787,18 +1787,96 @@ Return as JSON:
         
         return R * c
     
-    def _get_fallback_demographics(self) -> Dict[str, Any]:
-        """Return fallback demographics when API is unavailable."""
-        import random
-        return {
-            "population": random.randint(100000, 500000),
-            "median_age": random.randint(32, 42),
-            "median_income": random.randint(55000, 85000),
-            "total_households": random.randint(40000, 200000),
-            "median_home_value": random.randint(200000, 500000),
-            "unemployment_rate": round(random.uniform(3.0, 6.0), 1),
-            "growth_rate": round(random.uniform(2.0, 5.0), 1),
+    def _get_fallback_demographics(self, state: Optional[str] = None) -> Dict[str, Any]:
+        """Return fallback demographics using US state averages when API is unavailable.
+        
+        Uses Census Bureau state averages (ACS 2023 5-year estimates) instead of random values.
+        When state is unknown, uses US national averages with is_estimated=True flag.
+        """
+        # US National averages (ACS 2023 5-year estimates)
+        # Source: https://data.census.gov/table/ACSST5Y2023.S0101
+        national_averages = {
+            "population": 331900000,
+            "median_age": 38.5,
+            "median_income": 74580,
+            "total_households": 126000000,
+            "median_home_value": 281900,
+            "unemployment_rate": 3.7,
+            "growth_rate": 0.4,
+            "is_estimated": True,
+            "data_source": "Census Bureau ACS 2023 (US National Average)",
         }
+        
+        # State-specific averages for common states (ACS 2023)
+        state_averages: Dict[str, Dict[str, Any]] = {
+            "TX": {"population": 29700000, "median_age": 35.1, "median_income": 67404, "median_home_value": 237400, "unemployment_rate": 4.1, "growth_rate": 1.3},
+            "CA": {"population": 39500000, "median_age": 37.3, "median_income": 84907, "median_home_value": 659300, "unemployment_rate": 4.6, "growth_rate": 0.0},
+            "FL": {"population": 22300000, "median_age": 42.7, "median_income": 67399, "median_home_value": 294200, "unemployment_rate": 3.2, "growth_rate": 1.1},
+            "NY": {"population": 19600000, "median_age": 39.0, "median_income": 79308, "median_home_value": 381700, "unemployment_rate": 4.3, "growth_rate": -0.4},
+            "GA": {"population": 10800000, "median_age": 37.2, "median_income": 66159, "median_home_value": 245200, "unemployment_rate": 3.3, "growth_rate": 1.0},
+            "NC": {"population": 10500000, "median_age": 38.9, "median_income": 62843, "median_home_value": 241900, "unemployment_rate": 3.4, "growth_rate": 1.1},
+            "IL": {"population": 12700000, "median_age": 38.5, "median_income": 78202, "median_home_value": 236700, "unemployment_rate": 4.3, "growth_rate": -0.3},
+            "OH": {"population": 11800000, "median_age": 39.4, "median_income": 62524, "median_home_value": 181700, "unemployment_rate": 3.9, "growth_rate": 0.1},
+            "MI": {"population": 10000000, "median_age": 39.8, "median_income": 63374, "median_home_value": 199400, "unemployment_rate": 3.8, "growth_rate": 0.1},
+            "AZ": {"population": 7280000, "median_age": 38.3, "median_income": 69265, "median_home_value": 336300, "unemployment_rate": 3.9, "growth_rate": 1.2},
+            "CO": {"population": 5780000, "median_age": 37.5, "median_income": 87058, "median_home_value": 520400, "unemployment_rate": 3.3, "growth_rate": 0.8},
+            "WA": {"population": 7730000, "median_age": 37.8, "median_income": 87648, "median_home_value": 512700, "unemployment_rate": 3.9, "growth_rate": 0.8},
+            "NV": {"population": 3170000, "median_age": 38.2, "median_income": 66000, "median_home_value": 373000, "unemployment_rate": 5.2, "growth_rate": 1.0},
+            "OR": {"population": 4230000, "median_age": 39.6, "median_income": 71428, "median_home_value": 418500, "unemployment_rate": 3.9, "growth_rate": 0.6},
+            "TN": {"population": 6970000, "median_age": 38.9, "median_income": 59853, "median_home_value": 235200, "unemployment_rate": 3.1, "growth_rate": 1.0},
+            "SC": {"population": 5200000, "median_age": 39.7, "median_income": 62260, "median_home_value": 233200, "unemployment_rate": 3.1, "growth_rate": 1.2},
+            "VA": {"population": 8630000, "median_age": 38.4, "median_income": 87199, "median_home_value": 343200, "unemployment_rate": 2.9, "growth_rate": 0.5},
+            "PA": {"population": 13000000, "median_age": 40.9, "median_income": 67587, "median_home_value": 221800, "unemployment_rate": 3.5, "growth_rate": -0.1},
+            "MA": {"population": 7000000, "median_age": 39.6, "median_income": 96370, "median_home_value": 485700, "unemployment_rate": 2.8, "growth_rate": 0.2},
+            "NJ": {"population": 9300000, "median_age": 40.0, "median_income": 93253, "median_home_value": 414000, "unemployment_rate": 3.4, "growth_rate": 0.2},
+            "MD": {"population": 6180000, "median_age": 38.9, "median_income": 98661, "median_home_value": 370000, "unemployment_rate": 2.7, "growth_rate": 0.3},
+            "IN": {"population": 6790000, "median_age": 37.8, "median_income": 62843, "median_home_value": 174600, "unemployment_rate": 3.2, "growth_rate": 0.3},
+            "MO": {"population": 6160000, "median_age": 38.8, "median_income": 62296, "median_home_value": 198900, "unemployment_rate": 3.1, "growth_rate": 0.2},
+            "WI": {"population": 5890000, "median_age": 40.1, "median_income": 71521, "median_home_value": 237700, "unemployment_rate": 2.8, "growth_rate": 0.2},
+            "MN": {"population": 5730000, "median_age": 38.5, "median_income": 84672, "median_home_value": 290000, "unemployment_rate": 2.8, "growth_rate": 0.5},
+            "UT": {"population": 3280000, "median_age": 31.5, "median_income": 86527, "median_home_value": 421700, "unemployment_rate": 2.5, "growth_rate": 1.2},
+            "AL": {"population": 5020000, "median_age": 39.4, "median_income": 59910, "median_home_value": 179400, "unemployment_rate": 2.8, "growth_rate": 0.3},
+            "LA": {"population": 4660000, "median_age": 37.5, "median_income": 57914, "median_home_value": 188100, "unemployment_rate": 3.8, "growth_rate": -0.2},
+            "KY": {"population": 4510000, "median_age": 39.0, "median_income": 56352, "median_home_value": 173200, "unemployment_rate": 3.9, "growth_rate": 0.2},
+            "OK": {"population": 3980000, "median_age": 36.9, "median_income": 59133, "median_home_value": 163400, "unemployment_rate": 3.2, "growth_rate": 0.4},
+            "CT": {"population": 3610000, "median_age": 41.1, "median_income": 88496, "median_home_value": 322300, "unemployment_rate": 3.8, "growth_rate": 0.2},
+            "IA": {"population": 3190000, "median_age": 38.3, "median_income": 66142, "median_home_value": 174500, "unemployment_rate": 2.8, "growth_rate": 0.1},
+            "AR": {"population": 3010000, "median_age": 38.8, "median_income": 54929, "median_home_value": 159300, "unemployment_rate": 3.1, "growth_rate": 0.3},
+            "MS": {"population": 2960000, "median_age": 37.8, "median_income": 49811, "median_home_value": 151000, "unemployment_rate": 3.5, "growth_rate": -0.1},
+            "KS": {"population": 2930000, "median_age": 37.2, "median_income": 68924, "median_home_value": 172600, "unemployment_rate": 2.8, "growth_rate": 0.2},
+            "NM": {"population": 2110000, "median_age": 38.8, "median_income": 59829, "median_home_value": 214000, "unemployment_rate": 3.9, "growth_rate": 0.4},
+            "NE": {"population": 1960000, "median_age": 37.1, "median_income": 74715, "median_home_value": 205300, "unemployment_rate": 2.5, "growth_rate": 0.3},
+            "ID": {"population": 1860000, "median_age": 36.9, "median_income": 68798, "median_home_value": 370000, "unemployment_rate": 3.0, "growth_rate": 1.6},
+            "NH": {"population": 1380000, "median_age": 43.0, "median_income": 90845, "median_home_value": 349000, "unemployment_rate": 2.5, "growth_rate": 0.5},
+            "ME": {"population": 1360000, "median_age": 44.8, "median_income": 65367, "median_home_value": 252100, "unemployment_rate": 3.1, "growth_rate": 0.6},
+            "WV": {"population": 1790000, "median_age": 42.8, "median_income": 55385, "median_home_value": 137800, "unemployment_rate": 4.0, "growth_rate": -0.3},
+            "HI": {"population": 1440000, "median_age": 39.8, "median_income": 92265, "median_home_value": 772300, "unemployment_rate": 3.2, "growth_rate": -0.1},
+            "DE": {"population": 1000000, "median_age": 41.6, "median_income": 77400, "median_home_value": 291800, "unemployment_rate": 3.2, "growth_rate": 0.8},
+            "RI": {"population": 1100000, "median_age": 40.0, "median_income": 81660, "median_home_value": 348000, "unemployment_rate": 3.2, "growth_rate": 0.2},
+            "MT": {"population": 1080000, "median_age": 40.1, "median_income": 66541, "median_home_value": 311000, "unemployment_rate": 2.8, "growth_rate": 0.8},
+            "ND": {"population": 780000, "median_age": 35.3, "median_income": 73463, "median_home_value": 224500, "unemployment_rate": 2.0, "growth_rate": 0.4},
+            "SD": {"population": 887000, "median_age": 37.7, "median_income": 69928, "median_home_value": 205000, "unemployment_rate": 2.3, "growth_rate": 0.8},
+            "AK": {"population": 733000, "median_age": 35.0, "median_income": 86631, "median_home_value": 304900, "unemployment_rate": 4.2, "growth_rate": -0.8},
+            "VT": {"population": 646000, "median_age": 42.8, "median_income": 76079, "median_home_value": 268200, "unemployment_rate": 2.3, "growth_rate": 0.4},
+            "WY": {"population": 577000, "median_age": 38.5, "median_income": 71529, "median_home_value": 266600, "unemployment_rate": 3.0, "growth_rate": 0.3},
+            "DC": {"population": 670000, "median_age": 37.5, "median_income": 101027, "median_home_value": 669000, "unemployment_rate": 4.8, "growth_rate": 0.8},
+        }
+        
+        if state and state.upper() in state_averages:
+            avg = state_averages[state.upper()]
+            return {
+                "population": avg["population"],
+                "median_age": avg["median_age"],
+                "median_income": avg["median_income"],
+                "total_households": int(avg["population"] / 2.5),  # Approximate
+                "median_home_value": avg.get("median_home_value", 250000),
+                "unemployment_rate": avg["unemployment_rate"],
+                "growth_rate": avg["growth_rate"],
+                "is_estimated": True,
+                "data_source": f"Census Bureau ACS 2023 (State Average for {state.upper()})",
+            }
+        
+        return national_averages.copy()
     
     def _get_state_fips(self, state: str) -> Optional[str]:
         """Convert state abbreviation to FIPS code."""

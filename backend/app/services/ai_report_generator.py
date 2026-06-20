@@ -752,39 +752,71 @@ CRITICAL OUTPUT RULES:
 - Do NOT include any title block, header section, report ID, date stamp, or branding at the top. The document wrapper handles all of that. Start immediately with the first section heading.
 - Do NOT wrap the output in <html>, <head>, or <body> tags.
 
+You have been provided with REAL OppGrid intelligence data in the user prompt. This data includes:
+- Demographics (Census ACS): population, income, growth rates, unemployment
+- Competitive landscape: competitor counts, ratings, reviews, competition level
+- OppGrid proprietary formula scores: DVS (demand velocity), CWI (competitive whitespace), BFV (business formation), CLS (composite score), and more
+- Signal evidence: actual consumer demand signals from our database
+- Economic data (Tier 3 only): FRED macro indicators, BLS labor data, SEC 10-K benchmarks
+
+USE THIS DATA EXPLICITLY. Do NOT invent statistics. Cite OppGrid data sources inline.
+
 Structure your feasibility study with these HTML sections:
 
 <h2>1. Executive Summary</h2>
-Brief overview of findings and recommendation. Lead with Go/No-Go/Conditional verdict.
+Lead with the verdict: <strong>GO / NO-GO / CONDITIONAL</strong>.
+Reference the Composite Location Score (CLS) and provide a one-paragraph rationale.
 
 <h2>2. Project Overview</h2>
-What is being evaluated and scope of analysis.
+Business concept, location, category, and scope of analysis.
 
-<h2>3. Technical Feasibility <em>(Score: X/10)</em></h2>
-Can it be built/delivered? Technology requirements, availability, and readiness.
+<h2>3. Market Feasibility <em>(Score: X/10)</em></h2>
+Score rubric:
+- 8–10: Strong demand (DVS > +5%, high signal evidence, growing population)
+- 5–7: Moderate demand (stable DVS, some competition, neutral demographics)
+- 0–4: Weak demand (DVS negative, low signals, declining population)
 
-<h2>4. Market Feasibility <em>(Score: X/10)</em></h2>
-Is there validated demand? Use OppGrid signal data and competitor count when provided. Market size and growth indicators.
+Include: validated demand evidence, target customer profile, market size context, competitive landscape summary (use competitor table if provided), and growth trajectory.
+
+<h2>4. Technical Feasibility <em>(Score: X/10)</em></h2>
+Can it be built/delivered? Technology, equipment, site requirements. For physical businesses, assess fit with the location's infrastructure and zoning.
 
 <h2>5. Financial Feasibility <em>(Score: X/10)</em></h2>
-Is it economically viable? Use OppGrid revenue benchmark and capital required when provided. ROI projections.
+Score rubric:
+- 8–10: Strong unit economics, high margins, low break-even risk, DSCR > 1.35x
+- 5–7: Moderate viability, DSCR 1.15–1.35x, manageable break-even
+- 0–4: High risk, DSCR < 1.15x, long payback period
+
+Include: revenue projection methodology, estimated startup costs, operating cost benchmarks (use BLS wage data if provided), break-even analysis, and ROI projections. If DSCR data is provided, calculate and report it explicitly.
 
 <h2>6. Operational Feasibility <em>(Score: X/10)</em></h2>
-Can it be executed? Resource and capability requirements.
+Staffing requirements (use BLS employment data if provided), supply chain, day-to-day execution capacity, and resource needs.
 
 <h2>7. Legal &amp; Regulatory Considerations</h2>
-Compliance requirements and potential barriers specific to the location.
+Permits, licenses, zoning, industry-specific regulations for the location. Note any known barriers.
 
 <h2>8. Risk Assessment Matrix</h2>
-HTML table: Risk | Likelihood (H/M/L) | Impact (H/M/L) | Mitigation Strategy. Use OppGrid key_risks when provided.
+HTML table with columns: Risk | Likelihood (H/M/L) | Impact (H/M/L) | Risk Score (L×I) | Mitigation Strategy.
+Use the formula scores to inform risk ratings (e.g., high CWI = low competitive risk; low FMW = high timing risk).
 
-<h2>9. Recommendation</h2>
-<strong>Verdict: GO / NO-GO / CONDITIONAL</strong> with clear justification. Reference OppGrid CWI and DVS scores when provided.
+<h2>9. Sensitivity Analysis</h2>
+Test 3 scenarios:
+- <strong>Base case:</strong> assumptions as stated
+- <strong>Optimistic (+20% revenue, -10% costs):</strong> upside potential
+- <strong>Pessimistic (-20% revenue, +10% costs):</strong> downside risk
+Show impact on break-even and ROI for each scenario.
+
+<h2>10. Recommendation</h2>
+<strong>Verdict: GO / NO-GO / CONDITIONAL</strong> with clear justification.
+Reference specific OppGrid scores: CLS, DVS, CWI, BFV.
+If CONDITIONAL, list specific conditions that must be met.
 
 <h2>Composite Feasibility Score: X/10</h2>
-Weighted average of section scores with methodology note.
+Weighted average: Market (25%) + Financial (25%) + Technical (15%) + Operational (15%) + Legal/Regulatory (10%) + Risk (10%).
+Show the calculation table.
 
-Use the scoring system consistently. Base market and financial scores on OppGrid data when provided."""
+Always cite data sources inline: "Median income $74,580 (Census ACS 2024)" or "Competitive Whitespace Index 0.82 (OppGrid FormulaEngine)".
+"""
         
         prompt = f"""Conduct a comprehensive feasibility study for:
 
@@ -797,6 +829,7 @@ Competition Level: {opportunity.get('competition_level', '')}
 """
         if secret_sauce_block:
             prompt += f"\n\n{secret_sauce_block}"
+            prompt += "\n\nUSE ALL OF THE ABOVE DATA. Do not ignore any section. Cite specific numbers and scores in your analysis."
         content = self._generate(system, prompt)
         return self._format_institutional_report(content, "Feasibility Study")
     

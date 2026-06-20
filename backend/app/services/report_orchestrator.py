@@ -44,6 +44,17 @@ REPORT_TYPE_MAP = {
     "location_analysis":    "_generate_location_analysis",
 }
 
+REPORT_TIER_MAP = {
+    "feasibility_study": 1,
+    "pitch_deck": 2,
+    "strategic_assessment": 2,
+    "pestle_analysis": 2,
+    "market_analysis": 2,
+    "location_analysis": 2,
+    "financial_model": 3,
+    "business_plan": 3,
+}
+
 # Report types that receive full economic intelligence (FRED + BLS + SEC)
 ECONOMIC_INTEL_REPORT_TYPES = {"business_plan", "market_analysis", "layer_1", "layer_2", "layer_3"}
 
@@ -143,6 +154,7 @@ class ReportOrchestrator:
         secret_sauce_block = ""
         if rdc and formula_scores:
             try:
+                _tier = REPORT_TIER_MAP.get(norm_type, 2)
                 secret_sauce_block = SecretSauceInjector.build_context_block(
                     rdc=rdc,
                     formula_scores=formula_scores,
@@ -152,10 +164,46 @@ class ReportOrchestrator:
                     macro_context=macro_context,
                     labor_data=labor_data,
                     industry_benchmarks=industry_benchmarks,
+                    report_tier=_tier,
                 )
-                logger.info("[Orchestrator] SecretSauceInjector block built successfully")
+                logger.info(f"[Orchestrator] SecretSauceInjector block built successfully (Tier {_tier})")
             except Exception as si_err:
                 logger.warning(f"[Orchestrator] SecretSauceInjector failed: {si_err}")
+
+        # ── 4a. Add DSCR calculation for lender-facing reports ──────────────
+        if norm_type in {"feasibility_study", "financial_model", "business_plan"}:
+            try:
+                from app.services.dscr_service import DSCRService
+                dscr_service = DSCRService()
+                dscr_block = dscr_service.build_context_block(
+                    business_type=category or business_type,
+                    city=city,
+                    state=state,
+                    rdc=rdc,
+                    labor_data=labor_data,
+                )
+                if dscr_block:
+                    secret_sauce_block = f"{secret_sauce_block}\n\n{dscr_block}"
+                    logger.info(f"[Orchestrator] DSCR block injected ({norm_type})")
+            except Exception as dscr_err:
+                logger.warning(f"[Orchestrator] DSCR injection failed: {dscr_err}")
+
+        # ── 4b. Add TAM/SAM/SOM calculation for market-sizing reports ───────
+        if norm_type in {"market_analysis", "business_plan", "pitch_deck", "feasibility_study"}:
+            try:
+                from app.services.market_sizing_service import MarketSizingService
+                mss = MarketSizingService()
+                tam_sam_som_block = mss.build_context_block(
+                    business_type=category or business_type,
+                    city=city,
+                    state=state,
+                    rdc=rdc,
+                )
+                if tam_sam_som_block:
+                    secret_sauce_block = f"{secret_sauce_block}\n\n{tam_sam_som_block}"
+                    logger.info(f"[Orchestrator] TAM/SAM/SOM block injected ({norm_type})")
+            except Exception as mss_err:
+                logger.warning(f"[Orchestrator] TAM/SAM/SOM injection failed: {mss_err}")
 
         # ── 5. Route to correct generator ────────────────────────────────────
         opportunity_context = {
@@ -623,7 +671,11 @@ class ReportOrchestrator:
     async def _generate_location_analysis(
         self, opportunity_context: dict, secret_sauce_block: str, db
     ) -> str:
-        """Template-based path for Location Analysis reports."""
+        """Template-based path for Location Analysis reports.
+        
+        IMPORTANT: The Secret Sauce block already contains pre-calculated formula scores
+        from FormulaEngine. We inject a strong instruction to prevent Claude from recomputing them.
+        """
         from app.models.report_template import ReportTemplate
         from app.services.llm_ai_engine import llm_ai_engine_service
         from app.services.ai_report_generator import AIReportGenerator
@@ -644,9 +696,21 @@ class ReportOrchestrator:
             loc_context = f"{loc_context}\n\n{secret_sauce_block}"
 
         prompt = tmpl.ai_prompt.replace("{context}", loc_context)
+        
+        # Override the "compute" instruction with "USE the pre-calculated values" instruction
+        # This prevents Claude from hallucinating formula inputs/outputs
+        prompt = prompt.replace(
+            "CRITICAL: For every location you must compute all 8 proprietary formula scores and the Composite Location Score (CLS). Show your work for each formula.",
+            "CRITICAL: The 8 proprietary formula scores (TAI, WMM, DVS, CWI, BFV, ATI, FMW, DSI) and the Composite Location Score (CLS) are ALREADY PRE-CALCULATED in the OppGrid Intelligence Data provided above. DO NOT recompute or invent new values. USE the pre-calculated scores exactly as provided. Show your interpretation of each score, not the derivation."
+        )
+        
         system = (
             "You are OppGrid's senior market intelligence analyst producing institutional-grade "
             f"location analysis reports.\n\n{AIReportGenerator.INSTITUTIONAL_STYLE_INSTRUCTIONS}"
+            "\n\nCRITICAL INSTRUCTION: The formula scores (TAI, WMM, DVS, CWI, BFV, ATI, FMW, DSI, CLS) "
+            "are ALREADY calculated by OppGrid's FormulaEngine and provided in the data block above. "
+            "Use these exact values. Do NOT invent, estimate, or recalculate them. "
+            "Your job is to INTERPRET and EXPLAIN the pre-calculated scores, not to derive them."
         )
 
         result = await llm_ai_engine_service.generate_response(

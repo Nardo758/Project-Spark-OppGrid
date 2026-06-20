@@ -147,31 +147,161 @@ const getRecommendationLabel = (rec?: string) => {
   return 'Hybrid Model'
 }
 
+// ── State persistence for auth redirect ───────────────────────────────────
+const STUDIO_STATE_KEY = 'oppgrid:consultant-studio:pending-state'
+const STUDIO_STATE_RESTORED_KEY = 'oppgrid:consultant-studio:restored'
+
+interface StudioSavedState {
+  activeTab: TabId
+  ideaInput: string
+  validateResult: ValidateResult | null
+  searchQuery: string
+  searchCategory: string
+  searchResult: SearchResult | null
+  locCity: string
+  locBusiness: string
+  locResult: LocationResult | null
+  cloneName: string
+  cloneAddress: string
+  cloneTargetCity: string
+  cloneTargetState: string
+  cloneResult: CloneResult | null
+  selectedReport: string
+  _savedAt: number
+}
+
+function saveStudioState(state: Omit<StudioSavedState, '_savedAt'>): void {
+  try {
+    const payload: StudioSavedState = { ...state, _savedAt: Date.now() }
+    localStorage.setItem(STUDIO_STATE_KEY, JSON.stringify(payload))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function readStudioState(): StudioSavedState | null {
+  try {
+    const raw = localStorage.getItem(STUDIO_STATE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as StudioSavedState
+    // Discard stale state (> 30 min)
+    if (Date.now() - parsed._savedAt > 30 * 60 * 1000) {
+      localStorage.removeItem(STUDIO_STATE_KEY)
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function clearStudioState(): void {
+  try {
+    localStorage.removeItem(STUDIO_STATE_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+function markStateRestored(): void {
+  try {
+    sessionStorage.setItem(STUDIO_STATE_RESTORED_KEY, '1')
+  } catch {
+    // ignore
+  }
+}
+
+function wasStateRestored(): boolean {
+  try {
+    return sessionStorage.getItem(STUDIO_STATE_RESTORED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export default function ConsultantStudio() {
   const { token, isAuthenticated } = useAuthStore()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<TabId>('validate')
 
-  const [ideaInput, setIdeaInput] = useState('')
+  // Restore saved state after login redirect (once per session)
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    if (!isAuthenticated || wasStateRestored()) return 'validate'
+    const saved = readStudioState()
+    return saved?.activeTab ?? 'validate'
+  })
+
+  const [ideaInput, setIdeaInput] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.ideaInput ?? ''
+  })
   const [validating, setValidating] = useState(false)
-  const [validateResult, setValidateResult] = useState<ValidateResult | null>(null)
+  const [validateResult, setValidateResult] = useState<ValidateResult | null>(() => {
+    if (!isAuthenticated || wasStateRestored()) return null
+    const saved = readStudioState()
+    return saved?.validateResult ?? null
+  })
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchCategory, setSearchCategory] = useState('')
+  const [searchQuery, setSearchQuery] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.searchQuery ?? ''
+  })
+  const [searchCategory, setSearchCategory] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.searchCategory ?? ''
+  })
   const [searching, setSearching] = useState(false)
-  const [searchResult, setSearchResult] = useState<SearchResult | null>(null)
+  const [searchResult, setSearchResult] = useState<SearchResult | null>(() => {
+    if (!isAuthenticated || wasStateRestored()) return null
+    const saved = readStudioState()
+    return saved?.searchResult ?? null
+  })
 
-  const [locCity, setLocCity] = useState('')
-  const [locBusiness, setLocBusiness] = useState('')
+  const [locCity, setLocCity] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.locCity ?? ''
+  })
+  const [locBusiness, setLocBusiness] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.locBusiness ?? ''
+  })
   const [locating, setLocating] = useState(false)
-  const [locResult, setLocResult] = useState<LocationResult | null>(null)
+  const [locResult, setLocResult] = useState<LocationResult | null>(() => {
+    if (!isAuthenticated || wasStateRestored()) return null
+    const saved = readStudioState()
+    return saved?.locResult ?? null
+  })
 
-  const [cloneName, setCloneName] = useState('')
-  const [cloneAddress, setCloneAddress] = useState('')
-  const [cloneTargetCity, setCloneTargetCity] = useState('')
-  const [cloneTargetState, setCloneTargetState] = useState('')
+  const [cloneName, setCloneName] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.cloneName ?? ''
+  })
+  const [cloneAddress, setCloneAddress] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.cloneAddress ?? ''
+  })
+  const [cloneTargetCity, setCloneTargetCity] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.cloneTargetCity ?? ''
+  })
+  const [cloneTargetState, setCloneTargetState] = useState(() => {
+    if (!isAuthenticated || wasStateRestored()) return ''
+    const saved = readStudioState()
+    return saved?.cloneTargetState ?? ''
+  })
   const [cloning, setCloning] = useState(false)
-  const [cloneResult, setCloneResult] = useState<CloneResult | null>(null)
+  const [cloneResult, setCloneResult] = useState<CloneResult | null>(() => {
+    if (!isAuthenticated || wasStateRestored()) return null
+    const saved = readStudioState()
+    return saved?.cloneResult ?? null
+  })
 
   // Report generation state
   const [selectedReport, setSelectedReport] = useState('')
@@ -201,6 +331,14 @@ export default function ConsultantStudio() {
 
   // Ref to hold the AbortController for cancelling in-flight report requests
   const reportAbortRef = useRef<AbortController | null>(null)
+
+  // After login redirect: clear saved state and mark as restored so we don't re-restore on refresh
+  useEffect(() => {
+    if (isAuthenticated && readStudioState()) {
+      clearStudioState()
+      markStateRestored()
+    }
+  }, [isAuthenticated])
 
   const REPORTS = [
     { id: 'feasibility_study', name: 'Feasibility Study', description: 'Quick viability check with market validation', price_cents: 2500, icon: Shield },
@@ -368,10 +506,59 @@ export default function ConsultantStudio() {
         <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
           {reportError}
           {!isAuthenticated && (
-            <div className="mt-2 flex gap-2">
-              <button type="button" onClick={() => navigate('/login')} className="text-sm underline font-medium">Sign In</button>
-              <span className="text-gray-400">or</span>
-              <button type="button" onClick={() => navigate('/signup')} className="text-sm underline font-medium">Create Account</button>
+            <div className="mt-3 flex flex-col gap-2">
+              <p className="text-xs text-red-600">Sign in to unlock your report and keep your analysis.</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveStudioState({
+                      activeTab,
+                      ideaInput,
+                      validateResult,
+                      searchQuery,
+                      searchCategory,
+                      searchResult,
+                      locCity,
+                      locBusiness,
+                      locResult,
+                      cloneName,
+                      cloneAddress,
+                      cloneTargetCity,
+                      cloneTargetState,
+                      cloneResult,
+                      selectedReport,
+                    })
+                    navigate('/login?next=/build/consultant-studio')
+                  }}
+                  className="text-sm underline font-medium"
+                >Sign In</button>
+                <span className="text-gray-400">or</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveStudioState({
+                      activeTab,
+                      ideaInput,
+                      validateResult,
+                      searchQuery,
+                      searchCategory,
+                      searchResult,
+                      locCity,
+                      locBusiness,
+                      locResult,
+                      cloneName,
+                      cloneAddress,
+                      cloneTargetCity,
+                      cloneTargetState,
+                      cloneResult,
+                      selectedReport,
+                    })
+                    navigate('/signup?next=/build/consultant-studio')
+                  }}
+                  className="text-sm underline font-medium"
+                >Create Account</button>
+              </div>
             </div>
           )}
         </div>
@@ -382,9 +569,17 @@ export default function ConsultantStudio() {
             <CheckCircle className="w-4 h-4 text-green-500" />
             <span className="text-sm font-medium text-gray-900">Report Generated</span>
           </div>
-          <pre className="text-xs text-gray-600 overflow-auto max-h-48 bg-white p-3 rounded border">
-            {JSON.stringify(reportResult, null, 2)}
-          </pre>
+          {reportResult.content && (
+            <div
+              className="prose prose-sm max-w-none text-gray-700 max-h-64 overflow-y-auto border border-gray-100 rounded-lg p-3 bg-white"
+              dangerouslySetInnerHTML={{ __html: reportResult.content }}
+            />
+          )}
+          {!reportResult.content && (
+            <pre className="text-xs text-gray-600 overflow-auto max-h-48 bg-white p-3 rounded border">
+              {JSON.stringify(reportResult, null, 2)}
+            </pre>
+          )}
         </div>
       )}
     </div>
@@ -1258,10 +1453,59 @@ export default function ConsultantStudio() {
         <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
           {reportError}
           {!isAuthenticated && (
-            <div className="mt-2 flex gap-2">
-              <button type="button" onClick={() => navigate('/login')} className="text-sm underline font-medium">Sign In</button>
-              <span className="text-gray-400">or</span>
-              <button type="button" onClick={() => navigate('/signup')} className="text-sm underline font-medium">Create Account</button>
+            <div className="mt-3 flex flex-col gap-2">
+              <p className="text-xs text-red-600">Sign in to unlock your report and keep your analysis.</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveStudioState({
+                      activeTab,
+                      ideaInput,
+                      validateResult,
+                      searchQuery,
+                      searchCategory,
+                      searchResult,
+                      locCity,
+                      locBusiness,
+                      locResult,
+                      cloneName,
+                      cloneAddress,
+                      cloneTargetCity,
+                      cloneTargetState,
+                      cloneResult,
+                      selectedReport,
+                    })
+                    navigate('/login?next=/build/consultant-studio')
+                  }}
+                  className="text-sm underline font-medium"
+                >Sign In</button>
+                <span className="text-gray-400">or</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveStudioState({
+                      activeTab,
+                      ideaInput,
+                      validateResult,
+                      searchQuery,
+                      searchCategory,
+                      searchResult,
+                      locCity,
+                      locBusiness,
+                      locResult,
+                      cloneName,
+                      cloneAddress,
+                      cloneTargetCity,
+                      cloneTargetState,
+                      cloneResult,
+                      selectedReport,
+                    })
+                    navigate('/signup?next=/build/consultant-studio')
+                  }}
+                  className="text-sm underline font-medium"
+                >Create Account</button>
+              </div>
             </div>
           )}
         </div>
@@ -1272,9 +1516,17 @@ export default function ConsultantStudio() {
             <CheckCircle className="w-4 h-4 text-green-500" />
             <span className="text-sm font-medium text-gray-900">Report Generated</span>
           </div>
-          <pre className="text-xs text-gray-600 overflow-auto max-h-48 bg-white p-3 rounded border">
-            {JSON.stringify(reportResult, null, 2)}
-          </pre>
+          {reportResult.content && (
+            <div
+              className="prose prose-sm max-w-none text-gray-700 max-h-64 overflow-y-auto border border-gray-100 rounded-lg p-3 bg-white"
+              dangerouslySetInnerHTML={{ __html: reportResult.content }}
+            />
+          )}
+          {!reportResult.content && (
+            <pre className="text-xs text-gray-600 overflow-auto max-h-48 bg-white p-3 rounded border">
+              {JSON.stringify(reportResult, null, 2)}
+            </pre>
+          )}
         </div>
       )}
     </div>
