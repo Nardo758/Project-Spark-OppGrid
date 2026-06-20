@@ -170,6 +170,41 @@ class ReportOrchestrator:
             except Exception as si_err:
                 logger.warning(f"[Orchestrator] SecretSauceInjector failed: {si_err}")
 
+        # ── 4a. Add DSCR calculation for lender-facing reports ──────────────
+        if norm_type in {"feasibility_study", "financial_model", "business_plan"}:
+            try:
+                from app.services.dscr_service import DSCRService
+                dscr_service = DSCRService()
+                dscr_block = dscr_service.build_context_block(
+                    business_type=category or business_type,
+                    city=city,
+                    state=state,
+                    rdc=rdc,
+                    labor_data=labor_data,
+                )
+                if dscr_block:
+                    secret_sauce_block = f"{secret_sauce_block}\n\n{dscr_block}"
+                    logger.info(f"[Orchestrator] DSCR block injected ({norm_type})")
+            except Exception as dscr_err:
+                logger.warning(f"[Orchestrator] DSCR injection failed: {dscr_err}")
+
+        # ── 4b. Add TAM/SAM/SOM calculation for market-sizing reports ───────
+        if norm_type in {"market_analysis", "business_plan", "pitch_deck", "feasibility_study"}:
+            try:
+                from app.services.market_sizing_service import MarketSizingService
+                mss = MarketSizingService()
+                tam_sam_som_block = mss.build_context_block(
+                    business_type=category or business_type,
+                    city=city,
+                    state=state,
+                    rdc=rdc,
+                )
+                if tam_sam_som_block:
+                    secret_sauce_block = f"{secret_sauce_block}\n\n{tam_sam_som_block}"
+                    logger.info(f"[Orchestrator] TAM/SAM/SOM block injected ({norm_type})")
+            except Exception as mss_err:
+                logger.warning(f"[Orchestrator] TAM/SAM/SOM injection failed: {mss_err}")
+
         # ── 5. Route to correct generator ────────────────────────────────────
         opportunity_context = {
             "title": business_type,
