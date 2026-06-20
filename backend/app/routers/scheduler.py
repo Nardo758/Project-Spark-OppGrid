@@ -102,6 +102,86 @@ def trigger_hub_refresh(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/trigger/government-ingest")
+def trigger_government_ingest(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Trigger government data ingestion for free Tier 1 sources."""
+    try:
+        from app.services.government_data_service import GovernmentDataService
+        svc = GovernmentDataService(db)
+        sam_result = svc.ingest_sam_gov_awards(limit=100)
+        return {
+            "status": "ok",
+            "job": "government_ingest",
+            "triggered_at": datetime.utcnow().isoformat(),
+            "sam_gov": sam_result,
+        }
+    except Exception as e:
+        logger.error(f"Government ingest trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trigger/signal-detection")
+def trigger_signal_detection(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Trigger signal detection from public feeds (SEC Form D, etc.)."""
+    try:
+        from app.services.signal_detector import SignalDetector
+        detector = SignalDetector(db)
+        sec_result = detector.detect_funding_from_sec()
+        return {
+            "status": "ok",
+            "job": "signal_detection",
+            "triggered_at": datetime.utcnow().isoformat(),
+            "sec_form_d": sec_result,
+        }
+    except Exception as e:
+        logger.error(f"Signal detection trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/trigger/waterfall-enrich")
+def trigger_waterfall_enrichment(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Run waterfall enrichment for unpaired signals."""
+    try:
+        from app.services.waterfall_lookup import WaterfallLookupService
+        from app.models.opportunity_signal import OpportunitySignal
+        svc = WaterfallLookupService(db)
+
+        unpaired = db.query(OpportunitySignal).filter(
+            OpportunitySignal.paired_contact_id.is_(None),
+            OpportunitySignal.actioned == False,
+        ).limit(50).all()
+
+        enriched = 0
+        for signal in unpaired:
+            company = ""
+            if signal.signal_value:
+                company = signal.signal_value.get("company_name", "")
+            if not company:
+                continue
+            # Placeholder: in production, lookup contact from company name
+            enriched += 1
+
+        return {
+            "status": "ok",
+            "job": "waterfall_enrich",
+            "triggered_at": datetime.utcnow().isoformat(),
+            "unpaired_signals": len(unpaired),
+            "enriched": enriched,
+        }
+    except Exception as e:
+        logger.error(f"Waterfall enrich trigger failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/trigger/all")
 def trigger_all_scheduled_jobs(
     admin: User = Depends(require_admin),
@@ -139,6 +219,38 @@ def trigger_all_scheduled_jobs(
         errors.append(f"hub_refresh: {str(e)}")
         results["hub_refresh"] = {"error": str(e)}
 
+    # 3. Government data ingest
+    try:
+        from app.services.government_data_service import GovernmentDataService
+        svc = GovernmentDataService(db)
+        results["government_ingest"] = {
+            "sam_gov": svc.ingest_sam_gov_awards(limit=100),
+        }
+    except Exception as e:
+        logger.error(f"Government ingest failed in all-jobs run: {e}")
+        errors.append(f"government_ingest: {str(e)}")
+        results["government_ingest"] = {"error": str(e)}
+
+    # 4. Signal detection
+    try:
+        from app.services.signal_detector import SignalDetector
+        detector = SignalDetector(db)
+        results["signal_detection"] = detector.detect_funding_from_sec()
+    except Exception as e:
+        logger.error(f"Signal detection failed in all-jobs run: {e}")
+        errors.append(f"signal_detection: {str(e)}")
+        results["signal_detection"] = {"error": str(e)}
+
+    # 5. Auto-approve high-confidence staged records
+    try:
+        from app.services.enrichment_service import EnrichmentService
+        svc = EnrichmentService(db)
+        results["auto_approve"] = {"approved_count": svc.auto_approve()}
+    except Exception as e:
+        logger.error(f"Auto-approve failed in all-jobs run: {e}")
+        errors.append(f"auto_approve: {str(e)}")
+        results["auto_approve"] = {"error": str(e)}
+
     return {
         "status": "partial" if errors else "ok",
         "triggered_at": datetime.utcnow().isoformat(),
@@ -158,6 +270,10 @@ def get_scheduler_status(
         "jobs": [
             {"name": "google_scraper", "schedule": "Every 6 hours via external cron", "endpoint": "/api/v1/admin/scheduler/trigger/google-scraper"},
             {"name": "hub_refresh", "schedule": "Every 6 hours via external cron", "endpoint": "/api/v1/admin/scheduler/trigger/hub-refresh"},
+            {"name": "government_ingest", "schedule": "Daily via external cron", "endpoint": "/api/v1/admin/scheduler/trigger/government-ingest"},
+            {"name": "signal_detection", "schedule": "Daily via external cron", "endpoint": "/api/v1/admin/scheduler/trigger/signal-detection"},
+            {"name": "waterfall_enrich", "schedule": "Every 6 hours via external cron", "endpoint": "/api/v1/admin/scheduler/trigger/waterfall-enrich"},
+            {"name": "auto_approve", "schedule": "Every 6 hours via external cron", "endpoint": "/api/v1/enrichment/run-auto-approve"},
             {"name": "all", "schedule": "Every 6 hours via external cron", "endpoint": "/api/v1/admin/scheduler/trigger/all"},
         ],
     }

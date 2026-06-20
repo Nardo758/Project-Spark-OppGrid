@@ -1,35 +1,51 @@
-# Report Structure Deep Research Plan
+# Deep Research Plan: Alternative Data Sourcing for Platform Enhancement
 
-## Goal
-Research industry-standard structures, data requirements, and best practices for all 8 report types. Map against our current data pipeline. Identify proprietary data gaps.
+## Topic
+Other places to source data to improve dataset offering, leads, opportunities, and overall platform data.
 
-## Stage 1 — Research (deep-research-swarm, Route B: Focused Search)
-Load `deep-research-swarm` skill. Deploy parallel research agents per report type.
+## Route
+**Route B — Focused Search** (specific question with 5 clear expert perspective dimensions)
 
-Dimensions:
-1. **Feasibility Study** — What sections, data points, frameworks do VCs/lenders expect? (SBA, SCORE, IBISWorld standards)
-2. **Pitch Deck** — Sequoia/YC/Benchmark template standards. What data slides are mandatory?
-3. **Strategic Assessment** — McKinsey/BCG/Bain frameworks. SWOT, Porter's Five Forces, Ansoff Matrix requirements.
-4. **PESTLE Analysis** — Macro-environment scanning standards. Which indicators per factor? Data sources.
-5. **Market Analysis** — TAM/SAM/SOM calculation standards. Competitive landscape mapping. Industry report structure (IBISWorld, Euromonitor, Forrester).
-6. **Location Analysis** — Site selection methodology (CoStar, REIS, ESRI standards). Demographics, traffic, competition scoring.
-7. **Financial Model** — 3-statement model standards. SaaS vs physical business unit economics. Cap table, DCF, sensitivity analysis.
-8. **Business Plan** — SBA/SCORE/BPlan.com template. Executive summary, market analysis, operations, financials, appendices.
-9. **Data Pipeline Audit** — What data sources do we currently have? What gaps exist for each report type?
-10. **Proprietary Data Opportunities** — What unique data can OppGrid generate? Formula scores, signal database, competitor intelligence, opportunity ranking.
+## Current Date Anchor
+2026-06-20 EDT
 
-## Stage 2 — Synthesis
-Cross-verify findings across all 8 reports. Identify:
-- Common sections that appear in multiple reports (avoid duplication)
-- Data dependencies (which data feeds which sections)
-- Pipeline gaps (data we need but don't have)
-- Proprietary differentiators (data only we can provide)
+## Phase 1: Landscape Scan — COMPLETE
+Key findings from 5 coarse-to-fine searches:
+1. **B2B data enrichment market** is mature with players like ZoomInfo, Apollo.io, Cognism, Crustdata, Clearbit — offering databases, real-time scraping, and APIs.
+2. **Open/government data** (data.gov, business registries, SEC filings) provides free, structured business records but with coverage gaps.
+3. **Legal landscape**: hiQ v. LinkedIn (public scraping legal under CFAA), but GDPR/CCPA heavily restrict personal data scraping. Meta v. Bright Data, Reddit v. Perplexity ongoing.
+4. **Emerging trends**: Proprietary data as AI moat; real-time vs. cached data tradeoffs; AI-driven synthesis; regulatory fragmentation (EU AI Act, DSA).
+5. **Lead sourcing strategies**: B2B databases, social media (LinkedIn, X), events, ABM, intent data, AI-powered enrichment, web scraping with compliance.
 
-## Stage 3 — Integration
-Produce final deliverable: `report_structures_research.md` with:
-- Per-report: recommended sections, data requirements, sources, proprietary additions
-- Pipeline gap matrix: what data is missing and how to get it
-- Proprietary data roadmap: what unique data to build next
+## Phase 2: Dimension Decomposition (5 Expert Perspectives)
 
-## Output
-All files under `research/report_structures/` directory.
+| Dimension | Expert | Angle | Key Research Focus |
+|-----------|--------|-------|-------------------|
+| Dim 01 | THE PRACTITIONER | Daily operational reality | What data sources actually work in production vs. what vendors claim; integration pain points; data decay rates; practical ROI |
+| Dim 02 | THE ACADEMIC | Peer-reviewed evidence | What research says about data quality, bias in commercial datasets, information asymmetry; where evidence contradicts popular belief |
+| Dim 03 | THE SKEPTIC | Counterargument to mainstream | Why the "more data = better" narrative is wrong; hidden costs; compliance traps; evidence proponents ignore |
+| Dim 04 | THE ECONOMIST | Financial incentives & market structure | Who profits from the current data sourcing narrative; pricing power dynamics; arbitrage opportunities in data markets |
+| Dim 05 | THE HISTORIAN | Historical parallels & pattern recognition | How data sourcing strategies have evolved; what happened to previous "data gold rush" platforms; lessons from information market bubbles |
+
+## Phase 3: Parallel Deep Dive
+- 5 sub-agents, one per perspective
+- Each performs ≥10 independent searches from their specific angle
+- Each outputs: core position (2 sentences), strongest evidence, unique insight
+- Output files: `research/data_sourcing_dim01.md` through `dim05.md`
+
+## Phase 4: Cross-Verification
+- Compare findings across all 5 perspectives
+- Classify confidence tiers
+- Identify contradictions and convergences
+- Save to `research/data_sourcing_cross_verification.md`
+
+## Phase 6: Insight Extraction
+- Identify non-obvious insights from cross-perspective synthesis
+- Save to `research/data_sourcing_insight.md`
+
+## Phase 7: Final Synthesis
+- Produce final deliverable in the user's requested format:
+  - Core position (2 sentences) per perspective
+  - Strongest evidence per perspective
+  - One unique thing per perspective
+- Save to `research/data_sourcing_final_synthesis.md`

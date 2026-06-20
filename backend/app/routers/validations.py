@@ -6,6 +6,7 @@ from app.db.database import get_db
 from app.models.validation import Validation
 from app.models.opportunity import Opportunity
 from app.models.user import User
+from app.models.user_behavior_signal import UserBehaviorSignal
 from app.schemas.validation import ValidationCreate, Validation as ValidationSchema
 from app.core.dependencies import get_current_active_user
 from app.services.badges import BadgeService, award_impact_points
@@ -64,6 +65,17 @@ def create_validation(
             opportunity_title=opportunity.title,
             validation_type="validated"
         )
+
+        # Capture first-party behavior signal
+        behavior_signal = UserBehaviorSignal(
+            user_id=current_user.id,
+            entity_type="opportunity",
+            entity_id=opportunity.id,
+            action="validated",
+            metadata={"validation_score": getattr(validation_data, "score", None)},
+        )
+        db.add(behavior_signal)
+        db.commit()
 
         return new_validation
 
