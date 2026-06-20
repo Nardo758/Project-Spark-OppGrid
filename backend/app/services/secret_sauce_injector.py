@@ -48,30 +48,45 @@ class SecretSauceInjector:
         macro_context: Optional[MacroeconomicContext] = None,
         labor_data: Optional[IndustryLaborData] = None,
         industry_benchmarks: Optional[IndustryBenchmarks] = None,
+        report_tier: int = 2,
     ) -> str:
         """
         Return the complete OppGrid intelligence block to prepend to any Claude prompt.
         All sections degrade gracefully when data is unavailable.
         Economic data sections are only included when the corresponding argument is provided.
+        
+        Tier differentiation:
+            Tier 1 ($25): Basic competitor count, 3 core formulas (CLS, CWI, DVS), no signal evidence
+            Tier 2 ($79-$99): Full competitor section, all 8 formulas, signal evidence
+            Tier 3 ($129-$149): Everything + economic intelligence + benchmarks
         """
         sections = [
             SecretSauceInjector._build_header(business_type, city, state),
-            SecretSauceInjector._build_competitor_section(rdc),
-            SecretSauceInjector._build_demographics_section(rdc),
-            SecretSauceInjector._build_formula_scores_section(formula_scores),
-            SecretSauceInjector._build_signal_evidence_section(rdc, business_type, city),
         ]
+        
+        # Tier 1: Only basic competitor count, no detailed names/ratings
+        if report_tier >= 1:
+            sections.append(SecretSauceInjector._build_competitor_section(rdc, tier=report_tier))
+            sections.append(SecretSauceInjector._build_demographics_section(rdc))
+        
+        # Formula scores: Tier 1 gets only core 3, Tier 2+ gets all 8
+        sections.append(SecretSauceInjector._build_formula_scores_section(formula_scores, tier=report_tier))
+        
+        # Signal evidence: Tier 2+ only
+        if report_tier >= 2:
+            sections.append(SecretSauceInjector._build_signal_evidence_section(rdc, business_type, city))
 
-        # Economic intelligence sections (optional — provided for business_plan / market_analysis)
-        if macro_context is not None:
-            sections.append(SecretSauceInjector._build_macro_context_section(macro_context))
-        if labor_data is not None:
-            sections.append(SecretSauceInjector._build_labor_section(labor_data))
-        if industry_benchmarks is not None:
-            sections.append(SecretSauceInjector._build_benchmarks_section(industry_benchmarks))
+        # Economic intelligence sections (Tier 3 only, and only when data is provided)
+        if report_tier >= 3:
+            if macro_context is not None:
+                sections.append(SecretSauceInjector._build_macro_context_section(macro_context))
+            if labor_data is not None:
+                sections.append(SecretSauceInjector._build_labor_section(labor_data))
+            if industry_benchmarks is not None:
+                sections.append(SecretSauceInjector._build_benchmarks_section(industry_benchmarks))
 
         sections.append(SecretSauceInjector._build_data_sources_section(
-            rdc, macro_context, labor_data, industry_benchmarks
+            rdc, macro_context, labor_data, industry_benchmarks, tier=report_tier
         ))
         sections.append(SecretSauceInjector._build_instructions(
             has_economic_data=any(x is not None for x in [macro_context, labor_data, industry_benchmarks])
@@ -91,7 +106,8 @@ class SecretSauceInjector:
         )
 
     @staticmethod
-    def _build_competitor_section(rdc: "ReportDataContext") -> str:
+    def _build_competitor_section(rdc: "ReportDataContext", tier: int = 2) -> str:
+        """Competitor section — Tier 1 shows only count, Tier 2+ shows full table."""
         if not rdc or not rdc.promotion:
             return (
                 "### Competitive Landscape\n"
@@ -111,6 +127,19 @@ class SecretSauceInjector:
                 "Do NOT invent competitor names or counts."
             )
 
+        # Tier 1: Only basic count
+        if tier == 1:
+            lines = ["### Competitive Landscape"]
+            if competitor_count is not None:
+                lines.append(f"Total competitors within 5 miles: {competitor_count}")
+            if competition_level:
+                lines.append(f"Competition level: {competition_level.title()}")
+            if competitor_count is not None and competitor_count == 0:
+                lines.append("No direct competitors found in this market — potential first-mover advantage.")
+            lines.append("\nFull competitor analysis with ratings, reviews, and positioning is available in premium reports.")
+            return "\n".join(lines)
+
+        # Tier 2+: Full competitor table
         lines = ["### Competitive Landscape (Real Data)"]
         if competitor_count is not None:
             lines.append(f"Total competitors within 5 miles: {competitor_count}")
@@ -192,7 +221,8 @@ class SecretSauceInjector:
         return "\n".join(lines)
 
     @staticmethod
-    def _build_formula_scores_section(scores: FormulaScores) -> str:
+    def _build_formula_scores_section(scores: FormulaScores, tier: int = 2) -> str:
+        """Formula scores — Tier 1 gets 3 core, Tier 2+ gets all 8."""
         if not scores:
             return "### OppGrid Proprietary Scores\nScores not calculated."
 
@@ -206,6 +236,18 @@ class SecretSauceInjector:
             "|---------|-------|----------------|",
         ]
 
+        # Tier 1: Core 3 formulas only
+        if tier == 1:
+            lines.append(f"| Demand Velocity Score (DVS) | {scores.dvs:+.1f}% | {scores.interpret('dvs')} |")
+            lines.append(f"| Competitive Whitespace Index (CWI) | {scores.cwi:.2f} | {scores.interpret('cwi')} |")
+            lines.append(f"| Business Formation Velocity (BFV) | {scores.bfv:.1f}/10k | {scores.interpret('bfv')} |")
+            lines.append(
+                "\nTier 1 reports include the three core formula scores above. "
+                "Premium reports unlock all 8 proprietary formulas."
+            )
+            return "\n".join(lines)
+
+        # Tier 2+: All 8 formulas
         tai_str = f"{scores.tai:+.3f}" if scores.tai_available else "N/A*"
         lines.append(f"| Traffic Anomaly Index (TAI) | {tai_str} | {scores.interpret('tai')} |")
         lines.append(f"| Wealth Migration Momentum (WMM) | {scores.wmm:.3f} | {scores.interpret('wmm')} |")
@@ -406,6 +448,7 @@ class SecretSauceInjector:
         macro_context: Optional[MacroeconomicContext] = None,
         labor_data: Optional[IndustryLaborData] = None,
         industry_benchmarks: Optional[IndustryBenchmarks] = None,
+        tier: int = 2,
     ) -> str:
         sources = [
             "U.S. Census Bureau, American Community Survey 5-Year Estimates (2020-2024)",
@@ -414,27 +457,26 @@ class SecretSauceInjector:
         if rdc and rdc.promotion and (rdc.promotion.google_places_competitors or rdc.promotion.competitor_count is not None):
             sources.append("Google Maps Places API — competitor scan within 5-mile radius")
 
-        if rdc and rdc.product and rdc.product.amenity_demand:
-            sources.append("OppGrid Signal Database — aggregated consumer demand signals")
-
-        if rdc and rdc.product and rdc.product.google_trends_interest is not None:
-            sources.append("Google Trends — search interest index")
+        if tier >= 2:
+            if rdc and rdc.product and rdc.product.amenity_demand:
+                sources.append("OppGrid Signal Database — aggregated consumer demand signals")
+            if rdc and rdc.product and rdc.product.google_trends_interest is not None:
+                sources.append("Google Trends — search interest index")
 
         if rdc and rdc.price and rdc.price.zillow_home_value:
             sources.append("Zillow Research — real estate market data")
 
-        if macro_context is not None:
-            sources.append("FRED (Federal Reserve Bank of St. Louis) — macroeconomic indicators")
-
-        if labor_data is not None:
-            source_prefix = labor_data.source if labor_data.source else "BLS QCEW"
-            sources.append(f"{source_prefix} — {labor_data.industry_name} industry labor data")
-
-        if industry_benchmarks is not None:
-            tickers = ", ".join(c.ticker for c in (industry_benchmarks.public_comps or []))
-            sources.append(
-                f"SEC 10-K filings via sec-api.io — public company financials ({tickers})"
-            )
+        if tier >= 3:
+            if macro_context is not None:
+                sources.append("FRED (Federal Reserve Bank of St. Louis) — macroeconomic indicators")
+            if labor_data is not None:
+                source_prefix = labor_data.source if labor_data.source else "BLS QCEW"
+                sources.append(f"{source_prefix} — {labor_data.industry_name} industry labor data")
+            if industry_benchmarks is not None:
+                tickers = ", ".join(c.ticker for c in (industry_benchmarks.public_comps or []))
+                sources.append(
+                    f"SEC 10-K filings via sec-api.io — public company financials ({tickers})"
+                )
 
         sources.append("OppGrid FormulaEngine v1.0 — proprietary composite scoring")
 

@@ -44,6 +44,17 @@ REPORT_TYPE_MAP = {
     "location_analysis":    "_generate_location_analysis",
 }
 
+REPORT_TIER_MAP = {
+    "feasibility_study": 1,
+    "pitch_deck": 2,
+    "strategic_assessment": 2,
+    "pestle_analysis": 2,
+    "market_analysis": 2,
+    "location_analysis": 2,
+    "financial_model": 3,
+    "business_plan": 3,
+}
+
 # Report types that receive full economic intelligence (FRED + BLS + SEC)
 ECONOMIC_INTEL_REPORT_TYPES = {"business_plan", "market_analysis", "layer_1", "layer_2", "layer_3"}
 
@@ -143,6 +154,7 @@ class ReportOrchestrator:
         secret_sauce_block = ""
         if rdc and formula_scores:
             try:
+                _tier = REPORT_TIER_MAP.get(norm_type, 2)
                 secret_sauce_block = SecretSauceInjector.build_context_block(
                     rdc=rdc,
                     formula_scores=formula_scores,
@@ -152,8 +164,9 @@ class ReportOrchestrator:
                     macro_context=macro_context,
                     labor_data=labor_data,
                     industry_benchmarks=industry_benchmarks,
+                    report_tier=_tier,
                 )
-                logger.info("[Orchestrator] SecretSauceInjector block built successfully")
+                logger.info(f"[Orchestrator] SecretSauceInjector block built successfully (Tier {_tier})")
             except Exception as si_err:
                 logger.warning(f"[Orchestrator] SecretSauceInjector failed: {si_err}")
 
