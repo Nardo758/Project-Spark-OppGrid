@@ -62,3 +62,4 @@ class Lead(Base):
     user = relationship("User", foreign_keys=[user_id], backref="lead_records")
     assigned_to = relationship("User", foreign_keys=[assigned_to_id])
     opportunity = relationship("Opportunity", backref="leads")
+    signals = relationship("OpportunitySignal", back_populates="paired_contact")

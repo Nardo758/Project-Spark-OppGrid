@@ -109,4 +109,5 @@ class Opportunity(Base):
     enhanced_workspaces = relationship("EnhancedUserWorkspace", back_populates="opportunity")
     user_notes = relationship("OpportunityNote", back_populates="opportunity", cascade="all, delete-orphan")
     service_areas = relationship("ServiceAreaBoundary", back_populates="opportunity", cascade="all, delete-orphan")
+    signals = relationship("OpportunitySignal", back_populates="opportunity")
     claim_limit_record = relationship("OpportunityClaimLimit", back_populates="opportunity", uselist=False, cascade="all, delete-orphan")

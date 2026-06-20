@@ -13,6 +13,7 @@ import stripe
 from app.db.database import get_db
 from app.models.dataset import Dataset, DatasetPurchase, DatasetType
 from app.models.user import User
+from app.models.user_behavior_signal import UserBehaviorSignal
 from app.core.dependencies import get_current_user
 from app.core.security import decode_access_token
 from app.services.dataset_delivery_service import get_delivery_service
@@ -398,6 +399,17 @@ def purchase_dataset_by_id(
     db.commit()
 
     logger.info(f"Dataset purchase completed: {purchase_id} for user {current_user.id}")
+
+    # Capture first-party behavior signal
+    behavior_signal = UserBehaviorSignal(
+        user_id=current_user.id,
+        entity_type="dataset",
+        entity_id=int(dataset_id) if dataset_id.isdigit() else 0,
+        action="purchased",
+        metadata={"price_cents": dataset.price_cents, "dataset_name": dataset.name},
+    )
+    db.add(behavior_signal)
+    db.commit()
 
     return {
         "purchase_id": purchase_id,

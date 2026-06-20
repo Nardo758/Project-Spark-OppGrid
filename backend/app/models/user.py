@@ -101,6 +101,7 @@ class User(Base):
     ai_preference = relationship("UserAIPreference", back_populates="user", uselist=False, cascade="all, delete-orphan")
     ai_usage = relationship("UserAIUsage", back_populates="user", cascade="all, delete-orphan")
     api_keys = relationship("APIKey", back_populates="user", cascade="all, delete-orphan")
+    behavior_signals = relationship("UserBehaviorSignal", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserAIPreference(Base):

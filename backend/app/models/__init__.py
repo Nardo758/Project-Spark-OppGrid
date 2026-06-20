@@ -80,6 +80,10 @@ from .api_usage import APIUsage
 from .agent_webhook_subscription import AgentWebhookSubscription
 from .dataset import Dataset, DatasetPurchase, DatasetType
 from .micro_market import MicroMarket, SuccessProfile, IdentifyLocationCache
+from .raw_enrichment import RawEnrichment, EnrichmentStatus
+from .opportunity_signal import OpportunitySignal
+from .data_quality_audit import DataQualityAudit
+from .user_behavior_signal import UserBehaviorSignal
 
 __all__ = [
     "User",
@@ -236,4 +240,9 @@ __all__ = [
     "MicroMarket",
     "SuccessProfile",
     "IdentifyLocationCache",
+    "RawEnrichment",
+    "EnrichmentStatus",
+    "OpportunitySignal",
+    "DataQualityAudit",
+    "UserBehaviorSignal",
 ]

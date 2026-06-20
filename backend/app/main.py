@@ -89,6 +89,8 @@ from app.routers import (
     opportunity_lifecycle,
     scheduler,
     mapping_reports,
+    enrichment,
+    verified_data,
 )
 
 install_trace_id_factory()
@@ -203,6 +205,8 @@ app.include_router(agent_api.router, tags=["Agent Opportunities API"])
 app.include_router(datasets_api.router, tags=["Dataset Marketplace"])
 app.include_router(scheduler.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Scheduler"])
 app.include_router(market.router, prefix=f"{settings.API_V1_PREFIX}", tags=["Market Intelligence"])
+app.include_router(enrichment.router, tags=["Enrichment"])
+app.include_router(verified_data.router, tags=["Verified Data"])
 
 # Mount the Public API v1 sub-application.
 # Swagger UI available at /v1/docs.

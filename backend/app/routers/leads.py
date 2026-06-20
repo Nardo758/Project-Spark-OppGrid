@@ -13,6 +13,7 @@ from datetime import datetime
 from app.db.database import get_db
 from app.models.user import User
 from app.models.lead import Lead, LeadStatus, LeadSource
+from app.models.user_behavior_signal import UserBehaviorSignal
 from app.schemas.lead import (
     LeadCreate,
     LeadUpdate,
@@ -151,6 +152,17 @@ async def create_lead(
             to=lead.email,
             name=lead.name or "there"
         )
+    
+    # Capture first-party behavior signal
+    behavior_signal = UserBehaviorSignal(
+        user_id=admin_user.id,
+        entity_type="lead",
+        entity_id=lead.id,
+        action="created",
+        metadata={"email": lead.email, "source": lead.source.value if lead.source else "organic"},
+    )
+    db.add(behavior_signal)
+    db.commit()
     
     return _lead_to_response(lead)
 
