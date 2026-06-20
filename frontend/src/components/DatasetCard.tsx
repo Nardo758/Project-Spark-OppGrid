@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, ShoppingCart, Star, Database } from 'lucide-react'
 import DatasetPreview from './DatasetPreview'
+import { DataQualityBadge } from './DataQualityBadge'
 import { useAuthStore } from '../stores/authStore'
 
 interface Dataset {
@@ -124,6 +125,9 @@ export default function DatasetCard({ dataset }: { dataset: Dataset }) {
           <span>4.0</span>
           <span className="text-gray-400">· 124 purchases</span>
         </div>
+
+        {/* Data Quality Badge */}
+        <DataQualityBadge dataset={dataset.dataset_type} />
 
         <div className="flex-1" />
 
