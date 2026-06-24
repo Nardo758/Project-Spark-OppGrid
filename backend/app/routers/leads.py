@@ -159,7 +159,7 @@ async def create_lead(
         entity_type="lead",
         entity_id=lead.id,
         action="created",
-        metadata={"email": lead.email, "source": lead.source.value if lead.source else "organic"},
+        meta={"email": lead.email, "source": lead.source.value if lead.source else "organic"},
     )
     db.add(behavior_signal)
     db.commit()

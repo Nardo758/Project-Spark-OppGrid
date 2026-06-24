@@ -406,7 +406,7 @@ def purchase_dataset_by_id(
         entity_type="dataset",
         entity_id=int(dataset_id) if dataset_id.isdigit() else 0,
         action="purchased",
-        metadata={"price_cents": dataset.price_cents, "dataset_name": dataset.name},
+        meta={"price_cents": dataset.price_cents, "dataset_name": dataset.name},
     )
     db.add(behavior_signal)
     db.commit()

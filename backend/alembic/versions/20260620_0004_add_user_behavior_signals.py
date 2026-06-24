@@ -31,7 +31,7 @@ def upgrade() -> None:
         sa.Column("entity_type", sa.String(length=50), nullable=False, index=True),
         sa.Column("entity_id", sa.Integer(), nullable=False, index=True),
         sa.Column("action", sa.String(length=50), nullable=False, index=True),
-        sa.Column("metadata", postgresql.JSONB(), nullable=True),
+        sa.Column("meta", postgresql.JSONB(), nullable=True),
         sa.Column("session_id", sa.String(length=100), nullable=True, index=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=True, index=True),
     )

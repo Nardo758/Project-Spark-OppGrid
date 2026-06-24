@@ -15,7 +15,7 @@ class UserBehaviorSignal(Base):
     entity_type = Column(String(50), nullable=False, index=True)
     entity_id = Column(Integer, nullable=False, index=True)
     action = Column(String(50), nullable=False, index=True)
-    metadata = Column(JSONB, nullable=True)
+    meta = Column(JSONB, nullable=True)
     session_id = Column(String(100), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 

@@ -72,7 +72,7 @@ def create_validation(
             entity_type="opportunity",
             entity_id=opportunity.id,
             action="validated",
-            metadata={"validation_score": getattr(validation_data, "score", None)},
+            meta={"validation_score": getattr(validation_data, "score", None)},
         )
         db.add(behavior_signal)
         db.commit()
