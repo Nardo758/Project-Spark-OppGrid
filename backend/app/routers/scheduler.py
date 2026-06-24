@@ -107,16 +107,31 @@ def trigger_government_ingest(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Trigger government data ingestion for free Tier 1 sources."""
+    """Trigger government data ingestion for free Tier 1 sources across all states."""
     try:
-        from app.services.government_data_service import GovernmentDataService
+        from app.services.government_data_service import GovernmentDataService, STATE_FIPS
         svc = GovernmentDataService(db)
+        
+        # Run SAM.gov (national, not state-specific)
         sam_result = svc.ingest_sam_gov_awards(limit=100)
+        
+        # Run all new state-level ingestions for a sample of states (e.g., CA, TX, NY, FL)
+        # Full 50-state run should be done via /api/v1/enrichment/run-government-ingest-all-states
+        sample_states = ["CA", "TX", "NY", "FL", "IL", "PA", "OH", "GA", "NC", "MI"]
+        state_results = {}
+        for state_code in sample_states:
+            try:
+                state_results[state_code] = svc.ingest_all_for_state(state_code)
+            except Exception as e:
+                logger.error(f"State ingestion failed for {state_code}: {e}")
+                state_results[state_code] = {"status": "error", "error": str(e)}
+        
         return {
             "status": "ok",
             "job": "government_ingest",
             "triggered_at": datetime.utcnow().isoformat(),
             "sam_gov": sam_result,
+            "state_ingestions": state_results,
         }
     except Exception as e:
         logger.error(f"Government ingest trigger failed: {e}")
@@ -221,11 +236,21 @@ def trigger_all_scheduled_jobs(
 
     # 3. Government data ingest
     try:
-        from app.services.government_data_service import GovernmentDataService
+        from app.services.government_data_service import GovernmentDataService, STATE_FIPS
         svc = GovernmentDataService(db)
         results["government_ingest"] = {
             "sam_gov": svc.ingest_sam_gov_awards(limit=100),
         }
+        # Also run a sample of states for full coverage
+        sample_states = ["CA", "TX", "NY", "FL", "IL"]
+        state_results = {}
+        for state_code in sample_states:
+            try:
+                state_results[state_code] = svc.ingest_all_for_state(state_code)
+            except Exception as e:
+                logger.error(f"All-jobs state ingestion failed for {state_code}: {e}")
+                state_results[state_code] = {"status": "error", "error": str(e)}
+        results["government_ingest"]["state_ingestions"] = state_results
     except Exception as e:
         logger.error(f"Government ingest failed in all-jobs run: {e}")
         errors.append(f"government_ingest: {str(e)}")

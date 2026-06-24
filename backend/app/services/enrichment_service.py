@@ -128,7 +128,7 @@ class EnrichmentService:
 
     def auto_approve(self, threshold: float = 0.90) -> int:
         """Auto-approve government data and high-confidence records."""
-        auto_sources = os.getenv("ENRICHMENT_AUTO_APPROVE_SOURCES", "sec_edgar,companies_house,open_corporates,sam_gov").split(",")
+        auto_sources = os.getenv("ENRICHMENT_AUTO_APPROVE_SOURCES", "sec_edgar,companies_house,open_corporates,sam_gov,census_acs5,bls_api,usaspending,sba_api,sba_static").split(",")
         auto_sources = [s.strip() for s in auto_sources]
 
         records = (
