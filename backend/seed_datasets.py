@@ -20,6 +20,18 @@ from app.models.dataset import Dataset
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
+TYPE_ABBREV = {
+    "opportunities": "opp",
+    "markets": "mkt",
+    "trends": "trn",
+    "opportunity_signals": "sig",
+    "market_intelligence": "4ps",
+    "economic_intelligence": "eco",
+    "competition_intelligence": "comp",
+    "raw_data": "raw",
+}
+
+
 SEED_USER_ID = "system"  # created_by_user_id for seeded datasets
 
 DATASET_TIERS = [
@@ -123,7 +135,7 @@ def seed_datasets(db: Session) -> int:
     for city in CITIES:
         for tier in DATASET_TIERS:
             dataset_type = tier["dataset_type"]
-            dataset_id = f"ds-{city.lower().replace(' ', '-')}-{dataset_type}"
+            dataset_id = f"ds-{city.lower().replace(' ', '-')}-{TYPE_ABBREV.get(dataset_type, dataset_type[:3])}"
 
             # Idempotency: skip if already exists
             existing = db.query(Dataset).filter(Dataset.id == dataset_id).first()
