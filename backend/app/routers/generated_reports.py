@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 from typing import Optional
 from datetime import datetime, timedelta
@@ -18,7 +18,7 @@ from app.schemas.generated_report import (
     ReportStats,
     UserReportStats,
 )
-from app.core.dependencies import get_current_user, get_current_admin_user
+from app.core.dependencies import get_current_user, get_current_user_optional, get_current_admin_user
 from app.services.report_quota_service import ReportQuotaService
 
 logger = logging.getLogger(__name__)
@@ -284,7 +284,7 @@ def get_report(
 @router.post("/opportunity/{opportunity_id}/layer1")
 async def generate_layer1_report(
     opportunity_id: int,
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
     """
@@ -410,7 +410,7 @@ async def generate_layer1_report(
 @router.post("/opportunity/{opportunity_id}/layer2")
 async def generate_layer2_report(
     opportunity_id: int,
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
     """
@@ -532,7 +532,7 @@ async def generate_layer2_report(
 @router.post("/opportunity/{opportunity_id}/layer3")
 async def generate_layer3_report(
     opportunity_id: int,
-    current_user: Optional[User] = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
     """
@@ -1135,6 +1135,7 @@ async def backfill_economic_snapshots(
 
     reports_needing_backfill = (
         db.query(GeneratedReport)
+        .options(joinedload(GeneratedReport.opportunity))
         .filter(
             GeneratedReport.report_type.in_(layer_types),
             GeneratedReport.status == ReportStatus.COMPLETED,
@@ -1170,9 +1171,8 @@ async def backfill_economic_snapshots(
     failed = []
 
     for report in reports_needing_backfill:
-        opportunity = None
-        if report.opportunity_id:
-            opportunity = db.query(Opportunity).filter(Opportunity.id == report.opportunity_id).first()
+        # opportunity is eager-loaded via joinedload above
+        opportunity = report.opportunity
 
         business_type = (
             getattr(opportunity, "category", None)

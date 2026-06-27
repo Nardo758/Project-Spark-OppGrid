@@ -120,6 +120,8 @@ def list_datasets(
     city: Optional[str] = Query(None),
     dataset_type: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0, description="Number of items to skip"),
+    limit: int = Query(100, ge=1, le=500, description="Max items to return"),
     db: Session = Depends(get_db),
     x_agent_key: Optional[str] = Header(None),
 ) -> List[dict]:
@@ -131,6 +133,8 @@ def list_datasets(
     - city: Filter by city (partial, case-insensitive)
     - dataset_type: Filter by type (exact match)
     - search: Full-text search across name, description, city, vertical
+    - skip: Pagination offset (default: 0)
+    - limit: Max items per page (default: 100, max: 500)
     """
     from sqlalchemy import or_
     try:
@@ -151,7 +155,8 @@ def list_datasets(
                 Dataset.vertical.ilike(s),
             ))
 
-        datasets = query.order_by(Dataset.created_at.desc()).all()
+        total = query.count()
+        datasets = query.order_by(Dataset.created_at.desc()).offset(skip).limit(limit).all()
         return [d.to_dict() for d in datasets]
     except Exception as e:
         logger.error(f"Error listing datasets: {e}")
@@ -168,13 +173,17 @@ def list_purchases_early(
 ) -> PurchaseListResponse:
     """Get list of user's purchased datasets. (Declared early to avoid /{dataset_id} wildcard.)"""
     try:
-        purchases = db.query(DatasetPurchase).filter(
-            DatasetPurchase.user_id == current_user.id,
-        ).order_by(DatasetPurchase.created_at.desc()).all()
+        # Eager-load dataset info to avoid N+1 queries
+        purchases = (
+            db.query(DatasetPurchase, Dataset)
+            .outerjoin(Dataset, DatasetPurchase.dataset_id == Dataset.id)
+            .filter(DatasetPurchase.user_id == str(current_user.id))
+            .order_by(DatasetPurchase.created_at.desc())
+            .all()
+        )
 
         purchase_list = []
-        for purchase in purchases:
-            dataset = db.query(Dataset).filter(Dataset.id == purchase.dataset_id).first()
+        for purchase, dataset in purchases:
             if not dataset:
                 continue
             purchase_list.append(PurchaseHistory(

@@ -69,15 +69,20 @@ def trigger_google_scraper(
 
 @router.post("/trigger/hub-refresh")
 def trigger_hub_refresh(
+    limit: int = Query(100, ge=1, le=500, description="Max opportunities to process"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Trigger incremental Hub table refresh for all opportunities."""
+    """Trigger incremental Hub table refresh for all opportunities (batched)."""
     try:
         from app.models.opportunity import Opportunity as Opp
-        opportunities = db.query(Opp).filter(
-            Opp.moderation_status == "approved"
-        ).all()
+        opportunities = (
+            db.query(Opp)
+            .filter(Opp.moderation_status == "approved")
+            .order_by(Opp.id)
+            .limit(limit)
+            .all()
+        )
 
         refreshed = 0
         errors = 0
@@ -89,10 +94,17 @@ def trigger_hub_refresh(
                 logger.warning(f"Hub refresh failed for opp {opp.id}: {e}")
                 errors += 1
 
+        total_approved = (
+            db.query(Opp)
+            .filter(Opp.moderation_status == "approved")
+            .count()
+        )
+
         return {
             "status": "ok",
             "job": "hub_refresh",
             "triggered_at": datetime.utcnow().isoformat(),
+            "total_approved": total_approved,
             "opportunities_processed": len(opportunities),
             "refreshed": refreshed,
             "errors": errors,

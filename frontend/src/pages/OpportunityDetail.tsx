@@ -6,7 +6,7 @@ import {
   FileText, Target, 
   ChevronRight, ArrowRight,
   Zap, Share2, Star, Rocket, Briefcase,
-  AlertTriangle
+  AlertTriangle, MessageCircle, Send, ThumbsUp
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useUpgrade } from '../contexts/UpgradeContext'
@@ -139,6 +139,22 @@ type DemographicsData = {
   fetched_at: string | null
   census_configured: boolean
   trends_configured: boolean
+}
+
+type CommentItem = {
+  id: number
+  content: string
+  user_id: number
+  likes: number
+  created_at: string
+  updated_at?: string | null
+  user_name?: string
+  user_avatar?: string
+}
+
+type CommentCreateRequest = {
+  content: string
+  opportunity_id: number
 }
 
 function fmtCents(cents?: number | null) {
@@ -332,6 +348,34 @@ export default function OpportunityDetail() {
     },
   })
 
+  // ── Comments ──
+  const commentsQuery = useQuery({
+    queryKey: ['opportunity-comments', opportunityId],
+    enabled: Number.isFinite(opportunityId),
+    queryFn: async (): Promise<CommentItem[]> => {
+      const res = await fetch(`/api/v1/comments/opportunity/${opportunityId}`)
+      if (!res.ok) return []
+      return res.json()
+    },
+  })
+
+  const createCommentMutation = useMutation({
+    mutationFn: async (content: string) => {
+      if (!token) throw new Error('Not authenticated')
+      const res = await fetch('/api/v1/comments/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ content, opportunity_id: opportunityId } as CommentCreateRequest),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.detail || 'Failed to post comment')
+      return data as CommentItem
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['opportunity-comments', opportunityId] })
+    },
+  })
+
   const [ppuOpen, setPpuOpen] = useState(false)
   const [enterpriseModalOpen, setEnterpriseModalOpen] = useState(false)
   const [reportViewerOpen, setReportViewerOpen] = useState(false)
@@ -339,6 +383,7 @@ export default function OpportunityDetail() {
   const [ppuPublishableKey, setPpuPublishableKey] = useState<string | null>(null)
   const [ppuAmountLabel, setPpuAmountLabel] = useState<string>('$15')
   const [ppuError, setPpuError] = useState<string | null>(null)
+  const [commentText, setCommentText] = useState('')
   const autoUnlockStartedRef = useRef(false)
 
   const payPerUnlockMutation = useMutation({
@@ -1438,6 +1483,133 @@ export default function OpportunityDetail() {
                   <Link to="/network" className="text-violet-600 text-sm hover:underline">Browse all experts</Link>
                 </div>
               )}
+            </div>
+          </div>
+          {/* Comments Section */}
+          <div className="mt-6 pt-6 border-t-2 border-stone-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-stone-900 flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-blue-600" />
+                Community Discussion
+                <span className="text-sm font-normal text-stone-500">
+                  ({commentsQuery.data?.length || 0})
+                </span>
+              </h3>
+            </div>
+
+            {/* Comment Input */}
+            {isAuthenticated ? (
+              <div className="mb-6">
+                <div className="flex gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    {(user?.name || user?.email || 'U').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1">
+                    <textarea
+                      value={commentText}
+                      onChange={(e) => setCommentText(e.target.value)}
+                      placeholder="Share your insights, questions, or feedback..."
+                      className="w-full p-3 border border-stone-200 rounded-lg text-sm text-stone-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      rows={3}
+                      disabled={createCommentMutation.isPending}
+                    />
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={() => {
+                          if (!commentText.trim()) return
+                          createCommentMutation.mutate(commentText.trim(), {
+                            onSuccess: () => setCommentText(''),
+                          })
+                        }}
+                        disabled={!commentText.trim() || createCommentMutation.isPending}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {createCommentMutation.isPending ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                            Posting...
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4" />
+                            Post Comment
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    {createCommentMutation.isError && (
+                      <p className="text-sm text-red-600 mt-2">
+                        {createCommentMutation.error instanceof Error ? createCommentMutation.error.message : 'Failed to post comment'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-stone-50 rounded-lg border border-stone-200 p-4 mb-6 text-center">
+                <p className="text-sm text-stone-600 mb-2">
+                  Sign in to join the discussion and share your insights.
+                </p>
+                <Link
+                  to={`/login?next=${encodeURIComponent(`/opportunity/${opp.id}`)}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                  Sign In to Comment
+                </Link>
+              </div>
+            )}
+
+            {/* Comments List */}
+            <div className="space-y-4">
+              {commentsQuery.isLoading && (
+                <>
+                  {[1, 2].map((i) => (
+                    <div key={i} className="flex gap-3 animate-pulse">
+                      <div className="w-10 h-10 bg-stone-200 rounded-full flex-shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 w-24 bg-stone-200 rounded" />
+                        <div className="h-3 w-full bg-stone-200 rounded" />
+                        <div className="h-3 w-2/3 bg-stone-200 rounded" />
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+              {!commentsQuery.isLoading && (commentsQuery.data || []).length === 0 && (
+                <div className="text-center py-8 text-stone-400">
+                  <MessageCircle className="w-8 h-8 mx-auto mb-2 text-stone-300" />
+                  <p className="text-sm">No comments yet. Be the first to share your thoughts!</p>
+                </div>
+              )}
+              {(commentsQuery.data || []).map((comment) => (
+                <div key={comment.id} className="flex gap-3">
+                  <div className="w-10 h-10 bg-gradient-to-br from-stone-400 to-stone-500 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                    {(comment.user_name || 'A').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-stone-900 text-sm">
+                        {comment.user_name || `Analyst #${comment.user_id}`}
+                      </span>
+                      <span className="text-xs text-stone-400">
+                        {comment.created_at
+                          ? new Date(comment.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                          : ''}
+                      </span>
+                    </div>
+                    <p className="text-sm text-stone-700 leading-relaxed">{comment.content}</p>
+                    <div className="flex items-center gap-4 mt-2">
+                      <button
+                        className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 transition-colors"
+                        onClick={() => { /* TODO: like functionality */ }}
+                      >
+                        <ThumbsUp className="w-3.5 h-3.5" />
+                        {comment.likes || 0}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
