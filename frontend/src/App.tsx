@@ -248,9 +248,9 @@ function App() {
         <Route path="billing/return" element={<BillingReturn />} />
         <Route path="reports/view/:reportId" element={<PublicReportViewer />} />
         <Route path="admin" element={<RequireAuth><AdminRedirect /></RequireAuth>} />
-        <Route path="admin/marketing" element={<AdminMarketing />} />
-        <Route path="admin/experts" element={<AdminExperts />} />
-        <Route path="admin/affiliate-tools" element={<AdminAffiliateTools />} />
+        <Route path="admin/marketing" element={<RequireAuth><AdminMarketing /></RequireAuth>} />
+        <Route path="admin/experts" element={<RequireAuth><AdminExperts /></RequireAuth>} />
+        <Route path="admin/affiliate-tools" element={<RequireAuth><AdminAffiliateTools /></RequireAuth>} />
         <Route path="architecture/stripe" element={<StripeArchitecture />} />
         <Route
           path="my-ideas"
@@ -271,7 +271,11 @@ function App() {
         <Route path="marketplace" element={<Marketplace />} />
         <Route
           path="datasets/:datasetId/checkout"
-          element={<DatasetCheckout />}
+          element={
+            <RequireAuth>
+              <DatasetCheckout />
+            </RequireAuth>
+          }
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Route>

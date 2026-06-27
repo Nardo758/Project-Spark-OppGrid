@@ -542,7 +542,7 @@ async def deep_clone_analysis(
         has_premium_access = user.subscription.tier in ['growth', 'pro', 'team', 'business', 'enterprise']
     
     # Check if user has paid for this specific feature or has premium subscription
-    has_paid = False  # TODO: check payment records for this user
+    has_paid = has_premium_access  # Subscription tier covers payment for this feature
     
     if not has_premium_access and not has_paid:
         return DeepCloneResponse(

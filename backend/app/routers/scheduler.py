@@ -23,12 +23,12 @@ External cron setup (cron-job.org):
     - Schedule: Every 6 hours
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_admin_user
 from app.models.user import User
 from app.services.google_scraper_scheduler import GoogleScraperScheduler
 from app.services.hub_refresh_service import refresh_hub_for_opportunity
@@ -37,19 +37,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/scheduler", tags=["Scheduler"])
 
 
-# Admin check: only superusers can trigger scheduled jobs
-def require_admin(current_user: User = Depends(get_current_user)):
-    if not getattr(current_user, "is_superuser", False) and not getattr(current_user, "is_admin", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
-        )
-    return current_user
-
-
 @router.post("/trigger/google-scraper")
 def trigger_google_scraper(
-    admin: User = Depends(require_admin),
+    admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Trigger the daily Google scraper immediately."""
@@ -59,7 +49,7 @@ def trigger_google_scraper(
         return {
             "status": "ok",
             "job": "google_scraper",
-            "triggered_at": datetime.utcnow().isoformat(),
+            "triggered_at": datetime.now(timezone.utc).isoformat(),
             "result": result,
         }
     except Exception as e:
@@ -70,7 +60,7 @@ def trigger_google_scraper(
 @router.post("/trigger/hub-refresh")
 def trigger_hub_refresh(
     limit: int = Query(100, ge=1, le=500, description="Max opportunities to process"),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Trigger incremental Hub table refresh for all opportunities (batched)."""
@@ -103,7 +93,7 @@ def trigger_hub_refresh(
         return {
             "status": "ok",
             "job": "hub_refresh",
-            "triggered_at": datetime.utcnow().isoformat(),
+            "triggered_at": datetime.now(timezone.utc).isoformat(),
             "total_approved": total_approved,
             "opportunities_processed": len(opportunities),
             "refreshed": refreshed,
@@ -116,7 +106,7 @@ def trigger_hub_refresh(
 
 @router.post("/trigger/government-ingest")
 def trigger_government_ingest(
-    admin: User = Depends(require_admin),
+    admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Trigger government data ingestion for free Tier 1 sources across all states."""
@@ -141,7 +131,7 @@ def trigger_government_ingest(
         return {
             "status": "ok",
             "job": "government_ingest",
-            "triggered_at": datetime.utcnow().isoformat(),
+            "triggered_at": datetime.now(timezone.utc).isoformat(),
             "sam_gov": sam_result,
             "state_ingestions": state_results,
         }
@@ -152,7 +142,7 @@ def trigger_government_ingest(
 
 @router.post("/trigger/signal-detection")
 def trigger_signal_detection(
-    admin: User = Depends(require_admin),
+    admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Trigger signal detection from public feeds (SEC Form D, etc.)."""
@@ -163,7 +153,7 @@ def trigger_signal_detection(
         return {
             "status": "ok",
             "job": "signal_detection",
-            "triggered_at": datetime.utcnow().isoformat(),
+            "triggered_at": datetime.now(timezone.utc).isoformat(),
             "sec_form_d": sec_result,
         }
     except Exception as e:
@@ -173,7 +163,7 @@ def trigger_signal_detection(
 
 @router.post("/trigger/waterfall-enrich")
 def trigger_waterfall_enrichment(
-    admin: User = Depends(require_admin),
+    admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Run waterfall enrichment for unpaired signals."""
@@ -200,7 +190,7 @@ def trigger_waterfall_enrichment(
         return {
             "status": "ok",
             "job": "waterfall_enrich",
-            "triggered_at": datetime.utcnow().isoformat(),
+            "triggered_at": datetime.now(timezone.utc).isoformat(),
             "unpaired_signals": len(unpaired),
             "enriched": enriched,
         }
@@ -211,7 +201,7 @@ def trigger_waterfall_enrichment(
 
 @router.post("/trigger/all")
 def trigger_all_scheduled_jobs(
-    admin: User = Depends(require_admin),
+    admin: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
 ):
     """Trigger all scheduled jobs in sequence."""
@@ -290,7 +280,7 @@ def trigger_all_scheduled_jobs(
 
     return {
         "status": "partial" if errors else "ok",
-        "triggered_at": datetime.utcnow().isoformat(),
+        "triggered_at": datetime.now(timezone.utc).isoformat(),
         "results": results,
         "errors": errors,
     }
@@ -298,7 +288,7 @@ def trigger_all_scheduled_jobs(
 
 @router.get("/status")
 def get_scheduler_status(
-    admin: User = Depends(require_admin),
+    admin: User = Depends(get_current_admin_user),
 ):
     """Get status of scheduled jobs."""
     return {

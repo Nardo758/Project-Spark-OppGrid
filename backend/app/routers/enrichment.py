@@ -10,7 +10,7 @@ from app.db.database import get_db
 from app.models.raw_enrichment import RawEnrichment, EnrichmentStatus
 from app.models.data_quality_audit import DataQualityAudit
 from app.services.enrichment_service import EnrichmentService
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_admin_user
 from app.models.user import User
 
 router = APIRouter(prefix="/api/v1/enrichment", tags=["enrichment"])
@@ -144,11 +144,8 @@ def get_pending_enrichment(
 @router.post("/run-auto-approve")
 def run_auto_approve(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
 ):
-    """Admin endpoint: run auto-approve for pending records."""
-    if not getattr(current_user, "is_admin", False) and not getattr(current_user, "is_superuser", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
     svc = EnrichmentService(db)
     threshold = float(os.getenv("ENRICHMENT_AUTO_APPROVE_THRESHOLD", "0.90"))
     count = svc.auto_approve(threshold=threshold)
@@ -159,11 +156,8 @@ def run_auto_approve(
 def run_government_ingest(
     request: GovernmentIngestRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
 ):
-    """Admin endpoint: trigger government data ingestion for a specific state."""
-    if not getattr(current_user, "is_admin", False) and not getattr(current_user, "is_superuser", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.government_data_service import GovernmentDataService
     svc = GovernmentDataService(db)
@@ -200,11 +194,8 @@ def run_government_ingest(
 @router.post("/run-government-ingest-all-states")
 def run_government_ingest_all_states(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
 ):
-    """Admin endpoint: trigger government data ingestion for all 50 states + DC."""
-    if not getattr(current_user, "is_admin", False) and not getattr(current_user, "is_superuser", False):
-        raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.government_data_service import GovernmentDataService, STATE_FIPS
     svc = GovernmentDataService(db)

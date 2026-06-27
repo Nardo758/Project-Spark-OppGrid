@@ -1,7 +1,7 @@
 """Dataset marketplace API endpoints with Stripe payment integration."""
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, status, Depends, Path, Query, Header
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
@@ -400,7 +400,7 @@ def purchase_dataset_by_id(
         status="pending",
         download_url=None,
         expires_at=None,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         accessed_at=None,
     )
     db.add(purchase)
@@ -510,7 +510,7 @@ def purchase_dataset(
         status="pending",
         download_url=None,
         expires_at=None,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
         accessed_at=None,
     )
     db.add(purchase)
@@ -650,7 +650,7 @@ def download_dataset(
             )
         
         # Update access time
-        purchase.accessed_at = datetime.utcnow()
+        purchase.accessed_at = datetime.now(timezone.utc)
         db.commit()
         
         logger.info(f"User {user_id} downloaded dataset {dataset.id} (purchase {purchase_id})")

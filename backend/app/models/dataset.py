@@ -69,6 +69,8 @@ class Dataset(Base):
             'expires_at': self.expires_at.isoformat() if self.expires_at else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'created_by_user_id': self.created_by_user_id,
+            'query_definition': self.query_definition,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'is_active': self.is_active,
         }
 

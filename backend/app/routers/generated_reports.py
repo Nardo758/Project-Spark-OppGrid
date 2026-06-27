@@ -18,7 +18,7 @@ from app.schemas.generated_report import (
     ReportStats,
     UserReportStats,
 )
-from app.core.dependencies import get_current_user, get_current_user_optional, get_current_admin_user
+from app.core.dependencies import get_current_user, get_current_user_optional, get_current_admin_user, get_current_admin_user
 from app.services.report_quota_service import ReportQuotaService
 
 logger = logging.getLogger(__name__)
