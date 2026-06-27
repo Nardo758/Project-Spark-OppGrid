@@ -358,7 +358,7 @@ def purchase_dataset_by_id(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Complete a dataset purchase for the authenticated user."""
+    """Initiate Stripe checkout for a dataset purchase."""
     dataset = db.query(Dataset).filter(
         Dataset.id == dataset_id, Dataset.is_active == True
     ).first()
@@ -380,44 +380,51 @@ def purchase_dataset_by_id(
             "status": existing.status,
         }
 
+    # Create Stripe PaymentIntent and pending purchase
     purchase_id = str(uuid.uuid4())
-    expires_at = datetime.utcnow() + timedelta(days=30)
-    download_url = f"/api/v1/datasets/download/{purchase_id}"
-
     purchase = DatasetPurchase(
         id=purchase_id,
         dataset_id=dataset.id,
         user_id=str(current_user.id),
         price_cents=dataset.price_cents,
-        payment_method="direct",
-        status="completed",
-        download_url=download_url,
-        expires_at=expires_at,
+        payment_method="stripe",
+        status="pending",
+        download_url=None,
+        expires_at=None,
         created_at=datetime.utcnow(),
+        accessed_at=None,
     )
     db.add(purchase)
     db.commit()
 
-    logger.info(f"Dataset purchase completed: {purchase_id} for user {current_user.id}")
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=dataset.price_cents,
+            currency="usd",
+            metadata={
+                "purchase_id": purchase_id,
+                "dataset_id": dataset.id,
+                "dataset_name": dataset.name,
+                "user_id": str(current_user.id),
+            },
+            automatic_payment_methods={"enabled": True},
+        )
+        purchase.stripe_invoice_id = intent.id
+        db.commit()
+    except Exception as e:
+        logger.error(f"Stripe PaymentIntent creation failed: {e}")
+        purchase.status = "failed"
+        purchase.download_url = str(e)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Payment processing failed: {e}")
 
-    # Capture first-party behavior signal
-    behavior_signal = UserBehaviorSignal(
-        user_id=current_user.id,
-        entity_type="dataset",
-        entity_id=int(dataset_id) if dataset_id.isdigit() else 0,
-        action="purchased",
-        meta={"price_cents": dataset.price_cents, "dataset_name": dataset.name},
+    return PurchaseResponse(
+        purchase_id=purchase_id,
+        stripe_payment_intent_id=intent.id,
+        client_secret=intent.client_secret,
+        amount_cents=dataset.price_cents,
+        currency="usd",
     )
-    db.add(behavior_signal)
-    db.commit()
-
-    return {
-        "purchase_id": purchase_id,
-        "dataset_id": dataset_id,
-        "download_url": download_url,
-        "expires_at": expires_at.isoformat(),
-        "status": "completed",
-    }
 
 
 @router.get("/{dataset_id}", response_model=dict)
@@ -452,6 +459,7 @@ def get_dataset(
 @router.post("/purchase")
 def purchase_dataset(
     request: PurchaseRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -487,7 +495,7 @@ def purchase_dataset(
     purchase = DatasetPurchase(
         id=purchase_id,
         dataset_id=dataset.id,
-        user_id=None,  # Guest checkout; will be updated after payment
+        user_id=str(current_user.id),
         price_cents=dataset.price_cents,
         payment_method="stripe",
         status="pending",

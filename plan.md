@@ -1,51 +1,64 @@
-# Deep Research Plan: Alternative Data Sourcing for Platform Enhancement
+# Platform Assessment Plan
 
-## Topic
-Other places to source data to improve dataset offering, leads, opportunities, and overall platform data.
+## Objective
+Comprehensive audit of all OppGrid platform features to identify bugs, gaps, incomplete implementations, and improvement opportunities.
 
-## Route
-**Route B — Focused Search** (specific question with 5 clear expert perspective dimensions)
+## Phase 1: Parallel Discovery (5 agents)
+Each agent explores one domain of the platform and reports findings.
 
-## Current Date Anchor
-2026-06-20 EDT
+### Agent 1 — Frontend Explorer
+Explore all frontend pages, routes, components. Identify:
+- Broken routes / 404s
+- Missing pages (linked but not implemented)
+- UI/UX issues (layout breaks, missing mobile support)
+- Components that don't render data correctly
+- Console error patterns
 
-## Phase 1: Landscape Scan — COMPLETE
-Key findings from 5 coarse-to-fine searches:
-1. **B2B data enrichment market** is mature with players like ZoomInfo, Apollo.io, Cognism, Crustdata, Clearbit — offering databases, real-time scraping, and APIs.
-2. **Open/government data** (data.gov, business registries, SEC filings) provides free, structured business records but with coverage gaps.
-3. **Legal landscape**: hiQ v. LinkedIn (public scraping legal under CFAA), but GDPR/CCPA heavily restrict personal data scraping. Meta v. Bright Data, Reddit v. Perplexity ongoing.
-4. **Emerging trends**: Proprietary data as AI moat; real-time vs. cached data tradeoffs; AI-driven synthesis; regulatory fragmentation (EU AI Act, DSA).
-5. **Lead sourcing strategies**: B2B databases, social media (LinkedIn, X), events, ABM, intent data, AI-powered enrichment, web scraping with compliance.
+### Agent 2 — Backend API Explorer
+Audit all FastAPI routers, endpoints, and services:
+- Endpoints that return 500 errors or incomplete data
+- Missing CRUD operations
+- Auth/permission gaps
+- Services with TODO comments or stub implementations
+- External integration failures (Stripe, Google Maps, etc.)
 
-## Phase 2: Dimension Decomposition (5 Expert Perspectives)
+### Agent 3 — Database & Data Model Explorer
+Audit all SQLAlchemy models, migrations, and data flow:
+- Models without relationships defined
+- Missing indexes on queried columns
+- Columns with wrong types
+- Data integrity issues (orphaned records, nulls where required)
+- Missing migrations for model changes
 
-| Dimension | Expert | Angle | Key Research Focus |
-|-----------|--------|-------|-------------------|
-| Dim 01 | THE PRACTITIONER | Daily operational reality | What data sources actually work in production vs. what vendors claim; integration pain points; data decay rates; practical ROI |
-| Dim 02 | THE ACADEMIC | Peer-reviewed evidence | What research says about data quality, bias in commercial datasets, information asymmetry; where evidence contradicts popular belief |
-| Dim 03 | THE SKEPTIC | Counterargument to mainstream | Why the "more data = better" narrative is wrong; hidden costs; compliance traps; evidence proponents ignore |
-| Dim 04 | THE ECONOMIST | Financial incentives & market structure | Who profits from the current data sourcing narrative; pricing power dynamics; arbitrage opportunities in data markets |
-| Dim 05 | THE HISTORIAN | Historical parallels & pattern recognition | How data sourcing strategies have evolved; what happened to previous "data gold rush" platforms; lessons from information market bubbles |
+### Agent 4 — Feature Completeness Auditor
+Check each major feature against its intended scope:
+- **Marketplace**: datasets, signals, checkout, purchases
+- **Reports**: Layer 1/2/3, Consultant Studio, Report Studio
+- **Opportunities**: creation, validation, scoring, discovery
+- **Expert Marketplace**: profiles, bookings, payments
+- **Workspaces**: maps, notes, tasks, documents
+- **Admin**: dashboard, analytics, user management
+- **Google Pipeline**: scraping, keyword groups, catalog
+- **Integrations**: Stripe, Mapbox, Census, AI APIs
 
-## Phase 3: Parallel Deep Dive
-- 5 sub-agents, one per perspective
-- Each performs ≥10 independent searches from their specific angle
-- Each outputs: core position (2 sentences), strongest evidence, unique insight
-- Output files: `research/data_sourcing_dim01.md` through `dim05.md`
+### Agent 5 — Security & Performance Auditor
+- Missing auth checks on endpoints
+- Open redirect vulnerabilities
+- SQL injection risks (raw SQL strings)
+- N+1 query patterns
+- Missing rate limits
+- Hardcoded secrets or API keys
+- CORS misconfiguration
 
-## Phase 4: Cross-Verification
-- Compare findings across all 5 perspectives
-- Classify confidence tiers
-- Identify contradictions and convergences
-- Save to `research/data_sourcing_cross_verification.md`
+## Phase 2: Synthesis
+Orchestrator merges all findings, deduplicates, and prioritizes:
+- P0: Critical (data loss, security, crashes)
+- P1: Important (broken features, bad UX)
+- P2: Nice to have (missing polish, incomplete implementations)
 
-## Phase 6: Insight Extraction
-- Identify non-obvious insights from cross-perspective synthesis
-- Save to `research/data_sourcing_insight.md`
-
-## Phase 7: Final Synthesis
-- Produce final deliverable in the user's requested format:
-  - Core position (2 sentences) per perspective
-  - Strongest evidence per perspective
-  - One unique thing per perspective
-- Save to `research/data_sourcing_final_synthesis.md`
+## Phase 3: Report
+Deliver a structured markdown report with:
+- Executive summary (top 10 issues)
+- Per-domain findings with severity
+- Recommended fixes with file paths
+- Estimated effort per fix

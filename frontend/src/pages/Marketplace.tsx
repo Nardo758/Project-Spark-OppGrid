@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Database, Radio } from 'lucide-react'
+import { Database, Radio, Users } from 'lucide-react'
 import DatasetsTab from '../components/marketplace/DatasetsTab'
 import SignalsTab from '../components/marketplace/SignalsTab'
+import LeadsTab from '../components/marketplace/LeadsTab'
 
-type TabId = 'datasets' | 'signals'
+type TabId = 'datasets' | 'signals' | 'leads'
 
 const TABS: { id: TabId; label: string; icon: React.ElementType; description: string }[] = [
   {
@@ -19,6 +20,12 @@ const TABS: { id: TabId; label: string; icon: React.ElementType; description: st
     icon: Radio,
     description: 'AI-powered market signals from real opportunity data',
   },
+  {
+    id: 'leads',
+    label: 'Leads',
+    icon: Users,
+    description: 'Qualified business leads and contacts',
+  },
 ]
 
 export default function Marketplace() {
@@ -28,7 +35,7 @@ export default function Marketplace() {
 
   // Normalize URL so the active tab is always reflected (e.g. /marketplace -> /marketplace?tab=datasets).
   useEffect(() => {
-    if (tabParam !== 'datasets' && tabParam !== 'signals') {
+    if (tabParam !== 'datasets' && tabParam !== 'signals' && tabParam !== 'leads') {
       const next = new URLSearchParams(searchParams)
       next.set('tab', 'datasets')
       setSearchParams(next, { replace: true })
@@ -98,6 +105,14 @@ export default function Marketplace() {
           hidden={activeTab !== 'signals'}
         >
           <SignalsTab />
+        </div>
+        <div
+          id="tabpanel-leads"
+          role="tabpanel"
+          aria-labelledby="tab-leads"
+          hidden={activeTab !== 'leads'}
+        >
+          <LeadsTab />
         </div>
       </div>
     </div>

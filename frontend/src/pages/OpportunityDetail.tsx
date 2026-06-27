@@ -492,6 +492,13 @@ export default function OpportunityDetail() {
                     Unlocked
                   </span>
                 ) : null}
+                {/* Social proof: validation count */}
+                {opp.validation_count > 0 && (
+                  <span className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full text-xs font-medium">
+                    <Users className="w-3 h-3" />
+                    {opp.validation_count} {opp.validation_count === 1 ? 'analyst confirmed' : 'analysts confirmed'}
+                  </span>
+                )}
               </div>
               <h1 className="text-3xl font-bold text-stone-900 mb-3">{opp.title}</h1>
               <p className="text-stone-600 text-lg leading-relaxed">
@@ -569,6 +576,65 @@ export default function OpportunityDetail() {
                 </Link>
               ) : null}
             </div>
+          </div>
+        </div>
+
+        {/* KPI Ribbon — research-backed 4-metric at-a-glance header */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl border border-stone-200 p-4 flex flex-col justify-between">
+            <div className="text-xs font-medium text-stone-500 uppercase tracking-wide">Opportunity Score</div>
+            <div className="flex items-end gap-2 mt-2">
+              <div className="text-3xl font-bold text-stone-900">{Math.round(score)}</div>
+              <div className="text-sm text-stone-400 mb-1">/100</div>
+            </div>
+            <div className={`text-xs font-medium mt-1 ${score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+              {score >= 80 ? 'Strong' : score >= 60 ? 'Moderate' : 'Weak'} Opportunity
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-stone-200 p-4 flex flex-col justify-between">
+            <div className="text-xs font-medium text-stone-500 uppercase tracking-wide">Market Size</div>
+            <div className="text-2xl font-bold text-stone-900 mt-2">{marketSize}</div>
+            <div className="text-xs text-stone-400 mt-1">TAM Estimate</div>
+          </div>
+          <div className="bg-white rounded-xl border border-stone-200 p-4 flex flex-col justify-between">
+            <div className="text-xs font-medium text-stone-500 uppercase tracking-wide">Competition</div>
+            <div className={`text-2xl font-bold mt-2 ${competition === 'Low' ? 'text-emerald-600' : competition === 'High' ? 'text-red-600' : 'text-amber-600'}`}>{competition}</div>
+            <div className="text-xs text-stone-400 mt-1">{intel?.promotion?.competitor_count ? `${intel.promotion.competitor_count} competitors` : 'Competitor landscape'}</div>
+          </div>
+          <div className="bg-white rounded-xl border border-stone-200 p-4 flex flex-col justify-between">
+            <div className="text-xs font-medium text-stone-500 uppercase tracking-wide">Validation</div>
+            <div className="text-2xl font-bold text-stone-900 mt-2">{opp.validation_count}</div>
+            <div className="text-xs text-stone-400 mt-1">{opp.validation_count === 1 ? 'user confirmed' : 'users confirmed'}</div>
+          </div>
+        </div>
+
+        {/* Score Breakdown — sub-component transparency (CB Insights / Crunchbase pattern) */}
+        <div className="bg-white rounded-xl border border-stone-200 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-stone-900 uppercase tracking-wide">Score Breakdown</h3>
+            <span className="text-xs text-stone-400">Based on 4 factors</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: 'Market', score: Math.min(100, Math.round((intel?.place?.growth_score || 50) * 1.2)), desc: 'TAM & growth trajectory' },
+              { label: 'Timing', score: Math.min(100, Math.round((intel?.product?.trend_strength || 50) * 1.5)), desc: 'Trend momentum & urgency' },
+              { label: 'Competition', score: Math.min(100, Math.round(100 - (intel?.promotion?.competitor_count || 3) * 15)), desc: 'Saturation & moat potential' },
+              { label: 'Validation', score: Math.min(100, Math.round((opp.validation_count || 0) * 8 + 40)), desc: 'User confirmation signals' },
+            ].map((factor) => (
+              <div key={factor.label} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-stone-700">{factor.label}</span>
+                  <span className={`text-sm font-bold ${factor.score >= 70 ? 'text-emerald-600' : factor.score >= 40 ? 'text-amber-600' : 'text-red-600'}`}>{factor.score}</span>
+                </div>
+                <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${factor.score >= 70 ? 'bg-emerald-500' : factor.score >= 40 ? 'bg-amber-500' : 'bg-red-500'}`}
+                    style={{ width: `${factor.score}%` }}
+                  />
+                </div>
+                <p className="text-xs text-stone-400">{factor.desc}</p>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -805,22 +871,18 @@ export default function OpportunityDetail() {
         {/* TIER 2: Research Dashboard (PRO) - Ideate + Deep Dive CTA */}
         <div className="relative">
           {!hasPro && (
-            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
-              <div className="text-center p-8">
-                <Lock className="w-12 h-12 text-stone-400 mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-stone-900 mb-2">Unlock Research Dashboard</h3>
-                <p className="text-stone-600 mb-4">Get market analysis, demographics, and competitive landscape</p>
-                <button 
-                  onClick={() => showUpgradeModal('opportunity', opportunityQuery.data?.title)} 
-                  className="inline-flex items-center gap-2 bg-stone-900 text-white px-6 py-3 rounded-lg font-medium hover:bg-stone-800"
-                >
-                  Upgrade to Unlock
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
+            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white via-white/90 to-transparent rounded-b-xl z-10 flex items-end justify-center pb-4">
+              <button 
+                onClick={() => showUpgradeModal('opportunity', opportunityQuery.data?.title)} 
+                className="inline-flex items-center gap-2 bg-stone-900 text-white px-6 py-3 rounded-lg font-medium hover:bg-stone-800 shadow-lg"
+              >
+                <Lock className="w-4 h-4" />
+                Unlock Full Research Dashboard
+                <ArrowRight className="w-4 h-4" />
+              </button>
             </div>
           )}
-          <div className={`bg-white rounded-xl border-2 ${hasPro ? 'border-blue-200' : 'border-stone-200'} p-8 mb-6`}>
+          <div className={`bg-white rounded-xl border-2 ${hasPro ? 'border-blue-200' : 'border-stone-200'} p-8 mb-6 ${!hasPro ? 'max-h-[520px] overflow-hidden' : ''}`}>
           
           <div className="flex items-center gap-3 mb-6">
             <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -877,6 +939,15 @@ export default function OpportunityDetail() {
               </Link>
             </div>
           </div>
+          
+          {!hasPro && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-center gap-3">
+              <Lock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <p className="text-sm text-amber-800">
+                <span className="font-medium">Preview mode:</span> You're seeing a limited preview. Upgrade to access full market analysis, demographics, and competitive intelligence.
+              </p>
+            </div>
+          )}
 
           {/* Tabs */}
           <div className="mb-6 bg-stone-100 rounded-lg p-1.5 flex gap-1 overflow-x-auto">
@@ -917,7 +988,7 @@ export default function OpportunityDetail() {
 
                 <div className="bg-white rounded-lg border-2 border-stone-200 p-6">
                   <h3 className="text-lg font-bold text-stone-900 mb-4">Demand Signals</h3>
-                  <div className="grid grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                       <div className="text-sm text-stone-500">Search Interest</div>
                       <div className="text-3xl font-bold text-stone-900">
@@ -1005,7 +1076,7 @@ export default function OpportunityDetail() {
                   <div className="space-y-3">
                     {(opp.ai_competitive_advantages || ['Market leader gap exists', 'Fragmented competitor landscape', 'No dominant solution']).map((comp, idx) => (
                       <div key={idx} className="bg-stone-50 rounded-lg p-4">
-                        <div className="font-semibold text-stone-900">{typeof comp === 'string' ? comp : JSON.stringify(comp)}</div>
+                        <div className="font-semibold text-stone-900">{typeof comp === 'string' ? comp : 'Competitive advantage data unavailable'}</div>
                         <div className="text-sm text-stone-600 mt-1">Key opportunity for differentiation</div>
                       </div>
                     ))}
@@ -1022,7 +1093,7 @@ export default function OpportunityDetail() {
                     <div key={idx} className="bg-gradient-to-br from-violet-50 to-blue-50 rounded-lg p-4 border-2 border-violet-100">
                       <div className="flex items-center gap-2 mb-2">
                         <Zap className="w-5 h-5 text-violet-600" />
-                        <span className="font-bold text-stone-900">{typeof model === 'string' ? model : JSON.stringify(model)}</span>
+                        <span className="font-bold text-stone-900">{typeof model === 'string' ? model : 'Business model suggestion unavailable'}</span>
                       </div>
                       <p className="text-sm text-stone-600">Viable approach based on market analysis</p>
                     </div>
@@ -1211,7 +1282,7 @@ export default function OpportunityDetail() {
                     {(opp.ai_key_risks || ['Market timing uncertainty', 'Regulatory considerations', 'Competition from incumbents']).map((risk, idx) => (
                       <div key={idx} className="flex items-start gap-3 p-3 bg-red-50 rounded-lg border border-red-100">
                         <AlertTriangle className="w-5 h-5 text-red-500 mt-0.5 flex-shrink-0" />
-                        <span className="text-stone-700">{typeof risk === 'string' ? risk : JSON.stringify(risk)}</span>
+                        <span className="text-stone-700">{typeof risk === 'string' ? risk : 'Risk assessment data unavailable'}</span>
                       </div>
                     ))}
                   </div>
@@ -1223,8 +1294,7 @@ export default function OpportunityDetail() {
               <div className="space-y-4">
                 <div className="bg-white rounded-lg border-2 border-stone-200 p-6">
                   <h3 className="text-lg font-bold text-stone-900 mb-4">Market Size Analysis</h3>
-                  <div className="grid grid-cols-3 gap-6">
-                    <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div className="text-sm opacity-80 mb-1">TAM (Total)</div>
                       <div className="text-3xl font-bold">{opp.ai_market_size_estimate || opp.market_size || '$1B+'}</div>
                       <div className="text-xs opacity-60 mt-2">Total Addressable Market</div>

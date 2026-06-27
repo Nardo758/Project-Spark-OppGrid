@@ -4,6 +4,7 @@ Endpoints for report pricing, purchases, and access checks
 """
 
 import os
+import json
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -879,7 +880,7 @@ async def trigger_report_generation(
     """
     from app.models.generated_report import GeneratedReport, ReportStatus
     from app.services.ai_report_generator import AIReportGenerator
-    from app.services.email_service import email_service
+    from app.services.email_service import send_email
     
     # Find the pending report by session_id or payment_intent stored in summary
     query = db.query(GeneratedReport).filter(
@@ -998,8 +999,8 @@ async def trigger_report_generation(
                 view_token = generate_report_view_token(pending_report.id)
                 base_url = os.getenv("APP_BASE_URL", "https://oppgrid.replit.app")
                 view_url = f"{base_url}/reports/view/{pending_report.id}?token={view_token}"
-                email_service.send_email(
-                    to_email=recipient_email,
+                await send_email(
+                    to=recipient_email,
                     subject=f"Your {report_name} Report is Ready - OppGrid",
                     html_content=f"""
                     <html><body style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">

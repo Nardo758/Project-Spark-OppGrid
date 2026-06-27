@@ -20,8 +20,11 @@ class Settings(BaseSettings):
     BACKEND_URL: str = "http://localhost:8000"
     FRONTEND_URL: str = "http://localhost:3000"
 
-    # CORS - allow all origins by default for development (set explicit origins in production).
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    # CORS - allow explicit origins only; never default to wildcard in production.
+    BACKEND_CORS_ORIGINS: List[str] = Field(
+        default_factory=lambda: os.getenv("BACKEND_CORS_ORIGINS", "http://localhost:3000,http://localhost:5173").split(","),
+        description="Comma-separated allowed origins. Set explicitly in production."
+    )
 
     # Basic rate limiting (single-process best-effort).
     RATE_LIMIT_ENABLED: bool = True

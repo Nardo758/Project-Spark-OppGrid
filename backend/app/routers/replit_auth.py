@@ -39,8 +39,9 @@ SESSION_SECRET = os.environ.get('SESSION_SECRET')
 
 if not SESSION_SECRET:
     import logging
-    logging.warning("SESSION_SECRET not set - auth state tokens will use fallback key. Set SESSION_SECRET in production!")
-    SESSION_SECRET = "dev-fallback-key-not-for-production"
+    logging.warning("SESSION_SECRET not set - auth state tokens will use a randomly generated key. Set SESSION_SECRET in production for consistency!")
+    import secrets
+    SESSION_SECRET = secrets.token_urlsafe(32)
 
 SESSION_COOKIE_NAME = "oppgrid_session"
 STATE_COOKIE_NAME = "auth_state"
@@ -240,6 +241,23 @@ async def replit_login(
         'callback_url': callback_url,
         'session_key': session_key
     }
+    
+    # Validate redirect_url to prevent open redirect attacks
+    _redirect = state_data['redirect_url']
+    if _redirect.startswith('http'):
+        from urllib.parse import urlparse
+        parsed = urlparse(_redirect)
+        allowed_hosts = [
+            'localhost', '127.0.0.1',
+            os.getenv('FRONTEND_URL', '').replace('https://', '').replace('http://', '').split('/')[0],
+        ]
+        replit_domain = os.getenv("REPLIT_DOMAINS", "").split(",")
+        allowed_hosts.extend([d.strip().split(':')[0] for d in replit_domain if d.strip()])
+        if os.getenv("REPLIT_DEPLOYMENT"):
+            allowed_hosts.append(f"{os.getenv('REPL_SLUG', '')}.{os.getenv('REPL_OWNER', '')}.repl.co")
+        if parsed.netloc.split(':')[0] not in allowed_hosts:
+            state_data['redirect_url'] = '/discover.html'
+    
     state_token = create_state_token(state_data)
     
     params = {
@@ -425,8 +443,24 @@ async def replit_callback(
     
     use_secure = is_secure_context(request)
     
+    # Validate redirect_url before using it
+    _redirect = redirect_url or '/discover.html'
+    if _redirect.startswith('http'):
+        from urllib.parse import urlparse
+        parsed = urlparse(_redirect)
+        allowed_hosts = [
+            'localhost', '127.0.0.1',
+            os.getenv('FRONTEND_URL', '').replace('https://', '').replace('http://', '').split('/')[0],
+        ]
+        replit_domain = os.getenv("REPLIT_DOMAINS", "").split(",")
+        allowed_hosts.extend([d.strip().split(':')[0] for d in replit_domain if d.strip()])
+        if os.getenv("REPLIT_DEPLOYMENT"):
+            allowed_hosts.append(f"{os.getenv('REPL_SLUG', '')}.{os.getenv('REPL_OWNER', '')}.repl.co")
+        if parsed.netloc.split(':')[0] not in allowed_hosts:
+            _redirect = '/discover.html'
+    
     # Redirect directly to destination - use short-lived cookies for token handoff
-    response = RedirectResponse(url=redirect_url, status_code=302)
+    response = RedirectResponse(url=_redirect, status_code=302)
     response.delete_cookie(STATE_COOKIE_NAME)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
