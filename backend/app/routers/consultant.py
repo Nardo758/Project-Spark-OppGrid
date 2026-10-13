@@ -229,6 +229,45 @@ class DeepCloneResponse(BaseModel):
     error: Optional[str] = None
 
 
+def _transaction_metadata(raw: Optional[str]) -> Dict[str, Any]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _user_has_paid_for_deep_clone(db: Session, user: Optional[User]) -> bool:
+    """Whether this user has a succeeded Deep Clone purchase on the ledger.
+
+    Guests are unpaid. Deep Clone checkout sets metadata ``type`` to
+    ``deep_clone`` (other checkouts use ``payment_type``). A succeeded
+    transactions row for this user with that marker counts as paid.
+    Pending, failed, canceled, and other payment types do not.
+    """
+    if user is None:
+        return False
+
+    from app.models.transaction import Transaction, TransactionStatus
+
+    paid_rows = (
+        db.query(Transaction)
+        .filter(
+            Transaction.user_id == user.id,
+            Transaction.status == TransactionStatus.SUCCEEDED,
+        )
+        .all()
+    )
+    for row in paid_rows:
+        meta = _transaction_metadata(row.metadata_json)
+        payment_type = meta.get("payment_type") or meta.get("type")
+        if payment_type == "deep_clone":
+            return True
+    return False
+
+
 class ActivityLogResponse(BaseModel):
     id: int
     path: str
@@ -522,7 +561,7 @@ async def clone_success(
 async def deep_clone_analysis(
     request: DeepCloneRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_current_user_optional),
 ):
     """
     Premium: Deep Clone Analysis - Detailed 3mi and 5mi radius analysis for a specific target city.
@@ -535,14 +574,18 @@ async def deep_clone_analysis(
     """
     from app.models import User
     
-    user = db.query(User).filter(User.id == (current_user.id if current_user else 1)).first()
+    user = (
+        db.query(User).filter(User.id == current_user.id).first()
+        if current_user is not None
+        else None
+    )
     has_premium_access = False
     
     if user and user.subscription:
         has_premium_access = user.subscription.tier in ['growth', 'pro', 'team', 'business', 'enterprise']
     
-    # Check if user has paid for this specific feature or has premium subscription
-    has_paid = False  # TODO: check payment records for this user
+    # One-time Deep Clone purchase on the transactions ledger. Guests are unpaid.
+    has_paid = _user_has_paid_for_deep_clone(db, current_user)
     
     if not has_premium_access and not has_paid:
         return DeepCloneResponse(
