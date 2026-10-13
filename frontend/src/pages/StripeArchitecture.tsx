@@ -97,7 +97,7 @@ export default function StripeArchitecture() {
               </div>
               <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4 text-center">
                 <p className="text-white font-medium text-sm">IdeaEngine.tsx</p>
-                <p className="text-slate-400 text-xs mt-1">Validation $15</p>
+                <p className="text-slate-400 text-xs mt-1">Validation</p>
               </div>
               <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4 text-center">
                 <p className="text-white font-medium text-sm">ExpertMarketplace.tsx</p>
@@ -202,7 +202,6 @@ export default function StripeArchitecture() {
                 <div>
                   <p className="text-white font-medium mb-2 text-sm">Pricing Constants</p>
                   <ul className="text-slate-400 text-xs space-y-1">
-                    <li>• PAY_PER_UNLOCK: $15</li>
                     <li>• DEEP_DIVE: $49</li>
                     <li>• DEEP_CLONE: $49</li>
                     <li>• Expert Split: 85/15</li>

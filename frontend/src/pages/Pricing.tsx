@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Check, Loader2, FileText, Sparkles } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { LAUNCH_OFFERS } from '../constants/pricing'
 
@@ -13,6 +13,7 @@ type MySubscriptionResponse = {
 
 export default function Pricing() {
   const { token, isAuthenticated } = useAuthStore()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [billingLoading, setBillingLoading] = useState<'monthly' | 'report' | 'portal' | null>(null)
   const [billingError, setBillingError] = useState<string | null>(null)
@@ -149,6 +150,11 @@ export default function Pricing() {
           </p>
         </div>
 
+        {searchParams.get('deep_clone_success') === 'true' && (
+          <div className="mb-8 bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm">
+            Deep Clone checkout completed. Your {LAUNCH_OFFERS.deepClone.priceLabel} report is ready to run.
+          </div>
+        )}
         {billingError && (
           <div className="mb-8 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm">
             {billingError}

@@ -6,6 +6,7 @@ Only MONTHLY can be purchased. Its Stripe price id is STRIPE_PRICE_MONTHLY.
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -255,6 +256,62 @@ def reject_monthly_alerts(db: Session, user: User, prefs: Optional[dict]) -> Non
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="OppGrid Monthly does not include alerts",
+        )
+
+
+def _env_flag(*names: str) -> bool:
+    """True only when an env var is explicitly on. Unset means off."""
+    for name in names:
+        raw = os.getenv(name)
+        if raw is None or not raw.strip():
+            continue
+        return raw.strip().lower() in {"1", "true", "yes", "on"}
+    return False
+
+
+def launch_services_enabled() -> bool:
+    return _env_flag("LAUNCH_SERVICES", "VITE_LAUNCH_SERVICES")
+
+
+def launch_api_portal_enabled() -> bool:
+    return _env_flag("LAUNCH_API_PORTAL", "VITE_LAUNCH_API_PORTAL")
+
+
+def launch_report_catalog_enabled() -> bool:
+    return _env_flag("LAUNCH_REPORT_CATALOG", "VITE_LAUNCH_REPORT_CATALOG")
+
+
+def launch_workhub_enabled() -> bool:
+    return _env_flag("LAUNCH_WORKHUB", "VITE_LAUNCH_WORKHUB")
+
+
+def report_catalog_launch_lock() -> None:
+    """Hide report-catalog APIs at launch. The $49 Deep Clone checkout stays on subscriptions."""
+    if not launch_report_catalog_enabled():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+
+def workhub_launch_lock(
+    current_user: User | None = Depends(get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> None:
+    """WorkHub is admin-only until LAUNCH_WORKHUB is on. Monthly stays locked after that."""
+    if current_user is not None and bool(getattr(current_user, "is_admin", False)):
+        return
+    if not launch_workhub_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="WorkHub is not available",
+        )
+    if current_user is None:
+        return
+    subscription = (
+        db.query(Subscription).filter(Subscription.user_id == current_user.id).first()
+    )
+    if subscription is not None and coerce_tier(subscription.tier) == SubscriptionTier.MONTHLY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="OppGrid Monthly does not include workhub",
         )
 
 

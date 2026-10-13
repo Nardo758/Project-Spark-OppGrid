@@ -17,6 +17,7 @@ import {
   EyeOff,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import { launchFlags } from '../config/launchFlags'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -661,9 +662,7 @@ export default function SettingsApiKeys() {
             API keys grant programmatic access to your OppGrid account. Treat them like passwords —
             never share them or commit them to source control. Revoke any key you suspect has been
             compromised immediately.{' '}
-            <a href="/developer" className="text-emerald-600 hover:underline">
-              View API documentation →
-            </a>
+            {launchFlags.apiPortal ? <a href="/developer" className="text-emerald-600 hover:underline">View API documentation →</a> : <Link to="/pricing" className="text-emerald-600 hover:underline">View plans</Link>}
           </p>
         </div>
       </div>

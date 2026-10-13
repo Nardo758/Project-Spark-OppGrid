@@ -33,7 +33,7 @@ const layerConfig = {
     title: 'Problem Overview',
     description: 'Executive summary, problem analysis, market snapshot, and validation signals',
     tier: 'Pro',
-    price: '$15 one-time or Pro subscription',
+    price: 'See pricing for a Deep Clone report or OppGrid Monthly',
     color: 'violet',
   },
   layer2: {

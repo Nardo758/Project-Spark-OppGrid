@@ -889,8 +889,8 @@ def create_deep_clone_checkout(
         if not frontend_url:
             frontend_url = request.headers.get("origin", "")
         
-        success_url = f"{frontend_url}/build/reports?deep_clone_success=true"
-        cancel_url = f"{frontend_url}/build/reports?deep_clone_cancelled=true"
+        success_url = f"{frontend_url}/pricing?deep_clone_success=true"
+        cancel_url = f"{frontend_url}/pricing?deep_clone_cancelled=true"
         
         session = stripe_client.checkout.Session.create(
             customer=subscription.stripe_customer_id,

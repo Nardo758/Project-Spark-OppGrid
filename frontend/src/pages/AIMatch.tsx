@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { launchFlags } from '../config/launchFlags'
 import SimplePage from '../components/SimplePage'
 
 export default function AIMatch() {
@@ -11,9 +12,7 @@ export default function AIMatch() {
           <Link to="/network" className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-medium">
             Browse network
           </Link>
-          <Link to="/services" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">
-            Services
-          </Link>
+          {launchFlags.services ? <Link to="/services" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">Services</Link> : <Link to="/pricing" className="px-4 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 font-medium">View plans</Link>}
         </>
       }
     >

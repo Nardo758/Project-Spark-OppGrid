@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
+import { launchFlags } from '../config/launchFlags'
 import { 
   Menu, 
   X, 
@@ -10,7 +11,7 @@ import {
 const guestNavItems = [
   { name: 'Discover', path: '/discover' },
   { name: 'Marketplace', path: '/marketplace' },
-  { name: 'Consultant Studio', path: '/build/reports' },
+  ...(launchFlags.reportCatalog ? [{ name: 'Consultant Studio', path: '/build/reports' }] : []),
   { 
     name: 'Join Our Network',
     dropdown: [
@@ -20,7 +21,7 @@ const guestNavItems = [
       { name: 'Lender', path: '/network/lenders', description: 'Provide funding to startups' },
     ]
   },
-  { name: 'API', path: '/developer' },
+  ...(launchFlags.apiPortal ? [{ name: 'API', path: '/developer' }] : []),
   { name: 'Pricing', path: '/pricing' },
 ]
 
@@ -28,7 +29,7 @@ const paidNavItems = [
   { name: 'Dashboard', path: '/dashboard' },
   { name: 'Discover', path: '/discover' },
   { name: 'Marketplace', path: '/marketplace' },
-  { name: 'Consultant Studio', path: '/build/reports' },
+  ...(launchFlags.reportCatalog ? [{ name: 'Consultant Studio', path: '/build/reports' }] : []),
   { 
     name: 'My Projects',
     dropdown: [
@@ -40,11 +41,11 @@ const paidNavItems = [
     name: 'Build',
     dropdown: [
       { name: 'Find Expert Help', path: '/build/experts', description: 'Connect with industry experts' },
-      { name: 'Business Plan', path: '/build/business-plan', description: 'AI-powered business planning' },
+      ...(launchFlags.reportCatalog ? [{ name: 'Business Plan', path: '/build/business-plan', description: 'AI-powered business planning' }] : []),
       { name: 'Find Money', path: '/build/funding', description: 'Explore funding options' },
     ]
   },
-  { name: 'API', path: '/developer' },
+  ...(launchFlags.apiPortal ? [{ name: 'API', path: '/developer' }] : []),
   { name: 'Pricing', path: '/pricing' },
 ]
 

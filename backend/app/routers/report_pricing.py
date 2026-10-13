@@ -59,8 +59,13 @@ from app.services.usage_service import usage_service
 from app.services.entitlements import get_opportunity_entitlements
 from app.services.audit import log_event
 from app.services.report_usage_service import report_usage_service
+from app.services.launch_entitlements import report_catalog_launch_lock
 
-router = APIRouter(prefix="/report-pricing", tags=["Report Pricing"])
+router = APIRouter(
+    prefix="/report-pricing",
+    tags=["Report Pricing"],
+    dependencies=[Depends(report_catalog_launch_lock)],
+)
 
 
 class PublicPricingResponse(BaseModel):

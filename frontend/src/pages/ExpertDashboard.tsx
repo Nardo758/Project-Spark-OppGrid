@@ -45,7 +45,7 @@ type Earnings = {
 }
 
 function formatCents(cents: number | null): string {
-  if (!cents) return '$0'
+  if (!cents) return '—'
   return `$${(cents / 100).toLocaleString()}`
 }
 

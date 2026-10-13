@@ -9,6 +9,7 @@ import {
   AlertTriangle
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import { launchFlags } from '../config/launchFlags'
 import { useUpgrade } from '../contexts/UpgradeContext'
 import PayPerUnlockModal from '../components/PayPerUnlockModal'
 import EnterpriseContactModal from '../components/EnterpriseContactModal'
@@ -337,7 +338,7 @@ export default function OpportunityDetail() {
   const [reportViewerOpen, setReportViewerOpen] = useState(false)
   const [ppuClientSecret, setPpuClientSecret] = useState<string | null>(null)
   const [ppuPublishableKey, setPpuPublishableKey] = useState<string | null>(null)
-  const [ppuAmountLabel, setPpuAmountLabel] = useState<string>('$15')
+  const [ppuAmountLabel, setPpuAmountLabel] = useState<string>('')
   const [ppuError, setPpuError] = useState<string | null>(null)
   const autoUnlockStartedRef = useRef(false)
 
@@ -367,7 +368,7 @@ export default function OpportunityDetail() {
       setPpuError(null)
       setPpuPublishableKey(data.publishableKey)
       setPpuClientSecret(data.clientSecret)
-      setPpuAmountLabel(fmtCents(data.amountCents) || '$15')
+      setPpuAmountLabel(fmtCents(data.amountCents) || '')
       setPpuOpen(true)
     },
     onError: (e) => {
@@ -544,13 +545,7 @@ export default function OpportunityDetail() {
                   Sign in to Continue
                 </Link>
               ) : access?.is_accessible ? (
-                <button
-                  onClick={() => navigate(`/opportunity/${opp.id}/hub`)}
-                  className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors"
-                >
-                  <Rocket className="w-4 h-4" />
-                  Deep Dive WorkHub
-                </button>
+                (launchFlags.workhub || user?.is_admin) ? <button onClick={() => navigate(`/opportunity/${opp.id}/hub`)} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors"><Rocket className="w-4 h-4" />Deep Dive WorkHub</button> : <Link to="/pricing" className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg font-medium hover:bg-violet-700 transition-colors"><Rocket className="w-4 h-4" />View plans</Link>
               ) : access?.can_pay_to_unlock ? (
                 <button
                   onClick={() => payPerUnlockMutation.mutate()}
@@ -558,7 +553,7 @@ export default function OpportunityDetail() {
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50"
                 >
                   <Lock className="w-4 h-4" />
-                  {payPerUnlockMutation.isPending ? 'Processing...' : `Unlock Now (${fmtCents(access?.unlock_price) || '$15'})`}
+                  {payPerUnlockMutation.isPending ? 'Processing...' : 'Unlock Now'}
                 </button>
               ) : access?.days_until_unlock ? (
                 <Link
@@ -868,13 +863,7 @@ export default function OpportunityDetail() {
                 <Users className="w-4 h-4" />
                 Find Expert
               </Link>
-              <Link 
-                to={`/opportunity/${id}/hub`}
-                className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"
-              >
-                <Rocket className="w-4 h-4" />
-                Deep Dive WorkHub
-              </Link>
+              {(launchFlags.workhub || user?.is_admin) ? <Link to={`/opportunity/${id}/hub`} className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"><Rocket className="w-4 h-4" />Deep Dive WorkHub</Link> : <Link to="/pricing" className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700"><Rocket className="w-4 h-4" />View plans</Link>}
             </div>
           </div>
 
@@ -1381,7 +1370,7 @@ export default function OpportunityDetail() {
               </div>
               <div>
                 <h2 className="text-2xl font-bold mb-1">Ready to Deep Dive?</h2>
-                <p className="text-violet-100">Take action in our WorkHub with AI-powered planning, task management, and expert collaboration.</p>
+                <p className="text-violet-100">Keep going from the opportunity feed, or open pricing for a Deep Clone report.</p>
               </div>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
@@ -1394,13 +1383,7 @@ export default function OpportunityDetail() {
                   Sign in to Start
                 </Link>
               ) : access?.is_accessible ? (
-                <Link 
-                  to={`/opportunity/${id}/hub`}
-                  className="flex items-center gap-2 px-6 py-3 bg-white text-violet-700 rounded-lg font-medium hover:bg-violet-50 transition-colors"
-                >
-                  <Briefcase className="w-5 h-5" />
-                  Deep Dive WorkHub
-                </Link>
+                (launchFlags.workhub || user?.is_admin) ? <Link to={`/opportunity/${id}/hub`} className="flex items-center gap-2 px-6 py-3 bg-white text-violet-700 rounded-lg font-medium hover:bg-violet-50 transition-colors"><Briefcase className="w-5 h-5" />Deep Dive WorkHub</Link> : <Link to="/pricing" className="flex items-center gap-2 px-6 py-3 bg-white text-violet-700 rounded-lg font-medium hover:bg-violet-50 transition-colors"><Briefcase className="w-5 h-5" />View plans</Link>
               ) : access?.can_pay_to_unlock ? (
                 <button
                   onClick={() => payPerUnlockMutation.mutate()}
@@ -1408,7 +1391,7 @@ export default function OpportunityDetail() {
                   className="flex items-center gap-2 px-6 py-3 bg-white text-violet-700 rounded-lg font-medium hover:bg-violet-50 transition-colors disabled:opacity-50"
                 >
                   <Lock className="w-5 h-5" />
-                  {payPerUnlockMutation.isPending ? 'Processing...' : `Unlock Now (${fmtCents(access?.unlock_price) || '$15'})`}
+                  {payPerUnlockMutation.isPending ? 'Processing...' : 'Unlock Now'}
                 </button>
               ) : access?.days_until_unlock ? (
                 <Link 
@@ -1424,7 +1407,7 @@ export default function OpportunityDetail() {
                   className="flex items-center gap-2 px-6 py-3 bg-white text-violet-700 rounded-lg font-medium hover:bg-violet-50 transition-colors"
                 >
                   <Rocket className="w-5 h-5" />
-                  Upgrade to Access WorkHub
+                  View plans
                 </Link>
               )}
             </div>

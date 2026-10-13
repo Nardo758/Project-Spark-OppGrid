@@ -13,12 +13,12 @@ from app.models.user import User
 from app.models.watchlist import UserCollection, UserTag, OpportunityNote, WatchlistItem
 from app.core.dependencies import get_current_user
 
-from app.services.launch_entitlements import monthly_feature_lock
+from app.services.launch_entitlements import workhub_launch_lock
 
 router = APIRouter(
     prefix="/workhub",
     tags=["Workhub"],
-    dependencies=[Depends(monthly_feature_lock("workhub"))],
+    dependencies=[Depends(workhub_launch_lock)],
 )
 
 

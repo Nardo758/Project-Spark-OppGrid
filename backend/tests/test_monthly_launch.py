@@ -27,10 +27,14 @@ from app.services.launch_entitlements import (
     DEEP_CLONE_PRICE_CENTS,
     MONTHLY_PRICE_CENTS,
     is_available_for_new_purchase,
+    launch_report_catalog_enabled,
+    launch_workhub_enabled,
     monthly_period_is_open,
     reject_monthly_alerts,
+    report_catalog_launch_lock,
     stripe_price_id_for_tier,
     tier_unlocks_feature,
+    workhub_launch_lock,
 )
 from app.services.report_quota_service import ReportQuotaService
 from app.services.saved_search_alerts import should_send_alert
@@ -46,23 +50,30 @@ DEEP_CLONE_BODY = {
 }
 LEGACY_TIERS = ["starter", "growth", "pro", "team", "business", "enterprise"]
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BUYER_PRICE_FILES = [
-    "frontend/src/pages/Pricing.tsx",
-    "frontend/src/pages/Signup.tsx",
-    "frontend/src/components/UpgradeModal.tsx",
-    "frontend/src/hooks/useInlinePayment.ts",
-    "frontend/src/pages/StripeArchitecture.tsx",
-    "frontend/src/pages/Home.tsx",
-    "frontend/src/components/BlockMonthlyFeature.tsx",
-]
-FORBIDDEN_PRICE_PATTERNS = [
-    re.compile(r"\$20(?!\d)"),
-    re.compile(r"\$50(?!\d)"),
-    re.compile(r"\$99(?!\d)"),
-    re.compile(r"\$250(?!\d)"),
-    re.compile(r"\$750(?!\d)"),
-    re.compile(r"\$2,500"),
-]
+# Pages whose code stays in the repo but is not rendered for buyers while launch flags are off.
+HIDDEN_BUYER_FILES = {
+    "pages/Services.tsx",
+    "pages/ApiPortal.tsx",
+    "pages/build/ReportStudio.tsx",
+    "pages/build/ConsultantStudio.tsx",
+    "pages/WorkHub.tsx",
+    "pages/OpportunityHub.tsx",
+    "pages/LifecycleDashboard.tsx",
+    "components/ReportLibrary.tsx",
+    "components/ReportPurchaseModal.tsx",
+    "components/ReportInputModal.tsx",
+}
+HIDDEN_BUYER_DIRS = {"workhub", "ReportSections", "ConsultantResults"}
+# Existing-subscriber tier table. Buyer pages render LAUNCH_OFFERS, not these labels.
+LEGACY_PRICE_CONFIG = "constants/pricing.ts"
+PRICE_LITERAL = re.compile(r"\$\d[\d,]*(?:\.\d+)?")
+SCALE_SUFFIX = re.compile(r"\s*[KMBTkmb]\b")
+HIDDEN_LINK = re.compile(
+    r"""(?:\bto\s*=|\bhref\s*=|\bnavigate\s*\(|\bpath\s*:|location\.href\s*=)"""
+    r"""[^;\n]{0,180}"""
+    r"""(?:['"`]/(?:services|developer|build/reports|build/business-plan|build/financials|build/pitch-deck|build/consultant-studio|consultant-studio)\b|/hub['"`])"""
+)
+ALLOWED_PRICE_VALUES = {39.0, 49.0}
 
 
 @pytest.fixture
@@ -350,11 +361,99 @@ def test_legacy_tiers_cannot_be_checked_out(db, client, tier):
     assert is_available_for_new_purchase(SubscriptionTier.MONTHLY) is True
 
 
-def test_buyer_pricing_checkout_hides_retired_prices():
+def _buyer_source_files():
+    root = REPO_ROOT / "frontend" / "src"
+    files = []
+    for path in root.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        if "__tests__" in path.parts or path.name.endswith((".test.ts", ".test.tsx")):
+            continue
+        relative = path.relative_to(root).as_posix()
+        if relative == LEGACY_PRICE_CONFIG:
+            continue
+        if relative in HIDDEN_BUYER_FILES or path.name.startswith("Admin"):
+            continue
+        if any(part in HIDDEN_BUYER_DIRS for part in path.parts):
+            continue
+        files.append((relative, path))
+    return files
+
+
+def _price_is_allowed(line: str, match: re.Match) -> bool:
+    rest = line[match.end(): match.end() + 4]
+    if SCALE_SUFFIX.match(rest):
+        return True
+    number = match.group(0)[1:].replace(",", "")
+    try:
+        value = float(number)
+    except ValueError:
+        return False
+    return value in ALLOWED_PRICE_VALUES
+
+
+def test_buyer_surfaces_show_only_launch_prices_and_hide_retired_routes():
+    """Buyers see $49 and $39. Hidden surfaces are not linked unless a launch flag is on."""
+    app_source = (REPO_ROOT / "frontend/src/App.tsx").read_text()
+    assert '<LaunchRoute flag="services">' in app_source
+    assert '<LaunchRoute flag="apiPortal">' in app_source
+    assert app_source.count('<LaunchRoute flag="reportCatalog">') >= 5
+    assert app_source.count("<WorkHubRoute>") >= 3
+    flags = (REPO_ROOT / "frontend/src/config/launchFlags.ts").read_text()
+    assert "if (!value) return false" in flags
+
+    pricing = (REPO_ROOT / "frontend/src" / LEGACY_PRICE_CONFIG).read_text()
+    assert "priceLabel: '$49'" in pricing
+    assert "priceLabel: '$39/mo'" in pricing
+
+    index_html = (REPO_ROOT / "frontend/index.html").read_text()
+    assert "/services" not in index_html
+    assert "/developer" not in index_html
+    assert "/build/reports" not in index_html
+    assert "sitemap" not in index_html.lower()
+    assert not list((REPO_ROOT / "frontend").rglob("sitemap*.xml"))
+
     offenders = []
-    for relative in BUYER_PRICE_FILES:
-        text = (REPO_ROOT / relative).read_text()
-        for pattern in FORBIDDEN_PRICE_PATTERNS:
-            if pattern.search(text):
-                offenders.append(f"{relative} matches {pattern.pattern}")
+    for relative, path in _buyer_source_files():
+        # App.tsx declares the hidden routes so it can redirect them.
+        if relative == "App.tsx":
+            continue
+        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+            if "launchFlags" in line or "is_admin" in line:
+                continue
+            for match in PRICE_LITERAL.finditer(line):
+                if not _price_is_allowed(line, match):
+                    offenders.append(f"{relative}:{lineno} price {match.group(0)}")
+            if HIDDEN_LINK.search(line):
+                offenders.append(f"{relative}:{lineno} link {line.strip()[:160]}")
     assert offenders == []
+
+
+def test_report_catalog_api_is_hidden_until_flag(client, monkeypatch):
+    monkeypatch.delenv("LAUNCH_REPORT_CATALOG", raising=False)
+    monkeypatch.delenv("VITE_LAUNCH_REPORT_CATALOG", raising=False)
+    assert launch_report_catalog_enabled() is False
+    hidden = client.get("/api/v1/report-pricing/public")
+    assert hidden.status_code == 404
+
+    monkeypatch.setenv("LAUNCH_REPORT_CATALOG", "true")
+    assert launch_report_catalog_enabled() is True
+    assert report_catalog_launch_lock() is None
+
+
+def test_workhub_stays_available_for_admins_until_period_flag(monkeypatch):
+    monkeypatch.delenv("LAUNCH_WORKHUB", raising=False)
+    monkeypatch.delenv("VITE_LAUNCH_WORKHUB", raising=False)
+    assert launch_workhub_enabled() is False
+
+    buyer = SimpleNamespace(is_admin=False, id=1)
+    with pytest.raises(HTTPException) as denied:
+        workhub_launch_lock(current_user=buyer, db=SimpleNamespace())
+    assert denied.value.status_code == 403
+    assert "workhub" in denied.value.detail.lower()
+
+    admin = SimpleNamespace(is_admin=True, id=2)
+    workhub_launch_lock(current_user=admin, db=SimpleNamespace())
+
+    monkeypatch.setenv("LAUNCH_WORKHUB", "true")
+    assert launch_workhub_enabled() is True
