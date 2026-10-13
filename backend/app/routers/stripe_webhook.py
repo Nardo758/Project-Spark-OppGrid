@@ -417,8 +417,85 @@ def handle_checkout_completed(session: dict, db: Session):
         _handle_bundle_purchase(session, user, db)
     elif payment_type == "template_purchase":
         _handle_template_purchase(session, user, db)
+    elif payment_type == "deep_clone":
+        _handle_deep_clone_purchase(session, user, db)
     else:
         _handle_subscription_checkout(session, user, db)
+
+
+def _handle_deep_clone_purchase(session: dict, user: User, db: Session):
+    """Record a paid Deep Clone checkout on the transactions ledger.
+
+    checkout.session.completed for metadata type deep_clone is a one-time
+    payment. It must not be treated as a subscription. Only payment_status
+    "paid" writes a succeeded row, so pending or unpaid sessions stay locked.
+    """
+    if session.get("payment_status") != "paid":
+        logger.info(
+            "Deep clone checkout %s not paid (status=%s); no unlock recorded",
+            session.get("id"),
+            session.get("payment_status"),
+        )
+        return
+
+    payment_intent = session.get("payment_intent")
+    payment_intent_id = payment_intent.get("id") if isinstance(payment_intent, dict) else payment_intent
+    payment_intent_id = payment_intent_id or None
+    session_id = session.get("id")
+
+    existing = None
+    if payment_intent_id:
+        existing = db.query(Transaction).filter(
+            Transaction.stripe_payment_intent_id == payment_intent_id
+        ).first()
+    if existing is None and session_id:
+        for row in db.query(Transaction).filter(Transaction.user_id == user.id).all():
+            try:
+                meta = json.loads(row.metadata_json) if row.metadata_json else {}
+            except (TypeError, ValueError):
+                meta = {}
+            if isinstance(meta, dict) and meta.get("session_id") == session_id and meta.get("type") == "deep_clone":
+                existing = row
+                break
+
+    if existing and existing.user_id not in (None, user.id):
+        logger.warning(
+            "Deep clone checkout %s payment intent already belongs to user %s",
+            session_id,
+            existing.user_id,
+        )
+        return
+
+    metadata = {
+        "type": "deep_clone",
+        "user_id": str(user.id),
+        "session_id": session_id,
+    }
+    if existing:
+        existing.user_id = user.id
+        existing.type = TransactionType.DEEP_CLONE
+        existing.status = TransactionStatus.SUCCEEDED
+        existing.amount_cents = session.get("amount_total", existing.amount_cents)
+        existing.currency = session.get("currency") or existing.currency or "usd"
+        if payment_intent_id and not existing.stripe_payment_intent_id:
+            existing.stripe_payment_intent_id = payment_intent_id
+        existing.metadata_json = json.dumps(metadata)
+        db.commit()
+        logger.info("Deep clone purchase already recorded for user %s; marked succeeded", user.id)
+        return
+
+    tx = Transaction(
+        user_id=user.id,
+        type=TransactionType.DEEP_CLONE,
+        status=TransactionStatus.SUCCEEDED,
+        amount_cents=session.get("amount_total"),
+        currency=session.get("currency") or "usd",
+        stripe_payment_intent_id=payment_intent_id,
+        metadata_json=json.dumps(metadata),
+    )
+    db.add(tx)
+    db.commit()
+    logger.info("Recorded deep clone purchase for user %s", user.id)
 
 
 def _handle_slot_purchase(session: dict, user: User, db: Session):
@@ -939,6 +1016,7 @@ def _map_payment_type_to_transaction_type(payment_type: str) -> TransactionType 
         "pay_per_unlock": TransactionType.PAY_PER_UNLOCK,
         "success_fee": TransactionType.SUCCESS_FEE,
         "revenue_share": TransactionType.REVENUE_SHARE,
+        "deep_clone": TransactionType.DEEP_CLONE,
     }
     return mapping.get(payment_type)
 
