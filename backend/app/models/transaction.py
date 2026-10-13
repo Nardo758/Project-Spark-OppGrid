@@ -12,6 +12,7 @@ class TransactionType(str, enum.Enum):
     SUCCESS_FEE = "success_fee"
     REVENUE_SHARE = "revenue_share"
     PAY_PER_UNLOCK = "pay_per_unlock"
+    DEEP_CLONE = "deep_clone"
 
 
 class TransactionStatus(str, enum.Enum):

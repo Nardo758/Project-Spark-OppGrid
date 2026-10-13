@@ -242,15 +242,14 @@ def _transaction_metadata(raw: Optional[str]) -> Dict[str, Any]:
 def _user_has_paid_for_deep_clone(db: Session, user: Optional[User]) -> bool:
     """Whether this user has a succeeded Deep Clone purchase on the ledger.
 
-    Guests are unpaid. Deep Clone checkout sets metadata ``type`` to
-    ``deep_clone`` (other checkouts use ``payment_type``). A succeeded
-    transactions row for this user with that marker counts as paid.
-    Pending, failed, canceled, and other payment types do not.
+    Guests are unpaid. A succeeded transactions row counts when its type is
+    ``deep_clone`` or its metadata ``type`` / ``payment_type`` is
+    ``deep_clone``. Pending, failed, canceled, and other payment types do not.
     """
     if user is None:
         return False
 
-    from app.models.transaction import Transaction, TransactionStatus
+    from app.models.transaction import Transaction, TransactionStatus, TransactionType
 
     paid_rows = (
         db.query(Transaction)
@@ -261,11 +260,46 @@ def _user_has_paid_for_deep_clone(db: Session, user: Optional[User]) -> bool:
         .all()
     )
     for row in paid_rows:
+        if row.type == TransactionType.DEEP_CLONE:
+            return True
         meta = _transaction_metadata(row.metadata_json)
         payment_type = meta.get("payment_type") or meta.get("type")
         if payment_type == "deep_clone":
             return True
     return False
+
+
+def _has_premium_deep_clone_access(tier) -> bool:
+    """True for the existing premium set, matched case-insensitively.
+
+    Stored tiers are uppercase enum values (PRO, BUSINESS, ...). The previous
+    check compared those to lowercase strings, so they never matched.
+    """
+    from app.models.subscription import SubscriptionTier
+
+    premium = {
+        SubscriptionTier.GROWTH,
+        SubscriptionTier.PRO,
+        SubscriptionTier.TEAM,
+        SubscriptionTier.BUSINESS,
+        SubscriptionTier.ENTERPRISE,
+    }
+    if tier is None:
+        return False
+    if isinstance(tier, SubscriptionTier):
+        return tier in premium
+    raw = getattr(tier, "value", tier)
+    key = str(raw).strip().upper()
+    if not key:
+        return False
+    try:
+        parsed = SubscriptionTier[key]
+    except KeyError:
+        try:
+            parsed = SubscriptionTier(key)
+        except ValueError:
+            return False
+    return parsed in premium
 
 
 class ActivityLogResponse(BaseModel):
@@ -582,7 +616,7 @@ async def deep_clone_analysis(
     has_premium_access = False
     
     if user and user.subscription:
-        has_premium_access = user.subscription.tier in ['growth', 'pro', 'team', 'business', 'enterprise']
+        has_premium_access = _has_premium_deep_clone_access(user.subscription.tier)
     
     # One-time Deep Clone purchase on the transactions ledger. Guests are unpaid.
     has_paid = _user_has_paid_for_deep_clone(db, current_user)
