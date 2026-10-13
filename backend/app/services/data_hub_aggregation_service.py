@@ -606,6 +606,7 @@ class DataHubAggregationService:
     def _get_tier_price(self, tier: SubscriptionTier) -> float:
         """Get monthly price in cents for tier."""
         prices = {
+            SubscriptionTier.MONTHLY: 3900,
             SubscriptionTier.STARTER: 2000,
             SubscriptionTier.GROWTH: 5000,
             SubscriptionTier.PRO: 9900,

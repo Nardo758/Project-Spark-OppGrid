@@ -4,6 +4,7 @@ import {
   Briefcase, ChevronRight, Clock, Loader2, Plus, Rocket, Target, TrendingUp
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import { launchFlags } from '../config/launchFlags'
 
 type WorkspaceStatus = 'researching' | 'validating' | 'planning' | 'building' | 'launched' | 'paused' | 'archived'
 
@@ -42,7 +43,7 @@ const statusLabels: Record<WorkspaceStatus, { label: string; color: string }> = 
 }
 
 export default function MyWorkspaces() {
-  const { token, isAuthenticated } = useAuthStore()
+  const { token, isAuthenticated, user } = useAuthStore()
 
   const workspacesQuery = useQuery({
     queryKey: ['workspaces', { authed: Boolean(token) }],
@@ -120,7 +121,7 @@ export default function MyWorkspaces() {
               return (
                 <Link
                   key={ws.id}
-                  to={`/opportunity/${ws.opportunity_id}/hub`}
+                  to={(launchFlags.workhub || user?.is_admin) ? `/opportunity/${ws.opportunity_id}/hub` : `/opportunity/${ws.opportunity_id}`}
                   className="bg-white rounded-xl border border-stone-200 p-5 hover:border-violet-300 hover:shadow-md transition-all"
                 >
                   <div className="flex items-start justify-between mb-3">

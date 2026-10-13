@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { launchFlags } from '../config/launchFlags'
 import { useQuery } from '@tanstack/react-query'
 import { 
   DollarSign, Building2, Users, Landmark, Gift, FileText,
@@ -14,7 +15,7 @@ const fundingSources = [
     name: 'SBA Microloans',
     type: 'Government',
     icon: Landmark,
-    amount: 'Up to $50,000',
+    amount: 'Up to $50K',
     description: 'Small Business Administration microloans for startups and small businesses.',
     requirements: ['Business plan', '2+ years credit history', 'Collateral preferred'],
     timeline: '2-4 weeks',
@@ -325,18 +326,8 @@ export default function Funding() {
               </div>
             </div>
             <div className="flex flex-wrap gap-3">
-              <Link
-                to="/build/business-plan"
-                className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700"
-              >
-                Generate Business Plan
-              </Link>
-              <Link
-                to="/build/reports"
-                className="px-4 py-2 border border-gray-200 rounded-lg font-medium hover:bg-gray-50"
-              >
-                Consultant Studio
-              </Link>
+              {launchFlags.reportCatalog ? <Link to="/build/business-plan" className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700">Generate Business Plan</Link> : <Link to="/pricing" className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700">View plans</Link>}
+              {launchFlags.reportCatalog ? <Link to="/build/reports" className="px-4 py-2 border border-gray-200 rounded-lg font-medium hover:bg-gray-50">Consultant Studio</Link> : null}
               <Link
                 to="/build/experts"
                 className="px-4 py-2 border border-gray-200 rounded-lg font-medium hover:bg-gray-50"

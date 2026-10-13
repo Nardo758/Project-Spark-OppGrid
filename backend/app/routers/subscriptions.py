@@ -155,10 +155,16 @@ def create_checkout_session(
             detail="Cannot create checkout for free tier"
         )
 
-    if tier == SubscriptionTier.ENTERPRISE:
+    from app.services.launch_entitlements import (
+        NEW_PURCHASE_REFUSAL,
+        is_available_for_new_purchase,
+        stripe_price_id_for_tier,
+    )
+
+    if not is_available_for_new_purchase(tier):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Enterprise tier requires custom setup. Please contact sales."
+            detail=NEW_PURCHASE_REFUSAL,
         )
 
     # Get or create Stripe customer
@@ -173,8 +179,8 @@ def create_checkout_session(
         subscription.stripe_customer_id = customer.id
         db.commit()
 
-    # Get price ID for tier
-    price_id = stripe_service.STRIPE_PRICES.get(tier)
+    # Get price ID for tier. MONTHLY reads STRIPE_PRICE_MONTHLY at request time.
+    price_id = stripe_price_id_for_tier(tier)
     if not price_id:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -232,8 +238,17 @@ def create_subscription_intent(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid subscription tier: {payload.tier}")
 
-    if tier in (SubscriptionTier.FREE, SubscriptionTier.ENTERPRISE):
+    from app.services.launch_entitlements import (
+        NEW_PURCHASE_REFUSAL,
+        is_available_for_new_purchase,
+        stripe_price_id_for_tier,
+    )
+
+    if tier == SubscriptionTier.FREE:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This tier is not self-serve via card payment.")
+
+    if not is_available_for_new_purchase(tier):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=NEW_PURCHASE_REFUSAL)
 
     subscription = usage_service.get_or_create_subscription(current_user, db)
 
@@ -272,7 +287,7 @@ def create_subscription_intent(
         subscription.stripe_customer_id = customer.id
         db.commit()
 
-    price_id = stripe_service.STRIPE_PRICES.get(tier)
+    price_id = stripe_price_id_for_tier(tier)
     if not price_id:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Stripe price not configured for this tier")
 
@@ -874,8 +889,8 @@ def create_deep_clone_checkout(
         if not frontend_url:
             frontend_url = request.headers.get("origin", "")
         
-        success_url = f"{frontend_url}/build/reports?deep_clone_success=true"
-        cancel_url = f"{frontend_url}/build/reports?deep_clone_cancelled=true"
+        success_url = f"{frontend_url}/pricing?deep_clone_success=true"
+        cancel_url = f"{frontend_url}/pricing?deep_clone_cancelled=true"
         
         session = stripe_client.checkout.Session.create(
             customer=subscription.stripe_customer_id,

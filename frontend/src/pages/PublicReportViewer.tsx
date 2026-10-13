@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { launchFlags } from '../config/launchFlags'
 import { Loader2, FileText, AlertCircle, ChevronLeft } from 'lucide-react'
 
 interface ReportData {
@@ -119,7 +120,7 @@ export default function PublicReportViewer() {
         <div className="mt-8 text-center">
           <p className="text-xs text-gray-400 mb-3">Want deeper intelligence for your business idea?</p>
           <Link
-            to="/consultant-studio"
+            to={launchFlags.reportCatalog ? '/build/consultant-studio' : '/pricing'}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white"
             style={{ background: '#0F6E56' }}
           >

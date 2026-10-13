@@ -227,6 +227,12 @@ class DeepCloneResponse(BaseModel):
     processing_time_ms: Optional[int] = None
     requires_payment: Optional[bool] = None
     error: Optional[str] = None
+    offer_single_report: Optional[bool] = None
+    offer_amount_cents: Optional[int] = None
+    offer_amount_label: Optional[str] = None
+    offer_checkout_path: Optional[str] = None
+    reports_used: Optional[int] = None
+    reports_limit: Optional[int] = None
 
 
 def _transaction_metadata(raw: Optional[str]) -> Dict[str, Any]:
@@ -270,36 +276,14 @@ def _user_has_paid_for_deep_clone(db: Session, user: Optional[User]) -> bool:
 
 
 def _has_premium_deep_clone_access(tier) -> bool:
-    """True for the existing premium set, matched case-insensitively.
+    """True for premium tiers, including OppGrid Monthly, matched case-insensitively.
 
-    Stored tiers are uppercase enum values (PRO, BUSINESS, ...). The previous
-    check compared those to lowercase strings, so they never matched.
+    Stored tiers are uppercase enum values (PRO, BUSINESS, MONTHLY, ...).
+    Monthly still has a 2-report billing-period cap enforced at the endpoint.
     """
-    from app.models.subscription import SubscriptionTier
+    from app.services.launch_entitlements import is_premium_tier
 
-    premium = {
-        SubscriptionTier.GROWTH,
-        SubscriptionTier.PRO,
-        SubscriptionTier.TEAM,
-        SubscriptionTier.BUSINESS,
-        SubscriptionTier.ENTERPRISE,
-    }
-    if tier is None:
-        return False
-    if isinstance(tier, SubscriptionTier):
-        return tier in premium
-    raw = getattr(tier, "value", tier)
-    key = str(raw).strip().upper()
-    if not key:
-        return False
-    try:
-        parsed = SubscriptionTier[key]
-    except KeyError:
-        try:
-            parsed = SubscriptionTier(key)
-        except ValueError:
-            return False
-    return parsed in premium
+    return is_premium_tier(tier)
 
 
 class ActivityLogResponse(BaseModel):
@@ -614,11 +598,33 @@ async def deep_clone_analysis(
         else None
     )
     has_premium_access = False
-    
+    monthly_period_end = None
+
     if user and user.subscription:
-        has_premium_access = _has_premium_deep_clone_access(user.subscription.tier)
+        from app.services.launch_entitlements import monthly_report_decision
+
+        decision = monthly_report_decision(db, user)
+        if decision is None:
+            has_premium_access = _has_premium_deep_clone_access(user.subscription.tier)
+        elif decision["status"] == "allowed":
+            has_premium_access = True
+            monthly_period_end = decision["period_end"]
+        elif decision["status"] == "over_quota":
+            return DeepCloneResponse(
+                success=False,
+                requires_payment=True,
+                error=decision["error"],
+                offer_single_report=True,
+                offer_amount_cents=decision["offer_amount_cents"],
+                offer_amount_label=decision["offer_amount_label"],
+                offer_checkout_path=decision["offer_checkout_path"],
+                reports_used=decision["reports_used"],
+                reports_limit=decision["reports_limit"],
+            )
     
     # One-time Deep Clone purchase on the transactions ledger. Guests are unpaid.
+    # An active Monthly subscriber does not use this bypass: their cap is the
+    # billing-period quota above, and a $49 purchase in that period raises it by one.
     has_paid = _user_has_paid_for_deep_clone(db, current_user)
     
     if not has_premium_access and not has_paid:
@@ -637,6 +643,11 @@ async def deep_clone_analysis(
         target_city=request.target_city,
         session_id=request.session_id,
     )
+
+    if monthly_period_end is not None and result.get("success") is not False:
+        from app.services.report_quota_service import ReportQuotaService
+
+        ReportQuotaService(db).consume_monthly_deep_clone(user, monthly_period_end)
     
     return DeepCloneResponse(**result)
 

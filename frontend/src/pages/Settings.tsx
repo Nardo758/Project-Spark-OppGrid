@@ -281,7 +281,8 @@ export default function Settings() {
       'builder': 'Builder',
       'business': 'Scaler',
       'scaler': 'Scaler',
-      'enterprise': 'Enterprise'
+      'enterprise': 'Enterprise',
+      'monthly': 'OppGrid Monthly',
     }
     return tierMap[tier.toLowerCase()] || tier.charAt(0).toUpperCase() + tier.slice(1)
   }

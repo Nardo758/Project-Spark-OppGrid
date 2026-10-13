@@ -150,6 +150,7 @@ REPORT_BUNDLES = {
 
 TIER_DISCOUNTS = {
     SubscriptionTier.FREE: 0,
+    SubscriptionTier.MONTHLY: 0,
     SubscriptionTier.STARTER: 0,
     SubscriptionTier.GROWTH: 10,
     SubscriptionTier.PRO: 15,

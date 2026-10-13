@@ -13,7 +13,13 @@ from app.models.user import User
 from app.models.watchlist import UserCollection, UserTag, OpportunityNote, WatchlistItem
 from app.core.dependencies import get_current_user
 
-router = APIRouter(prefix="/workhub", tags=["Workhub"])
+from app.services.launch_entitlements import workhub_launch_lock
+
+router = APIRouter(
+    prefix="/workhub",
+    tags=["Workhub"],
+    dependencies=[Depends(workhub_launch_lock)],
+)
 
 
 class CollectionCreate(BaseModel):

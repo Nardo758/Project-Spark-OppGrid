@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { launchFlags } from '../config/launchFlags'
 import { 
   ArrowRight, 
   Search, 
@@ -97,7 +98,7 @@ export default function Home() {
               <div className="flex flex-wrap sm:flex-nowrap gap-2.5 mb-12">
                 {/* Validate Your Idea */}
                 <Link
-                  to="/build/reports"
+                  to={launchFlags.reportCatalog ? '/build/reports' : '/discover'}
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-md hover:bg-emerald-700 transition-colors whitespace-nowrap"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
@@ -106,7 +107,7 @@ export default function Home() {
 
                 {/* Identify a Location */}
                 <Link
-                  to="/build/reports"
+                  to={launchFlags.reportCatalog ? '/build/reports' : '/discover'}
                   className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-md hover:bg-emerald-700 transition-colors whitespace-nowrap"
                 >
                   <Target className="w-3.5 h-3.5" />
@@ -247,14 +248,14 @@ export default function Home() {
               </div>
               <div className="flex gap-4">
                 <Link
-                  to="/build/reports"
+                  to={launchFlags.reportCatalog ? '/build/reports' : '/pricing'}
                   className="inline-flex items-center gap-2 px-6 py-3 bg-white text-gray-900 font-medium rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <FileText className="w-5 h-5" />
                   See Examples
                 </Link>
                 <Link
-                  to="/build/reports/sample"
+                  to={launchFlags.reportCatalog ? '/build/reports/sample' : '/pricing'}
                   className="inline-flex items-center gap-2 px-6 py-3 border border-white/30 text-white font-medium rounded-lg hover:bg-white/10 transition-colors"
                 >
                   Try Free Sample
@@ -360,7 +361,7 @@ export default function Home() {
               <ArrowRight className="w-5 h-5" />
             </Link>
             <Link
-              to="/pricing?from=home&plan=builder"
+              to="/pricing"
               className="inline-flex items-center justify-center px-6 py-3 text-sm font-medium text-white border border-white/60 hover:bg-white/10 rounded-lg gap-2"
             >
               View paid plans

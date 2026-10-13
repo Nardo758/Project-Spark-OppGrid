@@ -118,6 +118,7 @@ class StripeService:
     # Time-decay access windows (legacy - all tiers now get full access)
     TIER_ACCESS_WINDOWS = {
         SubscriptionTier.FREE: 999,       # No access (gated platform)
+        SubscriptionTier.MONTHLY: 0,      # OppGrid Monthly: opportunity feed
         SubscriptionTier.STARTER: 0,      # Full access with slot limit
         SubscriptionTier.GROWTH: 0,       # Full access with slot limit
         SubscriptionTier.PRO: 0,          # Full access with slot limit
@@ -130,6 +131,7 @@ class StripeService:
     TIER_CONFIG = {
         SubscriptionTier.FREE: {
             "price": 0,
+            "price_cents": 0,
             "monthly_slots": 0,
             "seats": 1,
             "report_discount": 0,
@@ -138,6 +140,20 @@ class StripeService:
             "api_access": False,
             "extra_slot_price": 0,  # Cannot buy slots
             "track": "none",
+        },
+        SubscriptionTier.MONTHLY: {
+            "name": "OppGrid Monthly",
+            "price": 39,
+            "price_cents": 3900,
+            "monthly_slots": 0,
+            "seats": 1,
+            "report_discount": 0,
+            "white_label": False,
+            "commercial_use": False,
+            "api_access": False,
+            "extra_slot_price": 0,
+            "track": "individual",
+            "reports_per_period": 2,
         },
         SubscriptionTier.STARTER: {
             "price": 20,
@@ -221,7 +237,18 @@ class StripeService:
             "export_batch_size": 0,
             "api_access": False,
             "price": 0,
+            "price_cents": 0,
             "access_window_days": 999,  # No access
+        },
+        SubscriptionTier.MONTHLY: {
+            "monthly_views": -1,
+            "monthly_unlocks": 0,
+            "export_limit": 0,
+            "export_batch_size": 0,
+            "api_access": False,
+            "price": 39,
+            "price_cents": 3900,
+            "access_window_days": 0,
         },
         SubscriptionTier.STARTER: {
             "monthly_views": -1,
@@ -281,6 +308,7 @@ class StripeService:
 
     # Stripe Price IDs (set in environment variables)
     STRIPE_PRICES = {
+        SubscriptionTier.MONTHLY: os.getenv("STRIPE_PRICE_MONTHLY"),
         SubscriptionTier.STARTER: os.getenv("STRIPE_PRICE_STARTER"),
         SubscriptionTier.GROWTH: os.getenv("STRIPE_PRICE_GROWTH"),
         SubscriptionTier.PRO: os.getenv("STRIPE_PRICE_PRO"),

@@ -493,10 +493,10 @@ export default function ExpertMarketplace() {
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Engagement Type</label>
                       <div className="grid grid-cols-2 gap-3">
                         {[
-                          { value: 'consultation', label: 'Consultation', desc: '1-hour session', price: selectedExpert.hourly_rate_cents ? formatCents(selectedExpert.hourly_rate_cents) : '$150-500' },
-                          { value: 'project', label: 'Project', desc: '2-8 weeks', price: formatCentsRange(selectedExpert.project_rate_min_cents, selectedExpert.project_rate_max_cents) || '$2,500-50,000' },
-                          { value: 'retainer', label: 'Retainer', desc: 'Monthly advisor', price: selectedExpert.retainer_rate_cents ? `${formatCents(selectedExpert.retainer_rate_cents)}/mo` : '$2,000-10,000/mo' },
-                          { value: 'hourly', label: 'Hourly', desc: 'As needed', price: selectedExpert.hourly_rate_cents ? `${formatCents(selectedExpert.hourly_rate_cents)}/hr` : '$100-500/hr' }
+                          { value: 'consultation', label: 'Consultation', desc: '1-hour session', price: selectedExpert.hourly_rate_cents ? formatCents(selectedExpert.hourly_rate_cents) : 'Custom quote' },
+                          { value: 'project', label: 'Project', desc: '2-8 weeks', price: formatCentsRange(selectedExpert.project_rate_min_cents, selectedExpert.project_rate_max_cents) || 'Custom quote' },
+                          { value: 'retainer', label: 'Retainer', desc: 'Monthly advisor', price: selectedExpert.retainer_rate_cents ? `${formatCents(selectedExpert.retainer_rate_cents)}/mo` : 'Custom quote' },
+                          { value: 'hourly', label: 'Hourly', desc: 'As needed', price: selectedExpert.hourly_rate_cents ? `${formatCents(selectedExpert.hourly_rate_cents)}/hr` : 'Custom quote' }
                         ].map((type) => (
                           <button
                             key={type.value}

@@ -1036,6 +1036,9 @@ def _map_price_to_tier(price_id: str) -> SubscriptionTier | None:
         os.getenv("STRIPE_PRICE_BUSINESS"): SubscriptionTier.BUSINESS,
         os.getenv("STRIPE_PRICE_ENTERPRISE"): SubscriptionTier.ENTERPRISE,
     }
+    monthly_price_id = os.getenv("STRIPE_PRICE_MONTHLY")
+    if monthly_price_id:
+        price_mappings[monthly_price_id] = SubscriptionTier.MONTHLY
     
     tier = price_mappings.get(price_id)
     if tier:

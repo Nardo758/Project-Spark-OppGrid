@@ -4,6 +4,8 @@ import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import RequireAuth from './components/RequireAuth'
 import RequireTier from './components/RequireTier'
+import BlockMonthlyFeature from './components/BlockMonthlyFeature'
+import { LaunchRoute, WorkHubRoute } from './components/LaunchRoute'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Discover from './pages/Discover'
@@ -72,24 +74,32 @@ function App() {
         <Route path="welcome" element={<Home />} />
         <Route path="discover" element={<Discover />} />
         <Route path="idea-engine" element={<IdeaEngine />} />
-        <Route path="services" element={<Services />} />
+        <Route path="services" element={<LaunchRoute flag="services"><Services /></LaunchRoute>} />
         <Route path="network" element={<Navigate to="/network/experts" />} />
         <Route path="pricing" element={<Pricing />} />
         <Route path="opportunity/:id" element={<OpportunityDetail />} />
         <Route
           path="opportunity/:id/hub"
           element={
-            <RequireAuth>
-              <WorkHub />
-            </RequireAuth>
+            <WorkHubRoute>
+              <RequireAuth>
+                <BlockMonthlyFeature feature="workhub">
+                  <WorkHub />
+                </BlockMonthlyFeature>
+              </RequireAuth>
+            </WorkHubRoute>
           }
         />
         <Route
           path="opportunity/:id/hub-legacy"
           element={
-            <RequireAuth>
-              <OpportunityHub />
-            </RequireAuth>
+            <WorkHubRoute>
+              <RequireAuth>
+                <BlockMonthlyFeature feature="workhub">
+                  <OpportunityHub />
+                </BlockMonthlyFeature>
+              </RequireAuth>
+            </WorkHubRoute>
           }
         />
         <Route
@@ -115,7 +125,7 @@ function App() {
         <Route path="learn" element={<Learn />} />
         <Route path="ai-roadmap" element={<AIRoadmap />} />
         <Route path="ai-match" element={<AIMatch />} />
-        <Route path="developer" element={<ApiPortal />} />
+        <Route path="developer" element={<LaunchRoute flag="apiPortal"><ApiPortal /></LaunchRoute>} />
         <Route path="about" element={<About />} />
         <Route path="blog" element={<Blog />} />
         <Route path="contact" element={<Contact />} />
@@ -145,18 +155,20 @@ function App() {
             </RequireAuth>
           }
         />
-        <Route path="build/reports" element={<ReportStudio />} />
-        <Route path="build/reports/:type" element={<ReportStudio />} />
-        <Route path="build/business-plan" element={<ReportStudio />} />
-        <Route path="build/financials" element={<ReportStudio />} />
-        <Route path="build/pitch-deck" element={<ReportStudio />} />
-        <Route path="build/consultant-studio" element={<ConsultantStudio />} />
+        <Route path="build/reports" element={<LaunchRoute flag="reportCatalog"><ReportStudio /></LaunchRoute>} />
+        <Route path="build/reports/:type" element={<LaunchRoute flag="reportCatalog"><ReportStudio /></LaunchRoute>} />
+        <Route path="build/business-plan" element={<LaunchRoute flag="reportCatalog"><ReportStudio /></LaunchRoute>} />
+        <Route path="build/financials" element={<LaunchRoute flag="reportCatalog"><ReportStudio /></LaunchRoute>} />
+        <Route path="build/pitch-deck" element={<LaunchRoute flag="reportCatalog"><ReportStudio /></LaunchRoute>} />
+        <Route path="build/consultant-studio" element={<LaunchRoute flag="reportCatalog"><ConsultantStudio /></LaunchRoute>} />
         <Route
           path="build/experts"
           element={
-            <RequireTier requiredTier="starter" featureName="Expert Marketplace">
-              <ExpertMarketplace />
-            </RequireTier>
+            <BlockMonthlyFeature feature="expert_marketplace">
+              <RequireTier requiredTier="starter" featureName="Expert Marketplace">
+                <ExpertMarketplace />
+              </RequireTier>
+            </BlockMonthlyFeature>
           }
         />
         <Route
@@ -263,15 +275,30 @@ function App() {
         <Route
           path="lifecycle"
           element={
-            <RequireAuth>
-              <LifecycleDashboard />
-            </RequireAuth>
+            <WorkHubRoute>
+              <RequireAuth>
+                <BlockMonthlyFeature feature="workhub">
+                  <LifecycleDashboard />
+                </BlockMonthlyFeature>
+              </RequireAuth>
+            </WorkHubRoute>
           }
         />
-        <Route path="marketplace" element={<Marketplace />} />
+        <Route
+          path="marketplace"
+          element={
+            <BlockMonthlyFeature feature="datasets">
+              <Marketplace />
+            </BlockMonthlyFeature>
+          }
+        />
         <Route
           path="datasets/:datasetId/checkout"
-          element={<DatasetCheckout />}
+          element={
+            <BlockMonthlyFeature feature="datasets">
+              <DatasetCheckout />
+            </BlockMonthlyFeature>
+          }
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Route>

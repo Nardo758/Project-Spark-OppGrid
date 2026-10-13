@@ -3,17 +3,15 @@ import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-do
 import { useAuthStore } from '../stores/authStore'
 import { Loader2, Check, Crown } from 'lucide-react'
 import PayPerUnlockModal from '../components/PayPerUnlockModal'
-import { PLAN_DISPLAY, type Tier } from '../constants/pricing'
+import { LAUNCH_OFFERS, type Tier } from '../constants/pricing'
 
 const planDetails: Record<string, { name: string; price: string; color: string; tier: Tier }> = {
-  starter: { name: 'Starter', price: '$20/mo', color: 'blue', tier: 'starter' },
-  growth: { name: 'Growth', price: '$50/mo', color: 'blue', tier: 'growth' },
-  pro: { name: 'Pro', price: '$99/mo', color: 'purple', tier: 'pro' },
-  builder: PLAN_DISPLAY.builder,
-  team: { name: 'Team', price: '$250/mo', color: 'emerald', tier: 'team' },
-  business: { name: 'Business', price: '$750/mo', color: 'emerald', tier: 'business' },
-  scaler: PLAN_DISPLAY.scaler,
-  enterprise: { name: 'Enterprise', price: 'Custom', color: 'amber', tier: 'enterprise' },
+  monthly: {
+    name: LAUNCH_OFFERS.monthly.name,
+    price: LAUNCH_OFFERS.monthly.priceLabel,
+    color: 'emerald',
+    tier: 'monthly',
+  },
 }
 
 export default function Signup() {
@@ -304,7 +302,7 @@ export default function Signup() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate('/pricing?from=signup&plan=builder')}
+                  onClick={() => navigate('/pricing')}
                   className="w-full py-3 bg-gray-900 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium"
                 >
                   View paid plans & upgrade

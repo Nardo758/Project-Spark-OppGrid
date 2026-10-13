@@ -7,6 +7,9 @@ import enum
 
 class SubscriptionTier(str, enum.Enum):
     """Subscription tier levels - v2.1 unified access model (Apr 2026)"""
+    # Launch subscription. Price id comes from STRIPE_PRICE_MONTHLY, never hardcoded.
+    MONTHLY = "MONTHLY"  # OppGrid Monthly — $39/mo (3900 cents)
+
     # -------- v2.1 Platform tiers (dashboard + optional API) --------
     EXPLORER = "EXPLORER"           # $0/mo   — 0 opps, dashboard only
     BUILDER = "BUILDER"             # $99/mo  — 3 opps, 10 RPM, 250/day

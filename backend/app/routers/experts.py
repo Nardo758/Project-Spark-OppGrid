@@ -27,7 +27,9 @@ from app.schemas.expert import ExpertCreate, ExpertUpdate, ExpertResponse
 from app.services.json_codec import dumps_json, loads_json
 
 
-router = APIRouter()
+from app.services.launch_entitlements import monthly_feature_lock
+
+router = APIRouter(dependencies=[Depends(monthly_feature_lock("expert_marketplace"))])
 
 
 class ExpertMatchRequest(BaseModel):

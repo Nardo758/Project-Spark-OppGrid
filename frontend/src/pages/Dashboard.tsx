@@ -8,13 +8,13 @@ import {
 } from 'lucide-react'
 import type { AccessInfo } from '../types/paywall'
 import { useInlinePayment } from '../hooks/useInlinePayment'
-import { type Tier } from '../constants/pricing'
+import { launchFlags } from '../config/launchFlags'
 import PayPerUnlockModal from '../components/PayPerUnlockModal'
 
 const quickActions = [
   { icon: Target, label: 'Find Opportunity', path: '/discover', color: 'bg-blue-500' },
   { icon: Lightbulb, label: 'My Projects', path: '/projects', color: 'bg-yellow-500' },
-  { icon: FileText, label: 'Business Plan', path: '/build/business-plan', color: 'bg-purple-500' },
+  ...(launchFlags.reportCatalog ? [{ icon: FileText, label: 'Business Plan', path: '/build/business-plan', color: 'bg-purple-500' }] : []),
   { icon: Users, label: 'Find Expert Help', path: '/build/experts', color: 'bg-pink-500' },
   { icon: Briefcase, label: 'My Engagements', path: '/build/engagements', color: 'bg-violet-500' },
   { icon: DollarSign, label: 'Find Money', path: '/build/funding', color: 'bg-orange-500' },
@@ -94,21 +94,10 @@ export default function Dashboard() {
     
     if (paymentState.paymentModalOpen || paymentState.isLoading) return
     
-    const validTiers = ['starter', 'growth', 'pro', 'builder', 'team', 'business', 'scaler', 'enterprise']
     const normalizedTier = checkoutTier.toLowerCase()
-    if (validTiers.includes(normalizedTier)) {
-      const tierMap: Record<string, Tier> = {
-        starter: 'starter',
-        growth: 'growth',
-        pro: 'pro',
-        builder: 'pro',
-        team: 'team',
-        business: 'business',
-        scaler: 'business',
-        enterprise: 'enterprise',
-      }
+    if (normalizedTier === 'monthly') {
       setSearchParams({})
-      startCheckout(tierMap[normalizedTier] || 'starter')
+      startCheckout('monthly')
     }
   }, [searchParams, isAuthenticated, paymentState.paymentModalOpen, paymentState.isLoading, startCheckout, setSearchParams, navigate])
 
@@ -322,12 +311,7 @@ export default function Dashboard() {
                       
                       <div className="pt-4 border-t border-stone-200 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); navigate(`/build/reports?opp=${opp.id}`) }}
-                            className="flex items-center gap-1 text-sm text-stone-600 hover:text-violet-600"
-                          >
-                            <FileText className="w-4 h-4" /> Report
-                          </button>
+                          {launchFlags.reportCatalog ? <button onClick={(e) => { e.stopPropagation(); navigate(`/build/reports?opp=${opp.id}`) }} className="flex items-center gap-1 text-sm text-stone-600 hover:text-violet-600"><FileText className="w-4 h-4" /> Report</button> : null}
                           <button className="flex items-center gap-1 text-sm text-stone-600 hover:text-violet-600">
                             <Bookmark className="w-4 h-4" /> Save
                           </button>

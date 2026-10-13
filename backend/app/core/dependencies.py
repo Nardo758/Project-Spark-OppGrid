@@ -93,8 +93,6 @@ from functools import wraps
 
 def get_user_subscription_tier(user: User, db: Session) -> SubscriptionTier:
     """Get user's current subscription tier with caching (5 min TTL)"""
-    from datetime import datetime, timezone
-    
     cache_key = f"tier_{user.id}"
     
     with _cache_lock:
@@ -103,17 +101,12 @@ def get_user_subscription_tier(user: User, db: Session) -> SubscriptionTier:
             return cached
     
     subscription = db.query(Subscription).filter(
-        Subscription.user_id == user.id,
-        Subscription.status == SubscriptionStatus.ACTIVE
+        Subscription.user_id == user.id
     ).first()
-    
-    tier = SubscriptionTier.FREE
-    if subscription:
-        period_end = subscription.current_period_end
-        if period_end is not None and period_end < datetime.now(timezone.utc):
-            tier = SubscriptionTier.FREE
-        else:
-            tier = SubscriptionTier(subscription.tier) if isinstance(subscription.tier, str) else subscription.tier
+
+    from app.services.launch_entitlements import entitled_subscription_tier
+
+    tier = entitled_subscription_tier(subscription)
     
     with _cache_lock:
         _subscription_cache[cache_key] = tier
