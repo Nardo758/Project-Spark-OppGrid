@@ -77,6 +77,13 @@ def should_send_alert(search: SavedSearch) -> bool:
     Returns:
         bool: True if should send alert now
     """
+    user = getattr(search, "user", None)
+    subscription = getattr(user, "subscription", None) if user is not None else None
+    tier = getattr(subscription, "tier", None)
+    tier_value = getattr(tier, "value", tier)
+    if str(tier_value or "").upper() == "MONTHLY":
+        return False
+
     prefs = search.notification_prefs
     frequency = prefs.get('frequency', 'daily')
     

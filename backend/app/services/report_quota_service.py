@@ -1,6 +1,6 @@
 """Report quota management service for subscription-based allocation."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Tuple
 from sqlalchemy.orm import Session
 import logging
@@ -9,6 +9,9 @@ from app.models.user import User
 from app.models.user_report_quota import UserReportQuota, ReportPurchaseLog
 
 logger = logging.getLogger(__name__)
+
+DEEP_CLONE_REPORT_TIER = "deep_clone"
+MONTHLY_DEEP_CLONE_ALLOCATION = 2
 
 
 class ReportQuotaService:
@@ -259,3 +262,55 @@ class ReportQuotaService:
         # Paid members with exhausted quota: Overage pricing
         price = self.OVERAGE_PRICES.get(tier, {}).get(report_tier, self.BASE_PRICES.get(report_tier, 0))
         return True, f"Generate report for ${price/100:.2f} (quota exhausted)", price
+
+    def get_monthly_deep_clone_quota(self, user: User, period_end: datetime) -> UserReportQuota:
+        """Quota row for one Stripe billing period.
+
+        The row is keyed by the period end. A new period inserts a fresh row
+        with used=0, so unused reports from the previous period do not roll over.
+        """
+        if not user or not user.id:
+            raise ValueError("User must be saved before quota operations")
+        if period_end is None:
+            raise ValueError("Monthly report quota requires current_period_end")
+
+        reset_at = period_end
+        if reset_at.tzinfo is not None:
+            reset_at = reset_at.astimezone(timezone.utc).replace(tzinfo=None)
+        reset_at = reset_at.replace(microsecond=0)
+
+        quota = self.db.query(UserReportQuota).filter(
+            UserReportQuota.user_id == user.id,
+            UserReportQuota.report_tier == DEEP_CLONE_REPORT_TIER,
+            UserReportQuota.reset_date == reset_at,
+        ).first()
+        if quota:
+            return quota
+
+        quota = UserReportQuota(
+            user_id=user.id,
+            report_tier=DEEP_CLONE_REPORT_TIER,
+            allocated=MONTHLY_DEEP_CLONE_ALLOCATION,
+            used=0,
+            reset_date=reset_at,
+            subscription_tier="monthly",
+        )
+        self.db.add(quota)
+        self.db.commit()
+        self.db.refresh(quota)
+        logger.info(
+            "Created Monthly deep clone quota for user %s period_end=%s allocated=%s",
+            user.id,
+            reset_at.isoformat(),
+            MONTHLY_DEEP_CLONE_ALLOCATION,
+        )
+        return quota
+
+    def consume_monthly_deep_clone(self, user: User, period_end: datetime) -> UserReportQuota:
+        """Record one included or purchased Deep Clone report against the period."""
+        quota = self.get_monthly_deep_clone_quota(user, period_end)
+        quota.used = (quota.used or 0) + 1
+        quota.updated_at = datetime.utcnow()
+        self.db.commit()
+        self.db.refresh(quota)
+        return quota

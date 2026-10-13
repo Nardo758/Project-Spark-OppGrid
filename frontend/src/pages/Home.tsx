@@ -360,7 +360,7 @@ export default function Home() {
               <ArrowRight className="w-5 h-5" />
             </Link>
             <Link
-              to="/pricing?from=home&plan=builder"
+              to="/pricing"
               className="inline-flex items-center justify-center px-6 py-3 text-sm font-medium text-white border border-white/60 hover:bg-white/10 rounded-lg gap-2"
             >
               View paid plans

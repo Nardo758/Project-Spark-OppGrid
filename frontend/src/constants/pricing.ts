@@ -1,4 +1,4 @@
-export type Tier = 'free' | 'starter' | 'growth' | 'pro' | 'team' | 'business' | 'enterprise'
+export type Tier = 'free' | 'monthly' | 'starter' | 'growth' | 'pro' | 'team' | 'business' | 'enterprise'
 
 export type PlanSlug = 'starter' | 'builder' | 'scaler' | 'team' | 'business' | 'enterprise'
 
@@ -6,6 +6,7 @@ export type PlanTrack = 'individual' | 'business'
 
 export const TIER_LEVELS: Record<Tier, number> = {
   free: 0,
+  monthly: 0,
   starter: 1,
   growth: 2,
   pro: 3,
@@ -25,6 +26,7 @@ export const PLAN_TO_TIER: Record<PlanSlug, Tier> = {
 
 export const TIER_TO_TRACK: Record<Tier, PlanTrack> = {
   free: 'individual',
+  monthly: 'individual',
   starter: 'individual',
   growth: 'individual',
   pro: 'individual',
@@ -45,6 +47,7 @@ export interface TierConfig {
   apiAccess: boolean
   commercialUse: boolean
   freeReportsPerMonth: number
+  priceCents?: number
 }
 
 export const TIER_CONFIG: Record<Tier, TierConfig> = {
@@ -60,6 +63,20 @@ export const TIER_CONFIG: Record<Tier, TierConfig> = {
     apiAccess: false,
     commercialUse: false,
     freeReportsPerMonth: 0,
+  },
+  monthly: {
+    name: 'OppGrid Monthly',
+    price: 39,
+    priceLabel: '$39/mo',
+    priceCents: 3900,
+    slots: 0,
+    seats: 1,
+    reportDiscount: 0,
+    extraSlotPrice: 0,
+    whiteLabel: false,
+    apiAccess: false,
+    commercialUse: false,
+    freeReportsPerMonth: 2,
   },
   starter: {
     name: 'Starter',
@@ -161,6 +178,18 @@ export function hasTierAccess(userTier: Tier | string | undefined, requiredTier:
 export function isBusinessTrack(tier: Tier | string | undefined): boolean {
   return TIER_TO_TRACK[(tier || 'free') as Tier] === 'business'
 }
+
+export const LAUNCH_OFFERS = {
+  deepClone: { name: 'Deep Clone', priceCents: 4900, priceLabel: '$49' },
+  monthly: { name: 'OppGrid Monthly', priceCents: 3900, priceLabel: '$39/mo' },
+} as const
+
+export const MONTHLY_LOCKED_FEATURES = [
+  'expert_marketplace',
+  'workhub',
+  'datasets',
+  'alerts',
+] as const
 
 export function getTierConfig(tier: Tier | string | undefined): TierConfig {
   return TIER_CONFIG[(tier || 'free') as Tier] ?? TIER_CONFIG.free

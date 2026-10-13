@@ -36,6 +36,14 @@ export function useInlinePayment(onSuccess?: () => void, returnTo?: string): Use
   })
 
   const startCheckout = useCallback(async (tier: Tier) => {
+    if (tier !== 'monthly') {
+      setState((s) => ({
+        ...s,
+        isLoading: false,
+        error: 'That plan is not available. Subscribe to OppGrid Monthly for $39/mo.',
+      }))
+      return
+    }
     if (!token) {
       const returnPath = returnTo || window.location.pathname + window.location.search
       navigate(`/signup?plan=${tier}&next=${encodeURIComponent(returnPath)}`)

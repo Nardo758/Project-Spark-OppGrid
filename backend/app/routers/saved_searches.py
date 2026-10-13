@@ -43,6 +43,10 @@ def create_saved_search(
     - Business/Enterprise: Unlimited
     """
     
+    from app.services.launch_entitlements import reject_monthly_alerts
+
+    reject_monthly_alerts(db, current_user, search_data.notification_prefs)
+
     # Check tier limits
     user_tier = get_user_subscription_tier(current_user, db)
     existing_count = db.query(SavedSearch).filter(
@@ -160,6 +164,11 @@ def update_saved_search(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Saved search not found"
         )
+
+    from app.services.launch_entitlements import reject_monthly_alerts
+
+    if update_data.notification_prefs is not None:
+        reject_monthly_alerts(db, current_user, update_data.notification_prefs)
     
     # Update fields
     update_dict = update_data.model_dump(exclude_unset=True)

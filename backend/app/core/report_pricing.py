@@ -10,6 +10,9 @@ from dataclasses import dataclass
 
 TIER_FREE_REPORTS: Dict[str, int] = {
     "free": 0,
+    # OppGrid Monthly's 2 reports are counted per Stripe billing period in
+    # ReportQuotaService, not by this calendar-month map.
+    "monthly": 0,
     "starter": 1,
     "growth": 3,
     "pro": 5,
@@ -20,6 +23,7 @@ TIER_FREE_REPORTS: Dict[str, int] = {
 
 TIER_REPORT_DISCOUNTS: Dict[str, int] = {
     "free": 0,
+    "monthly": 0,
     "starter": 0,
     "growth": 10,
     "pro": 15,

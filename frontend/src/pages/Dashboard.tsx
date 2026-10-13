@@ -8,7 +8,6 @@ import {
 } from 'lucide-react'
 import type { AccessInfo } from '../types/paywall'
 import { useInlinePayment } from '../hooks/useInlinePayment'
-import { type Tier } from '../constants/pricing'
 import PayPerUnlockModal from '../components/PayPerUnlockModal'
 
 const quickActions = [
@@ -94,21 +93,10 @@ export default function Dashboard() {
     
     if (paymentState.paymentModalOpen || paymentState.isLoading) return
     
-    const validTiers = ['starter', 'growth', 'pro', 'builder', 'team', 'business', 'scaler', 'enterprise']
     const normalizedTier = checkoutTier.toLowerCase()
-    if (validTiers.includes(normalizedTier)) {
-      const tierMap: Record<string, Tier> = {
-        starter: 'starter',
-        growth: 'growth',
-        pro: 'pro',
-        builder: 'pro',
-        team: 'team',
-        business: 'business',
-        scaler: 'business',
-        enterprise: 'enterprise',
-      }
+    if (normalizedTier === 'monthly') {
       setSearchParams({})
-      startCheckout(tierMap[normalizedTier] || 'starter')
+      startCheckout('monthly')
     }
   }, [searchParams, isAuthenticated, paymentState.paymentModalOpen, paymentState.isLoading, startCheckout, setSearchParams, navigate])
 

@@ -8,7 +8,7 @@ interface User {
   avatar_url?: string
   is_verified?: boolean
   is_admin?: boolean
-  tier?: 'free' | 'starter' | 'growth' | 'pro' | 'team' | 'business' | 'enterprise'
+  tier?: 'free' | 'monthly' | 'starter' | 'growth' | 'pro' | 'team' | 'business' | 'enterprise'
   brainTier?: 'basic' | 'business' | 'expert' | 'enterprise'
 }
 
@@ -80,7 +80,7 @@ function normalizeUser(raw: unknown): User | null {
   const name = String(nameCandidate)
 
   const tierRaw = typeof obj.tier === 'string' ? obj.tier.toLowerCase() : ''
-  const validTiers = ['free', 'starter', 'growth', 'pro', 'team', 'business', 'enterprise'] as const
+  const validTiers = ['free', 'monthly', 'starter', 'growth', 'pro', 'team', 'business', 'enterprise'] as const
   const tier: User['tier'] = validTiers.includes(tierRaw as (typeof validTiers)[number]) ? (tierRaw as User['tier']) : undefined
 
   const brainTierRaw =

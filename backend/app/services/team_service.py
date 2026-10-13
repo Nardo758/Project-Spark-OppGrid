@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 TIER_SEAT_LIMITS = {
     SubscriptionTier.FREE: 0,
+    SubscriptionTier.MONTHLY: 1,
     SubscriptionTier.STARTER: 1,
     SubscriptionTier.GROWTH: 1,
     SubscriptionTier.PRO: 1,

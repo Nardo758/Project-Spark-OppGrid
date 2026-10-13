@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { X, Zap, Lock, TrendingUp, FileText, Users, Loader2 } from 'lucide-react'
+import { X, Zap, Lock, TrendingUp, FileText, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
+import { LAUNCH_OFFERS } from '../constants/pricing'
 
 interface UpgradeModalProps {
   isOpen: boolean
@@ -35,28 +36,15 @@ const contextMessages = {
 }
 
 const benefits = [
-  { icon: TrendingUp, text: 'Full access to opportunity data and insights' },
-  { icon: FileText, text: 'AI-generated business reports and analysis' },
-  { icon: Users, text: 'Expert marketplace and consultation access' },
-  { icon: Zap, text: 'Priority processing and faster results' },
-]
-
-const individualPlans = [
-  { tier: 'starter', name: 'Starter', price: '$20/mo', slots: 1 },
-  { tier: 'growth', name: 'Growth', price: '$50/mo', slots: 3, popular: true },
-  { tier: 'pro', name: 'Pro', price: '$99/mo', slots: 5 },
-]
-
-const businessPlans = [
-  { tier: 'team', name: 'Team', price: '$250/mo', slots: 5, seats: 3 },
-  { tier: 'business', name: 'Business', price: '$750/mo', slots: 15, seats: 10 },
-  { tier: 'enterprise', name: 'Enterprise', price: '$2,500+/mo', slots: 30, seats: 'Unlimited' },
+  { icon: TrendingUp, text: 'Opportunity feed' },
+  { icon: FileText, text: '2 reports each billing period' },
+  { icon: Zap, text: 'Extra reports are the single Deep Clone purchase' },
 ]
 
 export default function UpgradeModal({ isOpen, onClose, feature, context = 'general', returnUrl }: UpgradeModalProps) {
   const navigate = useNavigate()
   const { isAuthenticated, token } = useAuthStore()
-  const [selectedPlan, setSelectedPlan] = useState<string>('growth') // Default to popular plan
+  const [selectedPlan] = useState<string>('monthly')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   
@@ -65,23 +53,10 @@ export default function UpgradeModal({ isOpen, onClose, feature, context = 'gene
   const contextInfo = contextMessages[context]
   const ContextIcon = contextInfo.icon
 
-  function handlePlanClick(tier: string) {
-    setSelectedPlan(tier)
-    setError(null)
-  }
-
   async function handleCheckout() {
-    if (!selectedPlan) return
-    
     if (!isAuthenticated) {
       onClose()
-      navigate(`/signup?plan=${selectedPlan}`)
-      return
-    }
-
-    // Enterprise requires contact
-    if (selectedPlan === 'enterprise') {
-      window.open('mailto:sales@oppgrid.com?subject=Enterprise Plan Inquiry', '_blank')
+      navigate('/signup?plan=monthly')
       return
     }
 
@@ -175,43 +150,13 @@ export default function UpgradeModal({ isOpen, onClose, feature, context = 'gene
             </div>
           )}
 
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Individual Plans:</h3>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {individualPlans.map((plan) => (
-              <button
-                key={plan.tier}
-                onClick={() => handlePlanClick(plan.tier)}
-                disabled={isLoading}
-                className={`p-3 rounded-xl border-2 text-center transition-all hover:border-purple-500 hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  selectedPlan === plan.tier ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-200' : 'border-gray-200'
-                }`}
-              >
-                {plan.popular && (
-                  <span className="text-[10px] font-bold text-purple-600 uppercase">Popular</span>
-                )}
-                <div className="font-semibold text-gray-900">{plan.name}</div>
-                <div className="text-sm text-gray-600">{plan.price}</div>
-                <div className="text-xs text-gray-500 mt-1">{plan.slots} slot{plan.slots > 1 ? 's' : ''}</div>
-              </button>
-            ))}
-          </div>
-
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">Business Plans:</h3>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {businessPlans.map((plan) => (
-              <button
-                key={plan.tier}
-                onClick={() => handlePlanClick(plan.tier)}
-                disabled={isLoading}
-                className={`p-3 rounded-xl border-2 text-center transition-all hover:border-indigo-500 hover:bg-indigo-50 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  selectedPlan === plan.tier ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-200' : 'border-gray-200'
-                }`}
-              >
-                <div className="font-semibold text-gray-900">{plan.name}</div>
-                <div className="text-sm text-gray-600">{plan.price}</div>
-                <div className="text-xs text-gray-500 mt-1">{plan.slots} slots • {plan.seats} seats</div>
-              </button>
-            ))}
+          <div className="mb-4 p-4 rounded-xl border-2 border-purple-600 bg-purple-50">
+            <div className="font-semibold text-gray-900">{LAUNCH_OFFERS.monthly.name}</div>
+            <div className="text-sm text-gray-600">{LAUNCH_OFFERS.monthly.priceLabel}</div>
+            <div className="text-xs text-gray-500 mt-1">2 reports per billing period, plus the feed</div>
+            <p className="text-xs text-gray-500 mt-2">
+              A single Deep Clone report is {LAUNCH_OFFERS.deepClone.priceLabel}.
+            </p>
           </div>
 
           <div className="flex gap-3">

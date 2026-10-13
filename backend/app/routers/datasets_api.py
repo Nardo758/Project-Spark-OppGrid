@@ -22,7 +22,13 @@ logger = logging.getLogger(__name__)
 # Initialize Stripe
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_51234567890")
 
-router = APIRouter(prefix="/api/v1/datasets", tags=["datasets"])
+from app.services.launch_entitlements import monthly_feature_lock
+
+router = APIRouter(
+    prefix="/api/v1/datasets",
+    tags=["datasets"],
+    dependencies=[Depends(monthly_feature_lock("datasets"))],
+)
 
 
 # ============================================================================

@@ -15,7 +15,13 @@ from app.schemas.watchlist import (
 )
 from app.core.dependencies import get_current_user
 
-router = APIRouter(prefix="/workhub/lifecycle", tags=["lifecycle"])
+from app.services.launch_entitlements import monthly_feature_lock
+
+router = APIRouter(
+    prefix="/workhub/lifecycle",
+    tags=["lifecycle"],
+    dependencies=[Depends(monthly_feature_lock("workhub"))],
+)
 
 
 @router.get("/states")

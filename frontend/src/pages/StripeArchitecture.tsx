@@ -40,9 +40,7 @@ export default function StripeArchitecture() {
               </div>
             </div>
             <div className="space-y-2 text-sm text-slate-300">
-              <div className="flex justify-between"><span>Pro</span><span className="text-emerald-400">$29/mo</span></div>
-              <div className="flex justify-between"><span>Business</span><span className="text-emerald-400">$99/mo</span></div>
-              <div className="flex justify-between"><span>Enterprise</span><span className="text-emerald-400">Custom</span></div>
+              <div className="flex justify-between"><span>OppGrid Monthly</span><span className="text-emerald-400">$39/mo</span></div>
             </div>
           </div>
 
@@ -57,9 +55,7 @@ export default function StripeArchitecture() {
               </div>
             </div>
             <div className="space-y-2 text-sm text-slate-300">
-              <div className="flex justify-between"><span>Unlock</span><span className="text-blue-400">$15</span></div>
-              <div className="flex justify-between"><span>Deep Dive</span><span className="text-blue-400">$49</span></div>
-              <div className="flex justify-between"><span>Fast Pass</span><span className="text-blue-400">$99</span></div>
+              <div className="flex justify-between"><span>Deep Clone</span><span className="text-blue-400">$49</span></div>
             </div>
           </div>
 
@@ -208,7 +204,7 @@ export default function StripeArchitecture() {
                   <ul className="text-slate-400 text-xs space-y-1">
                     <li>• PAY_PER_UNLOCK: $15</li>
                     <li>• DEEP_DIVE: $49</li>
-                    <li>• FAST_PASS: $99</li>
+                    <li>• DEEP_CLONE: $49</li>
                     <li>• Expert Split: 85/15</li>
                   </ul>
                 </div>

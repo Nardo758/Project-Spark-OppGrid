@@ -4,6 +4,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import RequireAuth from './components/RequireAuth'
 import RequireTier from './components/RequireTier'
+import BlockMonthlyFeature from './components/BlockMonthlyFeature'
 import Home from './pages/Home'
 import Dashboard from './pages/Dashboard'
 import Discover from './pages/Discover'
@@ -80,7 +81,9 @@ function App() {
           path="opportunity/:id/hub"
           element={
             <RequireAuth>
-              <WorkHub />
+              <BlockMonthlyFeature feature="workhub">
+                <WorkHub />
+              </BlockMonthlyFeature>
             </RequireAuth>
           }
         />
@@ -88,7 +91,9 @@ function App() {
           path="opportunity/:id/hub-legacy"
           element={
             <RequireAuth>
-              <OpportunityHub />
+              <BlockMonthlyFeature feature="workhub">
+                <OpportunityHub />
+              </BlockMonthlyFeature>
             </RequireAuth>
           }
         />
@@ -154,9 +159,11 @@ function App() {
         <Route
           path="build/experts"
           element={
-            <RequireTier requiredTier="starter" featureName="Expert Marketplace">
-              <ExpertMarketplace />
-            </RequireTier>
+            <BlockMonthlyFeature feature="expert_marketplace">
+              <RequireTier requiredTier="starter" featureName="Expert Marketplace">
+                <ExpertMarketplace />
+              </RequireTier>
+            </BlockMonthlyFeature>
           }
         />
         <Route
@@ -264,14 +271,27 @@ function App() {
           path="lifecycle"
           element={
             <RequireAuth>
-              <LifecycleDashboard />
+              <BlockMonthlyFeature feature="workhub">
+                <LifecycleDashboard />
+              </BlockMonthlyFeature>
             </RequireAuth>
           }
         />
-        <Route path="marketplace" element={<Marketplace />} />
+        <Route
+          path="marketplace"
+          element={
+            <BlockMonthlyFeature feature="datasets">
+              <Marketplace />
+            </BlockMonthlyFeature>
+          }
+        />
         <Route
           path="datasets/:datasetId/checkout"
-          element={<DatasetCheckout />}
+          element={
+            <BlockMonthlyFeature feature="datasets">
+              <DatasetCheckout />
+            </BlockMonthlyFeature>
+          }
         />
         <Route path="*" element={<Navigate to="/" />} />
       </Route>
